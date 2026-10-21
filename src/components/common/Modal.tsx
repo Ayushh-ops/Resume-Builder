@@ -30,13 +30,28 @@ export const Modal: React.FC<ModalProps> = ({
   bodyClassName = '',
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
 
-  // Esc key closes modal & lock body scroll
+  // Esc key closes modal, locks body scroll & restores focus
   useEffect(() => {
     if (!isOpen) return;
 
+    previousActiveElement.current = document.activeElement as HTMLElement | null;
+
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+
+    // Auto-focus first focusable control
+    const timer = setTimeout(() => {
+      if (panelRef.current) {
+        const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length > 0) {
+          focusable[0].focus();
+        }
+      }
+    }, 50);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -48,8 +63,10 @@ export const Modal: React.FC<ModalProps> = ({
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
+      clearTimeout(timer);
       document.body.style.overflow = originalOverflow;
       window.removeEventListener('keydown', handleKeyDown);
+      previousActiveElement.current?.focus?.();
     };
   }, [isOpen, onClose]);
 
@@ -63,7 +80,7 @@ export const Modal: React.FC<ModalProps> = ({
     >
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/40 dark:bg-black/60 backdrop-blur-sm dark:backdrop-blur-md transition-opacity"
         onClick={onClose}
       />
 

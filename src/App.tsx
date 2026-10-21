@@ -787,18 +787,20 @@ export const App: React.FC = () => {
         onToggleTheme={handleToggleTheme}
         onOpenCustomAts={handleOpenCustomAts}
         isHomeOpen={showOnboarding}
+        canContinue={!isResumeEmpty(resumeData)}
+        onCloseHome={closeLayer}
       />
 
       {/* Full-Screen Centered Onboarding / Home Layer (fixed inset-0 top-14) */}
       {showOnboarding && (
-        <div className="fixed inset-0 top-14 z-30 bg-canvas canvas-dots overflow-y-auto flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-150">
-          <div className="w-full max-w-4xl card shadow-paper p-6 sm:p-8 text-center space-y-6 sm:space-y-7 relative border border-line my-auto">
+        <div className="fixed inset-0 top-14 z-30 bg-canvas overflow-y-auto flex items-center justify-center p-4 sm:p-6 min-h-[calc(100vh-3.5rem)] animate-in fade-in duration-150">
+          <div className="w-full max-w-5xl py-6 sm:py-10 text-center space-y-6 sm:space-y-8 relative">
             {/* Close button if user already has data */}
             {!isResumeEmpty(resumeData) && (
               <button
                 type="button"
                 onClick={closeLayer}
-                className="absolute top-4 right-4 p-2 rounded-xl text-ink/40 hover:text-ink hover:bg-muted transition"
+                className="absolute top-0 right-0 p-2 rounded-xl text-ink/40 hover:text-ink hover:bg-muted transition cursor-pointer"
                 title="Continue editing (Esc)"
               >
                 <X className="w-5 h-5" />
@@ -809,21 +811,22 @@ export const App: React.FC = () => {
               <div className="inline-flex p-3 rounded-2xl bg-brand-50 text-brand-600 mb-2 shadow-soft">
                 <FileText className="w-7 h-7" />
               </div>
-              <h1 className="text-2xl font-bold font-display text-ink tracking-tight">
+              <h1 className="text-2xl sm:text-3xl font-bold font-display text-ink tracking-tight">
                 ResumeCraft AI Studio
               </h1>
-              <p className="text-xs text-ink/60 mt-1 max-w-md mx-auto">
+              <p className="text-xs sm:text-sm text-ink/60 mt-1 max-w-md mx-auto">
                 Build, optimize, and tailor your executive ATS-ready resume with Gemini 3.8 AI
               </p>
             </div>
 
             {/* Main Options Grid */}
-            <div className={`grid grid-cols-1 ${!isResumeEmpty(resumeData) ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'} gap-4 text-left`}>
+            <div className={`grid grid-cols-1 ${!isResumeEmpty(resumeData) ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2 lg:grid-cols-3'} gap-4 text-left items-stretch`}>
               {/* Card 0: Continue Editing (when resume has content) */}
               {!isResumeEmpty(resumeData) && (
-                <div
+                <button
+                  type="button"
                   onClick={closeLayer}
-                  className="card p-5 border border-brand-500/30 bg-card hover:ring-2 hover:ring-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
+                  className="card p-5 border border-brand-500/30 bg-card hover:ring-2 hover:ring-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500 transition-all cursor-pointer text-left flex flex-col justify-between h-full group"
                 >
                   <div>
                     <div className="p-2.5 rounded-xl bg-brand-50 text-brand-600 w-fit mb-3 group-hover:scale-105 transition-transform">
@@ -832,20 +835,26 @@ export const App: React.FC = () => {
                     <h3 className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors">
                       Continue Editing
                     </h3>
-                    <p className="text-xs text-ink/60 mt-1 leading-relaxed">
-                      Resume editing "{resumeData.personalInfo.fullName || 'Untitled'}" with current live changes.
+                    <p className="text-xs text-ink/60 mt-1 leading-relaxed truncate">
+                      {resumeData.personalInfo.fullName || 'Untitled Resume'}
                     </p>
+                    {savedAt && (
+                      <p className="text-[11px] text-ink/40 mt-1">
+                        Last saved {savedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    )}
                   </div>
-                  <div className="mt-4 pt-3 border-t border-line text-xs font-bold text-brand-600 flex items-center gap-1">
-                    <span>Back to Workspace →</span>
+                  <div className="mt-4 pt-3 border-t border-line text-xs font-medium text-ink/50">
+                    Resume editing current document
                   </div>
-                </div>
+                </button>
               )}
 
               {/* Card 1: Upload Resume */}
-              <div
+              <button
+                type="button"
                 onClick={() => openModal(setIsUploadModalOpen)}
-                className="card p-5 border border-line bg-card hover:ring-2 hover:ring-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
+                className="card p-5 border border-line bg-card hover:ring-2 hover:ring-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500 transition-all cursor-pointer text-left flex flex-col justify-between h-full group"
               >
                 <div>
                   <div className="p-2.5 rounded-xl bg-brand-50 text-brand-600 w-fit mb-3 group-hover:scale-105 transition-transform">
@@ -858,15 +867,22 @@ export const App: React.FC = () => {
                     Import existing PDF, Word, JSON, or TXT file. Gemini extracts and structures your data automatically.
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-line text-xs font-bold text-brand-600 flex items-center gap-1">
-                  <span>Import Document →</span>
+                <div className="mt-4 pt-3 border-t border-line text-xs font-medium text-ink/50">
+                  PDF, DOCX, TXT, or JSON
                 </div>
-              </div>
+              </button>
 
               {/* Card 2: Start from Sample */}
               <div
-                className="card p-5 border border-line bg-card hover:ring-2 hover:ring-brand-500 hover:shadow-paper/70 transition-all flex flex-col justify-between cursor-pointer group"
+                role="button"
+                tabIndex={0}
                 onClick={() => handleRequestSample('aiEngineer')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    handleRequestSample('aiEngineer');
+                  }
+                }}
+                className="card p-5 border border-line bg-card hover:ring-2 hover:ring-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500 transition-all cursor-pointer text-left flex flex-col justify-between h-full group"
               >
                 <div>
                   <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 w-fit mb-3 group-hover:scale-105 transition-transform">
@@ -876,38 +892,51 @@ export const App: React.FC = () => {
                     Start from Sample
                   </h3>
                   <p className="text-xs text-ink/60 mt-1 leading-relaxed">
-                    Pick a production-grade curated sample profile to customize.
+                    Pick a curated sample profile to customize.
                   </p>
+                  <div className="mt-3 flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRequestSample('aiEngineer');
+                      }}
+                      className="px-2 py-1 text-[11px] font-semibold rounded-md bg-muted hover:bg-brand-50 hover:text-brand-600 transition text-ink/80 cursor-pointer"
+                    >
+                      AI Engineer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRequestSample('fullStack');
+                      }}
+                      className="px-2 py-1 text-[11px] font-semibold rounded-md bg-muted hover:bg-brand-50 hover:text-brand-600 transition text-ink/80 cursor-pointer"
+                    >
+                      Full-Stack Dev
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRequestSample('fresherStudent');
+                      }}
+                      className="px-2 py-1 text-[11px] font-semibold rounded-md bg-muted hover:bg-brand-50 hover:text-brand-600 transition text-ink/80 cursor-pointer"
+                    >
+                      Graduate
+                    </button>
+                  </div>
                 </div>
-                <div className="mt-4 pt-3 border-t border-line space-y-1.5" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    onClick={() => handleRequestSample('aiEngineer')}
-                    className="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-ink/70 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
-                  >
-                    • AI Engineer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRequestSample('fullStack')}
-                    className="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-ink/70 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
-                  >
-                    • Full-Stack Dev
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRequestSample('fresherStudent')}
-                    className="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-ink/70 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
-                  >
-                    • Graduate / Fresher
-                  </button>
+                <div className="mt-4 pt-3 border-t border-line text-xs font-medium text-ink/50">
+                  Pre-filled industry samples
                 </div>
               </div>
 
               {/* Card 3: Start Blank */}
-              <div
+              <button
+                type="button"
                 onClick={handleRequestBlank}
-                className="card p-5 border border-line bg-card hover:ring-2 hover:ring-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
+                className="card p-5 border border-line bg-card hover:ring-2 hover:ring-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500 transition-all cursor-pointer text-left flex flex-col justify-between h-full group"
               >
                 <div>
                   <div className="p-2.5 rounded-xl bg-muted text-ink/70 w-fit mb-3 group-hover:scale-105 transition-transform">
@@ -920,26 +949,26 @@ export const App: React.FC = () => {
                     Build from scratch with a clean slate, filling each section guided by AI suggestions.
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-line text-xs font-bold text-ink/60 flex items-center gap-1">
-                  <span>Create Clean Slate →</span>
+                <div className="mt-4 pt-3 border-t border-line text-xs font-medium text-ink/50">
+                  Clean slate with AI suggestions
                 </div>
-              </div>
+              </button>
             </div>
 
-            {/* Slim Banner: Add Custom ATS Profile */}
+            {/* Custom ATS banner: full-width slim row below the grid */}
             <div
               onClick={() => {
                 closeLayer();
                 handleOpenCustomAts();
               }}
-              className="p-3 bg-muted/60 border border-line rounded-xl flex items-center justify-between cursor-pointer hover:border-brand-500 hover:bg-muted transition text-xs group"
+              className="w-full p-3.5 bg-muted border border-line rounded-xl flex items-center justify-between cursor-pointer hover:border-brand-500/50 transition group"
             >
-              <div className="flex items-center gap-2 text-ink/70 group-hover:text-ink">
+              <div className="flex items-center gap-2.5 text-xs text-ink/70 group-hover:text-ink">
                 <Target className="w-4 h-4 text-brand-600 shrink-0" />
-                <span>Have your own ATS format?</span>
+                <span className="font-medium">Have your own ATS format or scoring rubric?</span>
               </div>
-              <span className="font-bold text-brand-600 group-hover:underline flex items-center gap-1">
-                <span>Add a custom ATS profile</span>
+              <span className="text-xs font-bold text-brand-600 group-hover:underline flex items-center gap-1">
+                <span>Add custom ATS profile</span>
                 <span>→</span>
               </span>
             </div>
