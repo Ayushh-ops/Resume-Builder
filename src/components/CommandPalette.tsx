@@ -242,11 +242,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-[480px] card shadow-paper border border-line bg-card flex flex-col max-h-[400px] overflow-hidden animate-in zoom-in-95 duration-150"
+        className="w-full max-w-[480px] card shadow-modal border border-line bg-card flex flex-col max-h-[400px] overflow-hidden rounded-[10px] animate-in zoom-in-95 duration-150"
       >
         {/* Search Input Bar */}
-        <div className="flex items-center gap-2.5 px-3.5 py-2.5 border-b border-line bg-card">
-          <Search className="w-4 h-4 text-ink/40 shrink-0" strokeWidth={2} />
+        <div className="flex items-center gap-2.5 px-3.5 py-2 border-b border-line bg-card">
+          <Search className="w-4 h-4 text-ink/40 shrink-0" strokeWidth={1.5} />
           <input
             ref={inputRef}
             type="text"
@@ -256,8 +256,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             placeholder="Type a command or jump to section..."
             className="w-full text-xs text-ink placeholder:text-ink/40 bg-transparent focus:outline-none"
           />
-          <kbd className="text-[10px] font-mono text-ink/40 bg-muted px-1.5 py-0.5 rounded border border-line shrink-0">
-            ESC
+          <kbd className="text-[10px] font-mono text-ink/40 bg-muted px-1.5 py-0.5 rounded-[4px] border border-line shrink-0">
+            Esc
           </kbd>
         </div>
 

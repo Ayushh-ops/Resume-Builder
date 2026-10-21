@@ -64,7 +64,7 @@ export const SectionNav: React.FC<SectionNavProps> = ({ onOpenSection, activeSec
   const currentActive = propActive || activeId;
 
   return (
-    <div className="sticky top-0 z-20 bg-canvas/95 backdrop-blur-md py-1 border-b border-line transition-colors">
+    <div className="sticky top-0 z-20 bg-canvas py-1.5 border-b border-line transition-colors">
       <div className="flex items-center justify-between gap-1 px-0.5">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
@@ -74,17 +74,18 @@ export const SectionNav: React.FC<SectionNavProps> = ({ onOpenSection, activeSec
               <button
                 type="button"
                 onClick={() => handleClick(item.id)}
-                className={`p-2 rounded-xl transition-all flex items-center justify-center shrink-0 ${
+                className={`p-1.5 rounded-[6px] transition-colors flex items-center justify-center shrink-0 ${
                   isActive
-                    ? 'bg-brand-600 text-white shadow-soft scale-105'
-                    : 'text-ink/60 hover:text-brand-600 hover:bg-muted'
+                    ? 'text-brand-600 bg-card border border-line'
+                    : 'text-ink/60 hover:text-ink hover:bg-muted'
                 }`}
+                title={item.title}
               >
-                <Icon className="w-3.5 h-3.5" strokeWidth={1.8} />
+                <Icon className="w-4 h-4" strokeWidth={1.5} />
               </button>
 
-              {/* Tooltip & label on hover */}
-              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-0.5 rounded-md bg-card text-ink border border-line text-[10px] font-semibold whitespace-nowrap shadow-soft pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-30">
+              {/* Tooltip on hover */}
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 px-2 py-0.5 rounded-[4px] bg-card text-ink border border-line text-[11px] font-medium whitespace-nowrap shadow-menu pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-100 z-30">
                 {item.title}
               </div>
             </div>

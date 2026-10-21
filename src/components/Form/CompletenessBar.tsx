@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { ResumeData } from '../../types/resume';
-import { Sparkles, CheckCircle2, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 
 interface CompletenessBarProps {
   data: ResumeData;
@@ -57,7 +57,7 @@ export const CompletenessBar: React.FC<CompletenessBarProps> = ({ data }) => {
   }, [data]);
 
   return (
-    <div className="card p-2 bg-card border border-line shadow-soft transition-all">
+    <div className="card p-2 bg-card border border-line rounded-[6px] transition-colors">
       <div className="flex items-center justify-between gap-2.5 text-xs">
         <button
           type="button"
@@ -65,12 +65,7 @@ export const CompletenessBar: React.FC<CompletenessBarProps> = ({ data }) => {
           className="flex items-center gap-1.5 shrink-0 font-medium text-ink hover:text-brand-600 transition"
           title="Toggle completeness details"
         >
-          {percentage === 100 ? (
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-          ) : (
-            <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-          )}
-          <span className="font-bold tabular-nums text-[11px] text-brand-600 font-sans">
+          <span className="font-semibold tabular-nums text-xs text-brand-600">
             {percentage}%
           </span>
           <ChevronDown
@@ -78,19 +73,19 @@ export const CompletenessBar: React.FC<CompletenessBarProps> = ({ data }) => {
           />
         </button>
 
-        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+        <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
           <div
             className="h-full bg-brand-600 rounded-full transition-all duration-300"
             style={{ width: `${percentage}%` }}
           />
         </div>
 
-        <span className="text-[11px] text-ink/60 truncate max-w-[190px] text-right font-sans" title={percentage === 100 ? '100% complete' : nextHint}>
+        <span className="text-xs text-ink/60 truncate max-w-[190px] text-right" title={percentage === 100 ? '100% complete' : nextHint}>
           {percentage === 100 ? (
-            <span className="font-medium text-ink/60">100% complete</span>
+            <span className="font-medium text-ink/60">Complete</span>
           ) : (
             <>
-              <span className="font-medium text-ink/70">Next:</span> {nextHint}
+              <span className="text-ink/40">Next:</span> {nextHint}
             </>
           )}
         </span>

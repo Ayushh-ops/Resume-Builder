@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Check, RefreshCw } from 'lucide-react';
+import { Wand2, Check, RefreshCw } from 'lucide-react';
 import type { ResumeData } from '../../types/resume';
 import { generateSummary } from '../../services/geminiService';
 import { Skeleton } from '../common/Skeleton';
@@ -56,14 +56,14 @@ export const SummaryForm: React.FC<SummaryFormProps> = ({ summary, resumeData, o
         <button
           onClick={handleGenerate}
           disabled={isGenerating}
-          className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-brand-600 bg-brand-50 hover:bg-brand-50/80 border border-brand-500/20 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+          className="btn-outline h-7 px-2.5 text-xs font-medium flex items-center gap-1.5 disabled:opacity-50"
         >
           {isGenerating ? (
-            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            <RefreshCw className="w-3.5 h-3.5 animate-spin" strokeWidth={1.5} />
           ) : (
-            <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+            <Wand2 className="w-3.5 h-3.5" strokeWidth={1.5} />
           )}
-          <span>{isGenerating ? 'AI Crafting...' : 'AI Generate / Polish'}</span>
+          <span>{isGenerating ? 'Generating…' : 'Generate summary'}</span>
         </button>
       </div>
 
@@ -83,7 +83,7 @@ export const SummaryForm: React.FC<SummaryFormProps> = ({ summary, resumeData, o
         <div className="p-3 bg-brand-50 border border-brand-500/20 rounded-xl space-y-2 animate-in fade-in">
           <div className="flex items-center justify-between text-xs text-brand-700 dark:text-brand-300 font-semibold">
             <span className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+              <Wand2 className="w-3.5 h-3.5 text-brand-600" />
               AI Suggested Summary ({tone}):
             </span>
             <div className="flex items-center gap-1">

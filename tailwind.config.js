@@ -8,10 +8,19 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        display: ['Fraunces', 'Georgia', 'serif'],
-        serif: ['Merriweather', 'Georgia', 'serif'],
+        sans: ['Instrument Sans', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['Newsreader', 'Georgia', 'serif'],
+        serif: ['Newsreader', 'Georgia', 'serif'],
         mono: ['JetBrains Mono', 'monospace'],
+      },
+      borderRadius: {
+        DEFAULT: '6px',
+        sm: '4px',
+        md: '6px',
+        lg: '8px',
+        xl: '10px',
+        '2xl': '10px',
+        full: '9999px',
       },
       colors: {
         ink: 'rgb(var(--ink) / <alpha-value>)',
@@ -29,8 +38,10 @@ export default {
         },
       },
       boxShadow: {
-        soft:  '0 2px 8px 0 rgba(0,0,0,0.06), 0 0 0 1px rgb(var(--line))',
-        paper: '0 8px 32px 0 rgba(0,0,0,0.12), 0 2px 8px 0 rgba(0,0,0,0.06)',
+        soft: '0 1px 2px 0 rgba(0, 0, 0, 0.04)',
+        menu: '0 4px 16px -2px rgba(0, 0, 0, 0.08), 0 0 0 1px rgb(var(--line))',
+        modal: '0 16px 48px -8px rgba(0, 0, 0, 0.18), 0 0 0 1px rgb(var(--line))',
+        paper: '0 2px 8px -2px rgba(0, 0, 0, 0.08), 0 0 0 1px rgb(var(--line))',
       },
     },
   },

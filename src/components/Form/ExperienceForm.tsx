@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Sparkles, Building2, MapPin, Check, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Wand2, Building2, MapPin, Check, RefreshCw } from 'lucide-react';
 import type { ExperienceItem } from '../../types/resume';
 import { enhanceBulletPoint } from '../../services/geminiService';
 
@@ -234,17 +234,17 @@ export const ExperienceForm: React.FC<ExperienceFormProps> = ({ experience, onCh
                     <button
                       onClick={() => handleEnhanceBullet(expIndex, bulletIndex)}
                       disabled={isEnhancing || !bullet || bullet.trim().length < 5}
-                      className="p-1.5 text-brand-600 hover:bg-brand-50 rounded-md transition-colors border border-brand-500/20 disabled:opacity-30"
-                      title="AI Bullet Enhancer (STAR + Metrics)"
+                      className="p-1 text-ink/60 hover:text-ink hover:bg-muted rounded-[4px] border border-line transition-colors disabled:opacity-30"
+                      title="Improve bullet point"
                     >
-                      <Sparkles className="w-3.5 h-3.5" />
+                      <Wand2 className="w-3.5 h-3.5" strokeWidth={1.5} />
                     </button>
                     <button
                       onClick={() => handleRemoveBullet(expIndex, bulletIndex)}
-                      className="p-1.5 text-ink/40 hover:text-rose-600 hover:bg-muted rounded-md transition-colors"
-                      title="Remove Bullet"
+                      className="p-1 text-ink/40 hover:text-rose-600 hover:bg-muted rounded-[4px] transition-colors"
+                      title="Remove bullet"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
                     </button>
                   </div>
                 </div>
@@ -261,7 +261,7 @@ export const ExperienceForm: React.FC<ExperienceFormProps> = ({ experience, onCh
                     <div className="p-3.5 bg-brand-50 border border-brand-500/20 rounded-xl space-y-2.5 shadow-sm">
                       <div className="flex items-center justify-between text-xs font-bold text-brand-700 dark:text-brand-300">
                         <span className="flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+                          <Wand2 className="w-3.5 h-3.5 text-brand-600" />
                           AI Enhanced Alternatives:
                         </span>
                         <button

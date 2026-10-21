@@ -71,24 +71,18 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="2026 Tech Hiring Trend Advisor"
-      subtitle="Actionable recommendations to beat modern ATS systems and stand out to hiring managers"
-      icon={<TrendingUp className="w-5 h-5 text-emerald-600" />}
-      headerRight={
-        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800">
-          AI Evaluated
-        </span>
-      }
+      title="Industry Trends & Recommendations"
+      subtitle="Suggestions to align your resume with current industry expectations"
+      icon={<TrendingUp className="w-4 h-4 text-ink/70" strokeWidth={1.5} />}
       maxWidth="max-w-3xl"
       footer={
-        <div className="w-full flex justify-between items-center text-xs text-ink/50">
-          <span>Apply these suggestions directly in the Experience & Skills editors.</span>
+        <div className="w-full flex justify-end items-center text-xs">
           <button
             type="button"
             onClick={onClose}
-            className="btn-outline px-4 py-1.5"
+            className="btn-outline h-8 px-3.5"
           >
-            Got It
+            Close
           </button>
         </div>
       }

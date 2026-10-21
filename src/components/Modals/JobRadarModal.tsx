@@ -49,24 +49,18 @@ export const JobRadarModal: React.FC<JobRadarModalProps> = ({ isOpen, onClose, r
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Early Job Radar & Applicant Advantage"
+      title="Job Search Feeds"
       subtitle={`Targeting: ${resumeData.personalInfo.jobTitle || 'Software Engineer'} • ${resumeData.personalInfo.location || 'Remote'}`}
-      icon={<Radar className="w-5 h-5 animate-pulse" />}
-      headerRight={
-        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800">
-          Past 24h Feed
-        </span>
-      }
+      icon={<Radar className="w-4 h-4 text-ink/70" strokeWidth={1.5} />}
       maxWidth="max-w-3xl"
       footer={
-        <div className="w-full flex justify-between items-center text-xs text-ink/50">
-          <span>Tips: Apply directly on the company career portal when found for 2x faster review.</span>
+        <div className="w-full flex justify-end items-center text-xs">
           <button
             type="button"
             onClick={onClose}
-            className="btn-outline px-4 py-1.5"
+            className="btn-outline h-8 px-3.5"
           >
-            Done
+            Close
           </button>
         </div>
       }

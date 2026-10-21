@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { ZoomIn, ZoomOut, RotateCcw, Palette, Type, Upload, User, Sparkles, Sliders } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, Upload, User, Sliders } from 'lucide-react';
 import type { ResumeData, ResumeTheme, TemplateType } from '../../types/resume';
 import { isResumeEmpty } from '../../services/atsScorer';
 import { ModernTemplate } from './templates/ModernTemplate';
 import { HarvardTemplate } from './templates/HarvardTemplate';
 import { MinimalistTemplate } from './templates/MinimalistTemplate';
 import { CreativeTemplate } from './templates/CreativeTemplate';
-import { TemplateThumbnail } from './TemplateThumbnail';
 
 interface ResumePreviewProps {
   data: ResumeData;
@@ -27,10 +26,10 @@ const RESUME_THEME_PRESETS = [
 ];
 
 const TEMPLATES = [
-  { id: 'modern',     label: 'Modern'    },
-  { id: 'harvard',    label: 'Harvard'   },
-  { id: 'minimalist', label: 'Minimal'   },
-  { id: 'creative',   label: 'Dual-Col'  },
+  { id: 'modern',     label: 'Modern'     },
+  { id: 'harvard',    label: 'Harvard'    },
+  { id: 'minimalist', label: 'Minimalist' },
+  { id: 'creative',   label: 'Creative'   },
 ] as const;
 
 export const ResumePreview: React.FC<ResumePreviewProps> = ({
@@ -45,8 +44,8 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
 }) => {
   const [zoom, setZoom] = useState(100);
 
-  const handleZoomIn  = () => setZoom(prev => Math.min(prev + 10, 150));
-  const handleZoomOut = () => setZoom(prev => Math.max(prev - 10, 60));
+  const handleZoomIn  = () => setZoom((prev) => Math.min(prev + 10, 150));
+  const handleZoomOut = () => setZoom((prev) => Math.max(prev - 10, 60));
   const handleReset   = () => setZoom(100);
 
   const renderTemplate = () => {
@@ -61,105 +60,121 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
   const isEmpty = isResumeEmpty(data);
 
   return (
-    <div className="flex flex-col h-full canvas-dots relative">
-      {/* Floating Toolbar: Vertically centered in one row, wraps cleanly on narrow screens */}
-      <div className="no-print sticky top-0 z-20 mx-4 mt-3 mb-0">
-        <div className="card shadow-soft px-3 py-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border border-line bg-card">
+    <div className="flex flex-col h-full bg-canvas relative">
+      {/* Tidy Single Row Toolbar */}
+      <div className="no-print border-b border-line bg-card px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs select-none">
+        {/* Template Tabs: simple text tabs with active underline */}
+        <div className="flex items-center gap-1 -mb-[9px] pb-[7px]">
+          {TEMPLATES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onChangeTemplate(t.id)}
+              className={`px-2.5 py-1 text-xs transition cursor-pointer border-b-2 ${
+                activeTemplate === t.id
+                  ? 'border-brand-600 text-brand-600 font-semibold'
+                  : 'border-transparent text-ink/60 hover:text-ink font-normal'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
 
-          {/* Template switcher with 40x52 thumbnails */}
-          <div className="flex items-center gap-2 shrink-0">
-            {TEMPLATES.map(t => (
-              <TemplateThumbnail
-                key={t.id}
-                id={t.id}
-                label={t.label}
-                isActive={activeTemplate === t.id}
-                onClick={() => onChangeTemplate(t.id)}
-              />
+        {/* Controls: Preset Select, Color, Font, Zoom */}
+        <div className="flex items-center flex-wrap gap-2 text-xs">
+          {/* Resume Preset as a clean select */}
+          <select
+            value={
+              RESUME_THEME_PRESETS.find(
+                (p) => p.color === theme.primaryColor && p.font === theme.fontFamily
+              )?.id || 'custom'
+            }
+            onChange={(e) => {
+              const selected = RESUME_THEME_PRESETS.find((p) => p.id === e.target.value);
+              if (selected) {
+                onChangeTheme({
+                  ...theme,
+                  primaryColor: selected.color,
+                  fontFamily: selected.font,
+                });
+              }
+            }}
+            className="h-7 text-xs bg-card border border-line rounded-[6px] px-2 text-ink focus:outline-none focus:border-brand-600 cursor-pointer"
+            title="Resume style preset"
+          >
+            {RESUME_THEME_PRESETS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
             ))}
+            <option value="custom" disabled>Custom</option>
+          </select>
+
+          {/* Color Picker */}
+          <div className="relative flex items-center border border-line bg-card rounded-[6px] h-7 px-1.5" title="Accent color">
+            <label className="cursor-pointer text-ink/60 hover:text-ink flex items-center gap-1">
+              <span className="w-3 h-3 rounded-full border border-black/10 shrink-0" style={{ backgroundColor: theme.primaryColor || '#1e3a8a' }} />
+              <input
+                type="color"
+                value={theme.primaryColor || '#1e3a8a'}
+                onChange={(e) => onChangeTheme({ ...theme, primaryColor: e.target.value })}
+                className="sr-only"
+              />
+            </label>
           </div>
 
-          {/* Theme Presets + Custom Color + Font + Zoom */}
-          <div className="flex items-center flex-wrap gap-2.5 shrink-0 self-center">
-            {/* 1-Click Resume Theme Presets */}
-            <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-line">
-              {RESUME_THEME_PRESETS.map((preset) => {
-                const isActive = theme.primaryColor === preset.color && theme.fontFamily === preset.font;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() =>
-                      onChangeTheme({
-                        ...theme,
-                        primaryColor: preset.color,
-                        fontFamily: preset.font,
-                      })
-                    }
-                    title={`${preset.name} (${preset.font})`}
-                    className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold transition ${
-                      isActive
-                        ? 'bg-card text-brand-600 shadow-soft ring-1 ring-brand-500/30'
-                        : 'text-ink/60 hover:text-ink hover:bg-card/50'
-                    }`}
-                  >
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: preset.color }} />
-                    <span className="hidden sm:inline">{preset.name}</span>
-                  </button>
-                );
-              })}
-            </div>
+          {/* Font Selector */}
+          <select
+            value={theme.fontFamily}
+            onChange={(e) => onChangeTheme({ ...theme, fontFamily: e.target.value as any })}
+            className="h-7 text-xs bg-card border border-line rounded-[6px] px-2 text-ink focus:outline-none focus:border-brand-600 cursor-pointer"
+            title="Font family"
+          >
+            <option value="sans">Sans</option>
+            <option value="serif">Serif</option>
+            <option value="mono">Mono</option>
+          </select>
 
-            {/* Custom Color Picker */}
-            <div className="relative flex items-center border border-line bg-card rounded-md" title="Custom color picker">
-              <label className="p-1 rounded-md hover:bg-muted cursor-pointer text-ink/50 hover:text-ink transition flex items-center">
-                <Palette className="w-3.5 h-3.5" strokeWidth={1.75} />
-                <input
-                  type="color"
-                  value={theme.primaryColor || '#4a49d8'}
-                  onChange={(e) => onChangeTheme({ ...theme, primaryColor: e.target.value })}
-                  className="sr-only"
-                />
-              </label>
-            </div>
+          <div className="h-4 w-px bg-line mx-0.5" />
 
-            {/* Font Selector */}
-            <div className="flex items-center gap-1">
-              <Type className="w-3 h-3 text-ink/40" strokeWidth={1.75} />
-              <select
-                value={theme.fontFamily}
-                onChange={e => onChangeTheme({ ...theme, fontFamily: e.target.value as any })}
-                className="text-[11px] bg-card border border-line rounded-md px-2 py-1 text-ink focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-              >
-                <option value="sans">Sans (Inter)</option>
-                <option value="serif">Serif (Merriweather)</option>
-                <option value="mono">Mono (Code)</option>
-              </select>
-            </div>
-
-            {/* Zoom Controls (Inter with tabular-nums) */}
-            <div className="flex items-center gap-0.5 border border-line bg-card rounded-md px-1.5 py-0.5 text-ink/60">
-              <button onClick={handleZoomOut} className="p-1 hover:text-ink rounded transition active:scale-95" title="Zoom out">
-                <ZoomOut className="w-3.5 h-3.5" strokeWidth={1.75} />
-              </button>
-              <span className="text-[11px] font-sans tabular-nums w-8 text-center text-ink/80">{zoom}%</span>
-              <button onClick={handleZoomIn} className="p-1 hover:text-ink rounded transition active:scale-95" title="Zoom in">
-                <ZoomIn className="w-3.5 h-3.5" strokeWidth={1.75} />
-              </button>
-              <button onClick={handleReset} className="p-1 hover:text-ink rounded transition active:scale-95 ml-0.5" title="Reset zoom">
-                <RotateCcw className="w-3 h-3" strokeWidth={1.75} />
-              </button>
-            </div>
+          {/* Zoom Controls */}
+          <div className="flex items-center gap-0.5 border border-line bg-card rounded-[6px] h-7 px-1 text-ink/70">
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              className="p-1 hover:text-ink transition cursor-pointer"
+              title="Zoom out"
+            >
+              <ZoomOut className="w-3.5 h-3.5" strokeWidth={1.5} />
+            </button>
+            <span className="text-[11px] tabular-nums w-8 text-center text-ink/80">{zoom}%</span>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              className="p-1 hover:text-ink transition cursor-pointer"
+              title="Zoom in"
+            >
+              <ZoomIn className="w-3.5 h-3.5" strokeWidth={1.5} />
+            </button>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="p-1 hover:text-ink transition cursor-pointer ml-0.5 text-ink/40"
+              title="Reset zoom"
+            >
+              <RotateCcw className="w-3 h-3" strokeWidth={1.5} />
+            </button>
           </div>
         </div>
       </div>
 
-      {/* A4 Sheet Viewport */}
-      <div className="flex-1 overflow-auto p-6 flex justify-center items-start relative">
+      {/* A4 Sheet Viewport on Flat Canvas */}
+      <div className="flex-1 overflow-auto p-6 sm:p-8 flex justify-center items-start relative bg-canvas">
         <div
           id="resume-pdf-sheet"
           data-theme="light"
-          className="print-resume-sheet bg-white shadow-paper transition-transform origin-top duration-150 rounded-sm relative text-[#16161d]"
+          className="print-resume-sheet bg-white border border-line shadow-sm relative text-[#16161d] transition-transform origin-top duration-150"
           style={{
             width: '794px',
             minHeight: '1123px',
@@ -174,36 +189,31 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
 
           {/* Empty State Overlay */}
           {isEmpty && (
-            <div className="no-print absolute inset-0 bg-white/80 backdrop-blur-[2px] flex items-center justify-center p-6 z-10 animate-in fade-in">
-              <div className="card shadow-paper p-6 max-w-sm text-center space-y-4 border border-border">
-                <div className="w-10 h-10 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mx-auto shadow-soft">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-ink">Your resume is empty</h4>
-                  <p className="text-xs text-ink/50 mt-1">
-                    Upload an existing document or load a pre-filled sample profile to start optimizing.
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 pt-1">
-                  <div className="flex flex-col sm:flex-row gap-2">
+            <div className="no-print absolute inset-0 bg-white/90 flex items-center justify-center p-6 z-10 animate-in fade-in">
+              <div className="card p-6 max-w-sm text-center space-y-3 border border-line bg-card shadow-modal">
+                <h4 className="text-sm font-semibold text-ink">Your resume is empty</h4>
+                <p className="text-xs text-ink/60">
+                  Import a document or choose a sample profile to begin.
+                </p>
+                <div className="flex flex-col gap-2 pt-2">
+                  <div className="flex gap-2">
                     {onOpenUpload && (
                       <button
                         type="button"
                         onClick={onOpenUpload}
-                        className="btn-primary flex-1 justify-center py-2"
+                        className="btn-primary flex-1 justify-center h-8"
                       >
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>Upload Resume</span>
+                        <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        <span>Upload resume</span>
                       </button>
                     )}
                     {onOpenCustomAts && (
                       <button
                         type="button"
                         onClick={onOpenCustomAts}
-                        className="btn-outline flex-1 justify-center py-2 text-brand-600 border-brand-500/30"
+                        className="btn-outline flex-1 justify-center h-8"
                       >
-                        <Sliders className="w-3.5 h-3.5" />
+                        <Sliders className="w-3.5 h-3.5" strokeWidth={1.5} />
                         <span>Custom ATS</span>
                       </button>
                     )}
@@ -212,10 +222,10 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
                     <button
                       type="button"
                       onClick={() => onLoadSample('aiEngineer')}
-                      className="btn-ghost w-full justify-center py-2"
+                      className="btn-ghost w-full justify-center h-8"
                     >
-                      <User className="w-3.5 h-3.5" />
-                      <span>Load Sample Profile</span>
+                      <User className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Load sample profile</span>
                     </button>
                   )}
                 </div>

@@ -88,35 +88,35 @@ export const Modal: React.FC<ModalProps> = ({
       <div
         ref={panelRef}
         style={{ backgroundColor: 'rgb(var(--card))' }}
-        className={`relative w-full ${maxWidth} bg-card text-ink border border-line rounded-2xl shadow-paper flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-150 z-50 ${className}`}
+        className={`relative w-full ${maxWidth} bg-card text-ink border border-line rounded-[10px] shadow-modal flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-150 z-50 ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header (Fixed) */}
         {(title || icon) && (
           <div
             style={{ backgroundColor: 'rgb(var(--card))' }}
-            className="px-5 py-4 bg-card border-b border-line flex items-center justify-between shrink-0 select-none"
+            className="px-5 py-3.5 bg-card border-b border-line flex items-center justify-between shrink-0 select-none"
           >
-            <div className="flex items-center gap-3 min-w-0 pr-2">
+            <div className="flex items-center gap-2.5 min-w-0 pr-2">
               {icon && (
-                <div className="p-2 rounded-xl bg-brand-50 text-brand-600 shrink-0">
+                <span className="text-ink/60 shrink-0">
                   {icon}
-                </div>
+                </span>
               )}
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-sm sm:text-base font-bold text-ink truncate">{title}</h2>
+                  <h2 className="text-base font-semibold text-ink truncate">{title}</h2>
                   {headerRight}
                 </div>
                 {subtitle && (
-                  <p className="text-[11px] sm:text-xs text-ink/60 truncate mt-0.5">{subtitle}</p>
+                  <p className="text-xs text-ink/60 truncate mt-0.5">{subtitle}</p>
                 )}
               </div>
             </div>
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-ink/40 hover:text-ink hover:bg-muted transition-colors shrink-0"
+              className="p-1 rounded-[6px] text-ink/40 hover:text-ink hover:bg-muted transition shrink-0"
               title="Close (Esc)"
             >
               <X className="w-4 h-4" />

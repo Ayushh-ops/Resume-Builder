@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Key, ExternalLink, Check, Sparkles, Palette } from 'lucide-react';
+import { Key, ExternalLink, Check, Palette } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import {
   getStoredApiKey,
@@ -56,39 +56,44 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="App & AI Settings"
-      subtitle="Theme appearance and Gemini model configuration"
-      icon={<Key className="w-4 h-4 text-brand-600" />}
+      title="Settings"
+      subtitle="Theme appearance and model configuration"
+      icon={<Key className="w-4 h-4 text-ink/70" />}
+      headerRight={
+        <span className="text-[11px] font-mono text-ink/50 bg-muted px-2 py-0.5 rounded-[4px] border border-line">
+          AI: {apiKey ? 'on' : 'off'}
+        </span>
+      }
       maxWidth="max-w-md"
       footer={
         <>
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-1.5 text-xs font-semibold text-ink/70 hover:bg-muted rounded-lg transition"
+            className="px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-muted rounded-[6px] transition cursor-pointer"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleSave}
-            className="btn-primary"
+            className="btn-primary h-8 px-3.5"
           >
             {saved ? <Check className="w-3.5 h-3.5" /> : null}
-            <span>{saved ? 'Saved!' : 'Save Settings'}</span>
+            <span>{saved ? 'Saved' : 'Save settings'}</span>
           </button>
         </>
       }
     >
       <div className="space-y-4 text-xs bg-card">
         {/* Unified Theme Grid — Applies Instantly */}
-        <div className="p-3 bg-muted/60 rounded-xl border border-line space-y-2.5">
+        <div className="p-3 bg-muted/40 rounded-[10px] border border-line space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="font-semibold text-ink flex items-center gap-1.5">
-              <Palette className="w-3.5 h-3.5 text-brand-600" />
-              <span>Theme Appearance</span>
+              <Palette className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
+              <span>Theme</span>
             </span>
-            <span className="text-[10px] text-ink/50 uppercase font-mono tracking-wider">
+            <span className="text-xs text-ink/50 font-mono">
               {currentTheme}
             </span>
           </div>
@@ -101,28 +106,28 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                   key={preset.id}
                   type="button"
                   onClick={() => handleSelectTheme(preset.id)}
-                  className={`p-2 rounded-xl border text-left transition-all flex flex-col gap-1.5 cursor-pointer ${
+                  className={`p-2 rounded-[6px] border text-left transition-colors flex flex-col gap-1.5 cursor-pointer ${
                     isActive
-                      ? 'border-brand-500 ring-2 ring-brand-500 bg-card shadow-soft'
-                      : 'border-line bg-card hover:border-brand-500/40 hover:bg-muted'
+                      ? 'border-brand-600 bg-card font-medium'
+                      : 'border-line bg-card hover:border-ink/30 hover:bg-muted'
                   }`}
                 >
                   {/* Swatch mini preview */}
                   <div
-                    className="w-full h-7 rounded-lg border border-line flex items-center justify-between px-2 overflow-hidden"
+                    className="w-full h-6 rounded border border-line flex items-center justify-between px-2 overflow-hidden"
                     style={{ backgroundColor: preset.canvas }}
                   >
                     <div
-                      className="w-4 h-4 rounded shadow-2xs border border-line"
+                      className="w-3.5 h-3.5 rounded border border-line"
                       style={{ backgroundColor: preset.card }}
                     />
                     <div
-                      className="w-3 h-3 rounded-full"
+                      className="w-2.5 h-2.5 rounded-full"
                       style={{ backgroundColor: preset.accent }}
                     />
                   </div>
                   <div className="flex items-center justify-between min-w-0">
-                    <span className="text-[11px] font-bold text-ink truncate">
+                    <span className="text-xs text-ink truncate">
                       {preset.name}
                     </span>
                     {isActive && <Check className="w-3 h-3 text-brand-600 shrink-0" />}
@@ -135,39 +140,32 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
         {/* Gemini Model Selector */}
         <div className="space-y-1.5">
-          <label className="label">Gemini Model</label>
+          <label className="label">Model</label>
           <div className="grid grid-cols-2 gap-2">
             {[
               {
                 id: 'gemini-3.8-flash',
                 name: 'Gemini 3.8 Flash',
-                badge: 'Recommended',
-                desc: 'Fastest latency, optimal for real-time bullet improvements',
+                desc: 'Fastest responses, suitable for drafting & bullet edits',
               },
               {
                 id: 'gemini-2.5-pro',
                 name: 'Gemini 2.5 Pro',
-                badge: 'Deep Reasoning',
-                desc: 'Highest reasoning depth for complex JD gap analysis',
+                desc: 'Deep analysis, suitable for detailed JD gap review',
               },
             ].map((m) => (
               <button
                 key={m.id}
                 type="button"
                 onClick={() => setModel(m.id)}
-                className={`p-2.5 rounded-xl border text-left transition-all ${
+                className={`p-2.5 rounded-[6px] border text-left transition-colors cursor-pointer ${
                   model === m.id
-                    ? 'border-brand-500 bg-brand-50/40 ring-1 ring-brand-500'
-                    : 'border-line bg-card hover:bg-muted'
+                    ? 'border-brand-600 bg-muted/40 font-medium'
+                    : 'border-line bg-card hover:border-ink/30'
                 }`}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-ink text-[11px]">{m.name}</span>
-                  <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded-full bg-brand-50 text-brand-600 border border-line">
-                    {m.badge}
-                  </span>
-                </div>
-                <p className="text-[10px] text-ink/60 leading-tight">{m.desc}</p>
+                <div className="font-semibold text-ink text-xs mb-0.5">{m.name}</div>
+                <p className="text-[11px] text-ink/60 leading-tight">{m.desc}</p>
               </button>
             ))}
           </div>
@@ -176,10 +174,9 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
         {/* API Key Input */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <label className="label mb-0">Google Gemini API Key</label>
-            <span className="text-[10px] text-ink/50 flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-amber-500" />
-              Stored locally in browser
+            <label className="label mb-0">Google Gemini API key</label>
+            <span className="text-[11px] text-ink/40">
+              Stored locally
             </span>
           </div>
           <input

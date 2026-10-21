@@ -50,18 +50,18 @@ export const FormSection: React.FC<FormSectionProps> = ({
       onDragEnd={onDragEnd}
       onDragOver={onDragOver}
       onDrop={onDrop}
-      className={`card transition-all ${
-        isHidden ? 'opacity-60 bg-muted' : 'hover:shadow-paper/50'
+      className={`card transition-colors ${
+        isHidden ? 'opacity-60 bg-muted' : ''
       }`}
     >
-      <div className="w-full px-3.5 py-3 flex items-center justify-between bg-card hover:bg-muted/40 transition-colors select-none">
+      <div className="w-full px-3.5 py-3 flex items-center justify-between bg-card hover:bg-muted/30 transition-colors select-none">
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
           {draggable && (
             <div
               className="cursor-grab active:cursor-grabbing text-ink/30 hover:text-ink/60 transition p-0.5 -ml-1"
               title="Drag to reorder section"
             >
-              <GripVertical className="w-4 h-4" strokeWidth={1.75} />
+              <GripVertical className="w-4 h-4" strokeWidth={1.5} />
             </div>
           )}
 
@@ -69,9 +69,9 @@ export const FormSection: React.FC<FormSectionProps> = ({
             onClick={() => !isHidden && setIsOpen(!isOpen)}
             className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer"
           >
-            <div className={`p-1.5 rounded-lg ${isHidden ? 'bg-muted text-ink/40' : 'bg-brand-50 text-brand-600'}`}>
+            <span className={`shrink-0 ${isHidden ? 'text-ink/30' : 'text-ink/60'}`}>
               {icon}
-            </div>
+            </span>
             <h3
               className={`text-sm font-semibold tracking-tight truncate ${
                 isHidden ? 'line-through text-ink/40' : 'text-ink'
@@ -80,8 +80,8 @@ export const FormSection: React.FC<FormSectionProps> = ({
               {title}
             </h3>
             {badge && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-ink/60 border border-line shrink-0">
-                {badge}
+              <span className="text-[11px] font-normal text-ink/40 shrink-0">
+                ({badge})
               </span>
             )}
           </div>

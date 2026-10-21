@@ -8,7 +8,6 @@ import {
   Wrench,
   FolderGit2,
   Award,
-  Sparkles,
   Eye,
   Edit3,
   Upload,
@@ -722,8 +721,8 @@ export const App: React.FC = () => {
           <FormSection
             key="personal"
             id="personal"
-            title="Personal & Contact Info"
-            icon={<User className="w-4 h-4" />}
+            title="Personal & contact info"
+            icon={<User className="w-4 h-4" strokeWidth={1.5} />}
             badge="Required"
             defaultOpen={true}
             forceOpen={isForced}
@@ -746,9 +745,8 @@ export const App: React.FC = () => {
           <FormSection
             key="summary"
             id="summary"
-            title="Professional Summary"
-            icon={<FileText className="w-4 h-4" />}
-            badge="AI Assist"
+            title="Professional summary"
+            icon={<FileText className="w-4 h-4" strokeWidth={1.5} />}
             defaultOpen={true}
             forceOpen={isForced}
             draggable={true}
@@ -771,9 +769,9 @@ export const App: React.FC = () => {
           <FormSection
             key="experience"
             id="experience"
-            title="Work Experience"
-            icon={<Briefcase className="w-4 h-4" />}
-            badge={`${resumeData.experience.length} Roles`}
+            title="Work experience"
+            icon={<Briefcase className="w-4 h-4" strokeWidth={1.5} />}
+            badge={resumeData.experience.length ? `${resumeData.experience.length}` : undefined}
             defaultOpen={true}
             forceOpen={isForced}
             draggable={true}
@@ -795,9 +793,13 @@ export const App: React.FC = () => {
           <FormSection
             key="skills"
             id="skills"
-            title="Skills & Technologies"
-            icon={<Wrench className="w-4 h-4" />}
-            badge={`${resumeData.skills.reduce((acc, cat) => acc + cat.skills.length, 0)} Skills`}
+            title="Skills & technologies"
+            icon={<Wrench className="w-4 h-4" strokeWidth={1.5} />}
+            badge={
+              resumeData.skills.reduce((acc, cat) => acc + cat.skills.length, 0)
+                ? `${resumeData.skills.reduce((acc, cat) => acc + cat.skills.length, 0)}`
+                : undefined
+            }
             defaultOpen={false}
             forceOpen={isForced}
             draggable={true}
@@ -819,9 +821,9 @@ export const App: React.FC = () => {
           <FormSection
             key="projects"
             id="projects"
-            title="Projects & Open Source"
-            icon={<FolderGit2 className="w-4 h-4" />}
-            badge={`${resumeData.projects.length} Projects`}
+            title="Projects & open source"
+            icon={<FolderGit2 className="w-4 h-4" strokeWidth={1.5} />}
+            badge={resumeData.projects.length ? `${resumeData.projects.length}` : undefined}
             defaultOpen={false}
             forceOpen={isForced}
             draggable={true}
@@ -843,9 +845,9 @@ export const App: React.FC = () => {
           <FormSection
             key="education"
             id="education"
-            title="Education & Degrees"
-            icon={<GraduationCap className="w-4 h-4" />}
-            badge={`${resumeData.education.length} Entries`}
+            title="Education"
+            icon={<GraduationCap className="w-4 h-4" strokeWidth={1.5} />}
+            badge={resumeData.education.length ? `${resumeData.education.length}` : undefined}
             defaultOpen={false}
             forceOpen={isForced}
             draggable={true}
@@ -867,9 +869,9 @@ export const App: React.FC = () => {
           <FormSection
             key="certifications"
             id="certifications"
-            title="Certifications & Credentials"
-            icon={<Award className="w-4 h-4" />}
-            badge={`${resumeData.certifications.length} Certs`}
+            title="Certifications"
+            icon={<Award className="w-4 h-4" strokeWidth={1.5} />}
+            badge={resumeData.certifications.length ? `${resumeData.certifications.length}` : undefined}
             defaultOpen={false}
             forceOpen={isForced}
             draggable={true}
@@ -937,32 +939,32 @@ export const App: React.FC = () => {
           {/* Header row */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-line">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold font-display text-ink tracking-tight flex items-center gap-2.5">
-                <span>Your Resumes</span>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-600 font-semibold font-sans">
+              <h1 className="text-2xl font-serif font-semibold text-ink tracking-tight flex items-center gap-2">
+                <span>Your resumes</span>
+                <span className="text-xs px-2 py-0.5 rounded-[4px] bg-muted text-ink/70 font-sans font-medium">
                   {resumeIndex.length}
                 </span>
               </h1>
-              <p className="text-xs sm:text-sm text-ink/60 mt-1">
-                Manage, optimize, and tailor your resumes with Gemini 3.8 AI
+              <p className="text-xs text-ink/60 mt-0.5">
+                Manage and edit your saved resumes.
               </p>
             </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => openModal(setIsUploadModalOpen)}
-                className="btn-outline h-9 px-3.5 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                className="btn-outline h-8 px-3 text-xs font-medium flex items-center gap-1.5 cursor-pointer"
               >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Upload Resume</span>
+                <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
+                <span>Upload resume</span>
               </button>
               <button
                 type="button"
                 onClick={handleCreateNew}
-                className="btn-primary h-9 px-4 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-soft"
+                className="btn-primary h-8 px-3 text-xs font-medium flex items-center gap-1.5 cursor-pointer"
               >
-                <Plus className="w-4 h-4" />
-                <span>New Resume</span>
+                <Plus className="w-4 h-4" strokeWidth={1.5} />
+                <span>New resume</span>
               </button>
             </div>
           </div>
@@ -973,17 +975,17 @@ export const App: React.FC = () => {
             <button
               type="button"
               onClick={handleCreateNew}
-              className="card p-5 border-2 border-dashed border-line hover:border-brand-500 bg-card/60 hover:bg-card transition-all cursor-pointer text-left flex flex-col justify-between h-[280px] group hover:shadow-soft"
+              className="card p-4 border border-dashed border-line hover:border-ink/40 bg-card transition cursor-pointer text-left flex flex-col justify-between h-[250px] group"
             >
-              <div className="flex flex-col items-center justify-center h-full text-center py-6">
-                <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 group-hover:bg-brand-500 group-hover:text-white transition-all shadow-soft">
-                  <Plus className="w-6 h-6" />
+              <div className="flex flex-col items-center justify-center h-full text-center py-4">
+                <div className="w-10 h-10 rounded-[6px] bg-muted text-ink/70 flex items-center justify-center mb-2.5 transition">
+                  <Plus className="w-5 h-5" strokeWidth={1.5} />
                 </div>
-                <h3 className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors">
-                  New Blank Resume
+                <h3 className="text-sm font-semibold text-ink transition-colors">
+                  Start from scratch
                 </h3>
-                <p className="text-xs text-ink/50 mt-1 max-w-[200px] leading-relaxed">
-                  Start from scratch with clean sections and live AI assistance
+                <p className="text-xs text-ink/50 mt-1 max-w-[180px] leading-relaxed">
+                  Build a new resume with a blank template.
                 </p>
               </div>
             </button>
@@ -992,7 +994,7 @@ export const App: React.FC = () => {
             {resumeIndex.map((entry) => (
               <div
                 key={entry.id}
-                className="card border border-line bg-card hover:border-brand-500/80 hover:shadow-paper transition-all flex flex-col justify-between h-[280px] relative group"
+                className="card border border-line bg-card hover:border-ink/40 transition flex flex-col justify-between h-[250px] relative group"
               >
                 {/* Click area to open */}
                 <div
@@ -1002,40 +1004,38 @@ export const App: React.FC = () => {
                   className="p-4 flex-1 flex flex-col justify-between cursor-pointer"
                 >
                   {/* Miniature Visual Mockup Thumbnail */}
-                  <div className="w-full h-28 bg-canvas rounded-lg p-2.5 border border-line flex flex-col justify-between overflow-hidden relative group-hover:border-brand-500/30 transition-colors">
-                    <div className="h-1 w-1/3 rounded-full bg-brand-500 mb-1.5" />
+                  <div className="w-full h-24 bg-canvas rounded-[6px] p-2 border border-line flex flex-col justify-between overflow-hidden relative">
+                    <div className="h-0.5 w-1/4 rounded-full bg-brand-600 mb-1" />
                     <div className="space-y-1">
-                      <div className="h-2 w-3/4 bg-ink/20 rounded" />
-                      <div className="h-1.5 w-1/2 bg-ink/10 rounded" />
+                      <div className="h-1.5 w-3/4 bg-ink/15 rounded" />
+                      <div className="h-1 w-1/2 bg-ink/10 rounded" />
                     </div>
-                    <div className="space-y-1 my-auto">
+                    <div className="space-y-0.5 my-auto">
                       <div className="h-1 w-full bg-ink/10 rounded" />
                       <div className="h-1 w-5/6 bg-ink/10 rounded" />
                       <div className="h-1 w-4/6 bg-ink/10 rounded" />
                     </div>
                     <div className="flex items-center justify-between pt-1 border-t border-line/60">
-                      <div className="flex gap-1">
-                        <div className="h-1 w-6 bg-brand-500/30 rounded" />
-                        <div className="h-1 w-6 bg-brand-500/30 rounded" />
-                      </div>
+                      <div className="h-1 w-12 bg-ink/10 rounded" />
                       {entry.score !== undefined && (
-                        <span
-                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                            entry.score >= 80
-                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-                              : entry.score >= 60
-                              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
-                              : 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
-                          }`}
-                        >
-                          ATS {entry.score}
+                        <span className="text-[10px] font-medium text-ink/70 flex items-center gap-1">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              entry.score >= 80
+                                ? 'bg-emerald-600'
+                                : entry.score >= 60
+                                ? 'bg-amber-600'
+                                : 'bg-rose-600'
+                            }`}
+                          />
+                          <span>{entry.score}</span>
                         </span>
                       )}
                     </div>
                   </div>
 
                   {/* Title & Info */}
-                  <div className="mt-3">
+                  <div className="mt-2.5">
                     {renamingCardId === entry.id ? (
                       <input
                         type="text"
@@ -1048,25 +1048,25 @@ export const App: React.FC = () => {
                         }}
                         onBlur={() => handleFinishCardRename(entry.id)}
                         autoFocus
-                        className="w-full text-xs font-bold px-2 py-1 rounded bg-card border border-brand-500 text-ink focus:outline-none"
+                        className="w-full text-xs font-semibold px-2 py-0.5 rounded-[4px] bg-card border border-brand-600 text-ink focus:outline-none"
                       />
                     ) : (
                       <h3
-                        className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors truncate"
+                        className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors truncate"
                         title={entry.name}
                       >
                         {entry.name}
                       </h3>
                     )}
                     <p className="text-xs text-ink/60 truncate mt-0.5">
-                      {entry.title || 'General Resume'}
+                      {entry.title || 'General resume'}
                     </p>
                   </div>
 
                   {/* Footer info: last edited */}
-                  <div className="mt-2 pt-2 border-t border-line flex items-center justify-between text-[11px] text-ink/40">
+                  <div className="mt-2 pt-2 border-t border-line flex items-center justify-between text-xs text-ink/40">
                     <span>{formatRelativeTime(entry.updatedAt)}</span>
-                    <span className="text-brand-600 font-medium group-hover:underline flex items-center gap-0.5">
+                    <span className="text-ink/60 font-medium group-hover:text-brand-600 flex items-center gap-0.5">
                       <span>Edit</span>
                       <ArrowRight className="w-3 h-3" />
                     </span>
@@ -1081,8 +1081,8 @@ export const App: React.FC = () => {
                       e.stopPropagation();
                       setOpenCardMenuId((prev) => (prev === entry.id ? null : entry.id));
                     }}
-                    className="p-1.5 rounded-lg bg-card/80 backdrop-blur-sm border border-line text-ink/60 hover:text-ink hover:bg-muted transition cursor-pointer shadow-xs"
-                    title="More actions"
+                    className="p-1 rounded-[4px] bg-card/90 border border-line text-ink/50 hover:text-ink hover:bg-muted transition cursor-pointer"
+                    title="Actions"
                   >
                     <MoreVertical className="w-3.5 h-3.5" />
                   </button>
@@ -1092,7 +1092,7 @@ export const App: React.FC = () => {
                     <div
                       ref={cardMenuRef}
                       onClick={(e) => e.stopPropagation()}
-                      className="absolute right-0 top-8 w-44 card shadow-paper py-1 z-20 border border-line bg-card animate-in fade-in zoom-in-95 duration-100"
+                      className="absolute right-0 top-7 w-40 card shadow-menu py-1 z-20 border border-line bg-card animate-in fade-in duration-100"
                     >
                       <button
                         type="button"
@@ -1102,7 +1102,7 @@ export const App: React.FC = () => {
                         }}
                         className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted flex items-center gap-2 transition cursor-pointer"
                       >
-                        <FolderOpen className="w-3.5 h-3.5 text-ink/60" />
+                        <FolderOpen className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
                         <span>Open</span>
                       </button>
                       <button
@@ -1114,7 +1114,7 @@ export const App: React.FC = () => {
                         }}
                         className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted flex items-center gap-2 transition cursor-pointer"
                       >
-                        <Edit3 className="w-3.5 h-3.5 text-ink/60" />
+                        <Edit3 className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
                         <span>Rename</span>
                       </button>
                       <button
@@ -1125,7 +1125,7 @@ export const App: React.FC = () => {
                         }}
                         className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted flex items-center gap-2 transition cursor-pointer"
                       >
-                        <Copy className="w-3.5 h-3.5 text-ink/60" />
+                        <Copy className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
                         <span>Duplicate</span>
                       </button>
                       <button
@@ -1136,7 +1136,7 @@ export const App: React.FC = () => {
                         }}
                         className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted flex items-center gap-2 transition cursor-pointer"
                       >
-                        <Download className="w-3.5 h-3.5 text-ink/60" />
+                        <Download className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
                         <span>Export JSON</span>
                       </button>
                       <div className="my-1 border-t border-line" />
@@ -1148,7 +1148,7 @@ export const App: React.FC = () => {
                         }}
                         className="w-full text-left px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2 transition cursor-pointer"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
                         <span>Delete</span>
                       </button>
                     </div>
@@ -1159,37 +1159,37 @@ export const App: React.FC = () => {
           </div>
 
           {/* Quick action row below the grid */}
-          <div className="mt-8 pt-6 border-t border-line space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-card border border-line">
+          <div className="mt-8 pt-6 border-t border-line space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-[10px] bg-card border border-line">
               <div>
-                <h3 className="text-xs font-bold text-ink uppercase tracking-wider">
-                  Start from Curated Sample
+                <h3 className="text-xs font-semibold text-ink">
+                  Start from a sample profile
                 </h3>
                 <p className="text-xs text-ink/60 mt-0.5">
-                  Create a new resume pre-filled with industry-tested profiles
+                  Choose a pre-filled profile to edit.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => handleLoadSample('aiEngineer')}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-muted hover:bg-brand-50 hover:text-brand-600 border border-line transition cursor-pointer text-ink"
+                  className="px-2.5 py-1 text-xs font-medium rounded-[6px] bg-muted hover:bg-line border border-line transition cursor-pointer text-ink"
                 >
                   AI Engineer
                 </button>
                 <button
                   type="button"
                   onClick={() => handleLoadSample('fullStack')}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-muted hover:bg-brand-50 hover:text-brand-600 border border-line transition cursor-pointer text-ink"
+                  className="px-2.5 py-1 text-xs font-medium rounded-[6px] bg-muted hover:bg-line border border-line transition cursor-pointer text-ink"
                 >
                   Full-Stack Developer
                 </button>
                 <button
                   type="button"
                   onClick={() => handleLoadSample('fresherStudent')}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-muted hover:bg-brand-50 hover:text-brand-600 border border-line transition cursor-pointer text-ink"
+                  className="px-2.5 py-1 text-xs font-medium rounded-[6px] bg-muted hover:bg-line border border-line transition cursor-pointer text-ink"
                 >
-                  Graduate / Fresher
+                  Graduate
                 </button>
               </div>
             </div>
@@ -1197,13 +1197,13 @@ export const App: React.FC = () => {
             {/* Custom ATS banner */}
             <div
               onClick={handleOpenCustomAts}
-              className="w-full p-3.5 bg-muted border border-line rounded-xl flex items-center justify-between cursor-pointer hover:border-brand-500/50 transition group"
+              className="w-full p-3 bg-card border border-line rounded-[10px] flex items-center justify-between cursor-pointer hover:border-ink/40 transition group"
             >
-              <div className="flex items-center gap-2.5 text-xs text-ink/70 group-hover:text-ink">
-                <Target className="w-4 h-4 text-brand-600 shrink-0" />
-                <span className="font-medium">Have your own ATS format or scoring rubric?</span>
+              <div className="flex items-center gap-2 text-xs text-ink/70 group-hover:text-ink">
+                <Target className="w-4 h-4 text-ink/60 shrink-0" strokeWidth={1.5} />
+                <span>Have an ATS format or rubric?</span>
               </div>
-              <span className="text-xs font-bold text-brand-600 group-hover:underline flex items-center gap-1">
+              <span className="text-xs font-medium text-brand-600 group-hover:underline flex items-center gap-1">
                 <span>Add custom ATS profile</span>
                 <span>→</span>
               </span>
@@ -1216,48 +1216,41 @@ export const App: React.FC = () => {
       {route.type === 'editor' && (
         <>
           {/* Mobile Tab Toggle */}
-          <div className="no-print lg:hidden flex border-b border-line bg-card sticky top-14 z-20">
+          <div className="no-print lg:hidden flex border-b border-line bg-card sticky top-13 z-20">
             <button
               onClick={() => setMobileTab('edit')}
-              className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition-colors ${
+              className={`flex-1 py-2 text-xs font-medium flex items-center justify-center gap-1.5 border-b-2 transition-colors ${
                 mobileTab === 'edit'
-                  ? 'border-brand-600 text-brand-600'
-                  : 'border-transparent text-ink/50 hover:text-ink'
+                  ? 'border-brand-600 text-brand-600 font-semibold'
+                  : 'border-transparent text-ink/60 hover:text-ink'
               }`}
             >
-              <Edit3 className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <Edit3 className="w-3.5 h-3.5" strokeWidth={1.5} />
               <span>Editor</span>
             </button>
             <button
               onClick={() => setMobileTab('preview')}
-              className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition-colors ${
+              className={`flex-1 py-2 text-xs font-medium flex items-center justify-center gap-1.5 border-b-2 transition-colors ${
                 mobileTab === 'preview'
-                  ? 'border-brand-600 text-brand-600'
-                  : 'border-transparent text-ink/50 hover:text-ink'
+                  ? 'border-brand-600 text-brand-600 font-semibold'
+                  : 'border-transparent text-ink/60 hover:text-ink'
               }`}
             >
-              <Eye className="w-3.5 h-3.5" strokeWidth={1.75} />
-              <span>Preview (ATS: {atsResult.score})</span>
+              <Eye className="w-3.5 h-3.5" strokeWidth={1.5} />
+              <span>Preview</span>
             </button>
           </div>
 
           {/* Main Split-Screen Workspace */}
-          <main className="flex-1 flex flex-col lg:flex-row overflow-hidden h-[calc(100vh-56px)]">
+          <main className="flex-1 flex flex-col lg:flex-row overflow-hidden h-[calc(100vh-52px)]">
             {/* Left: Editor Panel */}
             <div
               className={`no-print w-full lg:w-[420px] xl:w-[480px] lg:shrink-0 h-full overflow-y-auto p-4 space-y-3 border-r border-line bg-canvas ${
                 mobileTab === 'edit' ? 'block' : 'hidden lg:block'
               }`}
             >
-              <div className="flex items-center justify-between py-1">
-                <div>
-                  <h2 className="text-sm font-semibold text-ink tracking-tight">Resume Content</h2>
-                  <p className="text-[11px] text-ink/40 mt-0.5">Live preview updates in real-time.</p>
-                </div>
-                <div className="badge">
-                  <Sparkles className="w-3 h-3 mr-1" strokeWidth={1.75} />
-                  AI Active
-                </div>
+              <div className="flex items-center justify-between py-0.5">
+                <h2 className="text-sm font-semibold text-ink tracking-tight">Resume content</h2>
               </div>
 
               {/* Quick Actions: Upload Resume & Custom ATS format */}
@@ -1265,17 +1258,15 @@ export const App: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => openModal(setIsUploadModalOpen)}
-                  className="p-2.5 rounded-xl border border-line bg-card hover:border-brand-500 hover:shadow-soft transition text-left flex items-start gap-2.5 group cursor-pointer"
+                  className="p-2.5 rounded-[6px] border border-line bg-card hover:border-ink/40 transition text-left flex items-start gap-2 cursor-pointer"
                 >
-                  <div className="p-1.5 rounded-lg bg-brand-50 text-brand-600 shrink-0 group-hover:scale-105 transition-transform">
-                    <Upload className="w-4 h-4" />
-                  </div>
+                  <Upload className="w-4 h-4 text-ink/70 shrink-0 mt-0.5" strokeWidth={1.5} />
                   <div className="min-w-0">
-                    <span className="block text-xs font-bold text-ink group-hover:text-brand-600 transition truncate">
+                    <span className="block text-xs font-medium text-ink truncate">
                       Upload resume
                     </span>
-                    <span className="block text-[10px] text-ink/50 truncate">
-                      PDF/DOCX/JSON/TXT
+                    <span className="block text-[11px] text-ink/50 truncate">
+                      PDF, Word, or text
                     </span>
                   </div>
                 </button>
@@ -1283,17 +1274,15 @@ export const App: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleOpenCustomAts}
-                  className="p-2.5 rounded-xl border border-line bg-card hover:border-brand-500 hover:shadow-soft transition text-left flex items-start gap-2.5 group cursor-pointer"
+                  className="p-2.5 rounded-[6px] border border-line bg-card hover:border-ink/40 transition text-left flex items-start gap-2 cursor-pointer"
                 >
-                  <div className="p-1.5 rounded-lg bg-brand-50 text-brand-600 shrink-0 group-hover:scale-105 transition-transform">
-                    <Sliders className="w-4 h-4" />
-                  </div>
+                  <Sliders className="w-4 h-4 text-ink/70 shrink-0 mt-0.5" strokeWidth={1.5} />
                   <div className="min-w-0">
-                    <span className="block text-xs font-bold text-ink group-hover:text-brand-600 transition truncate">
-                      Custom ATS format
+                    <span className="block text-xs font-medium text-ink truncate">
+                      Custom ATS
                     </span>
-                    <span className="block text-[10px] text-ink/50 truncate">
-                      paste or upload rubric
+                    <span className="block text-[11px] text-ink/50 truncate">
+                      Rubric or guidelines
                     </span>
                   </div>
                 </button>

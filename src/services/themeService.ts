@@ -10,12 +10,12 @@ export interface ThemePreset {
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
-  { id: 'light',    name: 'Warm Light',      isDark: false, canvas: '#f6f5f2', card: '#ffffff', accent: '#4a49d8' },
-  { id: 'dark',     name: 'Obsidian Dark',   isDark: true,  canvas: '#0f0f14', card: '#17171f', accent: '#6463e0' },
-  { id: 'midnight', name: 'Midnight OLED',   isDark: true,  canvas: '#000000', card: '#101014', accent: '#7b7af0' },
-  { id: 'forest',   name: 'Forest Emerald',  isDark: true,  canvas: '#0b130f', card: '#121d17', accent: '#10b981' },
-  { id: 'rose',     name: 'Rose Quartz',     isDark: false, canvas: '#fdf7f8', card: '#ffffff', accent: '#e11d48' },
-  { id: 'slate',    name: 'Corporate Slate', isDark: false, canvas: '#f8fafc', card: '#ffffff', accent: '#475569' },
+  { id: 'light',    name: 'Paper',     isDark: false, canvas: '#f7f6f2', card: '#ffffff', accent: '#b4451f' },
+  { id: 'dark',     name: 'Dark',      isDark: true,  canvas: '#121212', card: '#1a1a1a', accent: '#e07a4f' },
+  { id: 'midnight', name: 'Midnight',  isDark: true,  canvas: '#000000', card: '#0b0b0b', accent: '#e07a4f' },
+  { id: 'forest',   name: 'Forest',    isDark: true,  canvas: '#141715', card: '#1b201d', accent: '#3d8b68' },
+  { id: 'rose',     name: 'Rose',      isDark: false, canvas: '#f7f4f4', card: '#ffffff', accent: '#ab485c' },
+  { id: 'slate',    name: 'Slate',     isDark: false, canvas: '#f5f6f7', card: '#ffffff', accent: '#445163' },
 ];
 
 export const RC_THEME_KEY = 'rc-theme';

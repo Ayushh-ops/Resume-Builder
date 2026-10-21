@@ -295,14 +295,9 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Target JD Matcher & ATS Studio"
-      subtitle="Score against specific ATS rubrics or tailor bullets directly to any job posting"
-      icon={<Target className="w-5 h-5 text-brand-600" />}
-      headerRight={
-        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-brand-50 text-brand-600 border border-brand-500/20">
-          {activeTab === 'ats_profile' ? 'Profile Studio' : 'Precision Matcher'}
-        </span>
-      }
+      title="Job Matcher & ATS Profiles"
+      subtitle="Match keywords against a job description or custom rubric"
+      icon={<Target className="w-4 h-4 text-ink/70" strokeWidth={1.5} />}
       maxWidth="max-w-3xl"
       bodyClassName="p-0 flex flex-col flex-1 overflow-hidden min-h-0"
       footer={
@@ -312,24 +307,24 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
               <button
                 type="button"
                 onClick={() => setTailoredChanges(null)}
-                className="px-4 py-1.5 font-semibold text-xs text-ink/70 hover:bg-muted rounded-lg transition-colors cursor-pointer"
+                className="px-3.5 py-1.5 font-medium text-xs text-ink/70 hover:bg-muted rounded-[6px] transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleApplyTailoring}
-                className="btn-primary"
+                className="btn-primary h-8"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>Apply Changes</span>
+                <span>Apply changes</span>
               </button>
             </>
           ) : (
             <button
               type="button"
               onClick={onClose}
-              className="btn-outline px-4 py-1.5"
+              className="btn-outline h-8 px-3.5"
             >
               Close
             </button>
@@ -342,26 +337,26 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
         <button
           type="button"
           onClick={() => handleTabChange('jd_matcher')}
-          className={`py-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+          className={`py-2 px-3 text-xs border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
             activeTab === 'jd_matcher'
-              ? 'border-brand-600 text-brand-600 font-bold'
-              : 'border-transparent text-ink/60 hover:text-ink'
+              ? 'border-brand-600 text-brand-600 font-semibold'
+              : 'border-transparent text-ink/60 hover:text-ink font-normal'
           }`}
         >
-          <Wand2 className="w-3.5 h-3.5" />
-          <span>Job Description Matcher & Tailor</span>
+          <Wand2 className="w-3.5 h-3.5" strokeWidth={1.5} />
+          <span>Job Description Matcher</span>
         </button>
         <button
           type="button"
           onClick={() => handleTabChange('ats_profile')}
-          className={`py-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+          className={`py-2 px-3 text-xs border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
             activeTab === 'ats_profile'
-              ? 'border-brand-600 text-brand-600 font-bold'
-              : 'border-transparent text-ink/60 hover:text-ink'
+              ? 'border-brand-600 text-brand-600 font-semibold'
+              : 'border-transparent text-ink/60 hover:text-ink font-normal'
           }`}
         >
-          <Sliders className="w-3.5 h-3.5" />
-          <span>ATS Profiles & Criteria ({allProfiles.length})</span>
+          <Sliders className="w-3.5 h-3.5" strokeWidth={1.5} />
+          <span>ATS Profiles ({allProfiles.length})</span>
         </button>
       </div>
 

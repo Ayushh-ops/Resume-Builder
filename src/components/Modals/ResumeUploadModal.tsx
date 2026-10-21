@@ -118,9 +118,9 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Import & Structure Resume"
-      subtitle="PDF, DOCX, JSON, or TXT — automatic field extraction and AI formatting"
-      icon={<Upload className="w-5 h-5 text-brand-600" />}
+      title="Upload resume"
+      subtitle="Import a PDF, Word, JSON or text file"
+      icon={<Upload className="w-4 h-4 text-ink/70" strokeWidth={1.5} />}
       maxWidth="max-w-2xl"
       footer={
         step === 'review' && parsedResult ? (
@@ -128,7 +128,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 font-semibold text-xs text-ink/70 hover:bg-muted rounded-lg transition-colors cursor-pointer"
+              className="px-3 py-1.5 font-medium text-xs text-ink/70 hover:bg-muted rounded-[6px] transition cursor-pointer"
             >
               Cancel
             </button>
@@ -139,7 +139,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
                   onReplaceCurrent(parsedResult.data);
                   onClose();
                 }}
-                className="btn-outline h-8 px-3 text-xs font-semibold text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/30 cursor-pointer"
+                className="btn-outline h-8 px-3 text-xs font-medium cursor-pointer"
               >
                 Replace current resume
               </button>
@@ -152,7 +152,6 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
               }}
               className="btn-primary h-8 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5" />
               <span>Save as new resume</span>
             </button>
           </div>
@@ -160,7 +159,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="btn-outline px-4 py-1.5"
+            className="btn-outline h-8 px-3.5"
           >
             Close
           </button>
@@ -177,10 +176,10 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
               onDragOver={handleDrag}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
+              className={`border border-dashed rounded-[10px] p-8 text-center cursor-pointer transition-colors ${
                 dragActive
-                  ? 'border-brand-500 bg-brand-50/50 scale-[0.99]'
-                  : 'border-line hover:border-brand-500/50 hover:bg-muted/40'
+                  ? 'border-brand-600 bg-muted/40'
+                  : 'border-line hover:border-ink/40 hover:bg-muted/20'
               }`}
             >
               <input
@@ -191,12 +190,10 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
                 className="hidden"
               />
 
-              <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shadow-soft">
-                <Upload className="w-6 h-6" strokeWidth={1.75} />
-              </div>
+              <Upload className="w-6 h-6 text-ink/50 mx-auto mb-2" strokeWidth={1.5} />
 
               <h3 className="text-sm font-semibold text-ink">
-                Drag & Drop your resume here, or <span className="text-brand-600 underline">browse</span>
+                Drop your resume here, or <span className="text-brand-600 underline">browse files</span>
               </h3>
               <p className="text-xs text-ink/40 mt-1">
                 Supports PDF, Word (.docx), JSON, or TXT (Max 5MB)
