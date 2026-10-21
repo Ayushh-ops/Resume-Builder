@@ -65,7 +65,7 @@ export const SectionNav: React.FC<SectionNavProps> = ({ onOpenSection, activeSec
 
   return (
     <div className="sticky top-0 z-20 bg-canvas/95 backdrop-blur-md py-1 border-b border-line transition-colors">
-      <div className="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar px-0.5">
+      <div className="flex items-center justify-between gap-1 px-0.5">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = currentActive === item.id;

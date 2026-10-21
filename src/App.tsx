@@ -12,18 +12,21 @@ import {
   Eye,
   Edit3,
   Upload,
-  X,
   ArrowRight,
   AlertTriangle,
   Download,
   Sliders,
   Target,
+  Plus,
+  MoreVertical,
+  Copy,
+  Trash2,
+  FolderOpen,
 } from 'lucide-react';
 import type { ResumeData, ResumeTheme, TemplateType, ATSProfile } from './types/resume';
 import { sampleProfiles } from './data/sampleData';
 import {
   calculateLiveATSScore,
-  isResumeEmpty,
   getAllATSProfiles,
   getActiveProfileId,
   setActiveProfileId,
@@ -34,6 +37,20 @@ import {
   toggleLightDarkTheme,
   type ThemeId,
 } from './services/themeService';
+import {
+  initResumeStorage,
+  getResumeIndex,
+  getResume,
+  saveResume,
+  createResume,
+  duplicateResume,
+  renameResume,
+  deleteResume,
+  getActiveResumeId,
+  setActiveResumeId,
+  blankResumeData,
+  type ResumeIndexEntry,
+} from './services/resumeStorage';
 import { Header } from './components/Header';
 import { FormSection } from './components/Form/FormSection';
 import { PersonalInfoForm } from './components/Form/PersonalInfoForm';
@@ -57,49 +74,70 @@ import { useToast } from './components/common/Toast';
 import { printResume, exportResumeToPdf } from './utils/pdfExport';
 import type { TailoredChanges } from './services/geminiService';
 
-const blankResumeData: ResumeData = {
-  personalInfo: {
-    fullName: '',
-    jobTitle: '',
-    email: '',
-    phone: '',
-    location: '',
-    website: '',
-    linkedin: '',
-    github: '',
-  },
-  summary: '',
-  experience: [],
-  education: [],
-  projects: [],
-  skills: [],
-  certifications: [],
-  customSections: [],
+type Route =
+  | { type: 'home' }
+  | { type: 'editor'; resumeId: string };
+
+const formatRelativeTime = (isoString?: string): string => {
+  if (!isoString) return '';
+  try {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+    if (diffSec < 60) return 'Just now';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+    if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+    if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}d ago`;
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  } catch {
+    return '';
+  }
+};
+
+const computeInitialRoute = (index: ResumeIndexEntry[]): Route => {
+  const hash = typeof window !== 'undefined' ? window.location.hash : '';
+  const clean = hash.replace(/^#/, '');
+
+  if (clean.startsWith('/r/')) {
+    const id = clean.slice(3);
+    const exists = index.some((item) => item.id === id);
+    if (exists && getResume(id)) {
+      return { type: 'editor', resumeId: id };
+    }
+  }
+
+  if (!hash || hash === '#' || hash === '#/') {
+    if (index.length === 1) {
+      const activeId = getActiveResumeId() || index[0].id;
+      if (getResume(activeId)) {
+        return { type: 'editor', resumeId: activeId };
+      }
+    }
+  }
+
+  return { type: 'home' };
 };
 
 export const App: React.FC = () => {
   const { showToast } = useToast();
 
-  // Onboarding state
-  const [showOnboarding, setShowOnboarding] = useState<boolean>(
-    () => !localStorage.getItem('resume-data')
-  );
+  // Storage initialization and initial index
+  const [resumeIndex, setResumeIndex] = useState<ResumeIndexEntry[]>(() => initResumeStorage());
 
-  // Resume state initialized with stored data or rich profile
+  // Routing State
+  const [route, setRoute] = useState<Route>(() => computeInitialRoute(resumeIndex));
+
+  // Current Resume Data
   const [resumeData, setResumeData] = useState<ResumeData>(() => {
-    try {
-      const saved = localStorage.getItem('resume-data');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed?.personalInfo) return parsed;
-      }
-    } catch (e) {
-      console.warn('Could not read cached resume-data', e);
+    const initial = computeInitialRoute(resumeIndex);
+    if (initial.type === 'editor') {
+      const loaded = getResume(initial.resumeId);
+      if (loaded) return loaded;
     }
-    return sampleProfiles.aiEngineer;
+    return blankResumeData;
   });
 
-  // Undo / Redo History
+  // Undo / Redo History per resume
   const [history, setHistory] = useState<ResumeData[]>([resumeData]);
   const [historyIndex, setHistoryIndex] = useState(0);
 
@@ -150,20 +188,103 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleUndoRedoKeys);
   }, [undo, redo]);
 
-  // Debounced Autosave to localStorage
+  // ATS Profiles state
+  const [activeProfileId, setActiveProfileIdState] = useState<string>(() => getActiveProfileId());
+  const [allProfiles, setAllProfiles] = useState<ATSProfile[]>(() => getAllATSProfiles());
+
+  const handleSelectProfileId = (id: string) => {
+    setActiveProfileIdState(id);
+    setActiveProfileId(id);
+  };
+
+  // Live ATS Scoring with activeProfileId
+  const atsResult = useMemo(() => {
+    return calculateLiveATSScore(resumeData, activeProfileId);
+  }, [resumeData, activeProfileId]);
+
+  // Debounced Autosave to localStorage (per resume)
   const [savedAt, setSavedAt] = useState<Date | null>(null);
 
   useEffect(() => {
+    if (route.type !== 'editor' || !route.resumeId) return;
+
     const timer = setTimeout(() => {
       try {
-        localStorage.setItem('resume-data', JSON.stringify(resumeData));
+        saveResume(route.resumeId, resumeData, undefined, atsResult.score);
+        setResumeIndex(getResumeIndex());
         setSavedAt(new Date());
       } catch (err) {
         console.error('Failed to autosave resume:', err);
       }
     }, 1000);
+
     return () => clearTimeout(timer);
-  }, [resumeData]);
+  }, [resumeData, route, atsResult.score]);
+
+  // Sync hash routing and resume data loading
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      const clean = hash.replace(/^#/, '');
+
+      if (clean.startsWith('/r/')) {
+        const id = clean.slice(3);
+        const index = getResumeIndex();
+        const exists = index.some((item) => item.id === id);
+        if (exists) {
+          const loaded = getResume(id);
+          if (loaded) {
+            setRoute({ type: 'editor', resumeId: id });
+            setResumeData(loaded);
+            setHistory([loaded]);
+            setHistoryIndex(0);
+            setActiveResumeId(id);
+            return;
+          }
+        }
+        showToast('Resume not found', 'error');
+        window.location.hash = '#/';
+        setRoute({ type: 'home' });
+        return;
+      }
+
+      setRoute({ type: 'home' });
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [showToast]);
+
+  // Initial load hash synchronization
+  useEffect(() => {
+    const hash = window.location.hash;
+    const clean = hash.replace(/^#/, '');
+
+    if (clean.startsWith('/r/')) {
+      const id = clean.slice(3);
+      const exists = resumeIndex.some((item) => item.id === id);
+      if (!exists) {
+        showToast('Resume not found', 'error');
+        window.location.hash = '#/';
+        setRoute({ type: 'home' });
+      } else {
+        const loaded = getResume(id);
+        if (loaded) {
+          setResumeData(loaded);
+          setHistory([loaded]);
+          setHistoryIndex(0);
+          setActiveResumeId(id);
+        }
+      }
+    } else if (!hash || hash === '#' || hash === '#/') {
+      if (resumeIndex.length === 1) {
+        const activeId = getActiveResumeId() || resumeIndex[0].id;
+        window.location.hash = `#/r/${activeId}`;
+      } else {
+        window.location.hash = '#/';
+      }
+    }
+  }, []);
 
   // Template & Theme
   const [activeTemplate, setActiveTemplate] = useState<TemplateType>('modern');
@@ -184,23 +305,6 @@ export const App: React.FC = () => {
   const handleSelectTheme = (themeId: ThemeId) => {
     setCurrentTheme(themeId);
     applyTheme(themeId);
-  };
-
-  // Job Matcher Initial Tab State (for Custom ATS shortcuts)
-  const [jobMatcherInitialTab, setJobMatcherInitialTab] = useState<'jd_matcher' | 'ats_profile' | 'create_profile'>('jd_matcher');
-
-  const handleOpenCustomAts = () => {
-    setJobMatcherInitialTab('create_profile');
-    openModal(setIsJobMatcherOpen);
-  };
-
-  // ATS Profiles state
-  const [activeProfileId, setActiveProfileIdState] = useState<string>(() => getActiveProfileId());
-  const [allProfiles, setAllProfiles] = useState<ATSProfile[]>(() => getAllATSProfiles());
-
-  const handleSelectProfileId = (id: string) => {
-    setActiveProfileIdState(id);
-    setActiveProfileId(id);
   };
 
   // Section Ordering & Visibility
@@ -254,96 +358,106 @@ export const App: React.FC = () => {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
-  // Confirmation state before overwriting resume
-  const [pendingOverwrite, setPendingOverwrite] = useState<{
-    type: 'sample' | 'blank';
-    key?: string;
+  // Job Matcher Initial Tab State
+  const [jobMatcherInitialTab, setJobMatcherInitialTab] = useState<'jd_matcher' | 'ats_profile' | 'create_profile'>('jd_matcher');
+
+  // Confirmation Modal state for Delete & Replace
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'delete' | 'replace';
+    resumeId?: string;
+    resumeName?: string;
+    dataToReplace?: Partial<ResumeData>;
   } | null>(null);
 
-  // Track open layers with a ref so popstate event listener always reads current state
-  const openLayersRef = useRef({
-    pendingOverwrite: false,
+  // Home card dropdown menu & inline rename states
+  const [openCardMenuId, setOpenCardMenuId] = useState<string | null>(null);
+  const [renamingCardId, setRenamingCardId] = useState<string | null>(null);
+  const [cardRenameValue, setCardRenameValue] = useState('');
+  const cardMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!openCardMenuId) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (cardMenuRef.current && !cardMenuRef.current.contains(e.target as Node)) {
+        setOpenCardMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openCardMenuId]);
+
+  // Modal History Stack helper (Modals pushState({modal: true}), Back closes topmost modal)
+  const isClosingViaCodeRef = useRef(false);
+  const openModalsRef = useRef({
+    confirmAction: false,
     isUploadModalOpen: false,
     isJobMatcherOpen: false,
     isJobRadarOpen: false,
     isTrendAdvisorOpen: false,
     isApiKeyModalOpen: false,
     isCommandPaletteOpen: false,
-    showOnboarding: false,
-    hasResumeData: false,
   });
 
   useEffect(() => {
-    openLayersRef.current = {
-      pendingOverwrite: !!pendingOverwrite,
+    openModalsRef.current = {
+      confirmAction: !!confirmAction,
       isUploadModalOpen,
       isJobMatcherOpen,
       isJobRadarOpen,
       isTrendAdvisorOpen,
       isApiKeyModalOpen,
       isCommandPaletteOpen,
-      showOnboarding,
-      hasResumeData: !isResumeEmpty(resumeData),
     };
   }, [
-    pendingOverwrite,
+    confirmAction,
     isUploadModalOpen,
     isJobMatcherOpen,
     isJobRadarOpen,
     isTrendAdvisorOpen,
     isApiKeyModalOpen,
     isCommandPaletteOpen,
-    showOnboarding,
-    resumeData,
   ]);
 
-  // History API helper to close the topmost open layer
-  const closeTopmostDirectly = useCallback(() => {
-    const cur = openLayersRef.current;
-    if (cur.pendingOverwrite) setPendingOverwrite(null);
-    else if (cur.isUploadModalOpen) setIsUploadModalOpen(false);
-    else if (cur.isJobMatcherOpen) setIsJobMatcherOpen(false);
-    else if (cur.isJobRadarOpen) setIsJobRadarOpen(false);
-    else if (cur.isTrendAdvisorOpen) setIsTrendAdvisorOpen(false);
-    else if (cur.isApiKeyModalOpen) setIsApiKeyModalOpen(false);
-    else if (cur.isCommandPaletteOpen) setIsCommandPaletteOpen(false);
-    else if (cur.showOnboarding && cur.hasResumeData) setShowOnboarding(false);
-  }, []);
-
-  const closeLayer = useCallback(() => {
-    if (window.history.state?.layer === 'modal' || window.history.state?.layer === 'home') {
-      window.history.back();
-    } else {
-      closeTopmostDirectly();
-    }
-  }, [closeTopmostDirectly]);
-
-  // Open layer helpers that push history state
   const openModal = useCallback((setter: React.Dispatch<React.SetStateAction<boolean>>) => {
-    window.history.pushState({ layer: 'modal' }, '');
+    if (!window.history.state?.modal) {
+      window.history.pushState({ modal: true }, '');
+    }
     setter(true);
   }, []);
 
-  const openHome = useCallback(() => {
-    window.history.pushState({ layer: 'home' }, '');
-    setShowOnboarding(true);
+  const closeModal = useCallback((setter: React.Dispatch<React.SetStateAction<boolean>>) => {
+    setter(false);
+    if (window.history.state?.modal) {
+      isClosingViaCodeRef.current = true;
+      window.history.back();
+    }
   }, []);
 
-  // History API: push base state on first load, handle browser Back button via popstate
+  const openConfirmModal = useCallback((action: typeof confirmAction) => {
+    if (!window.history.state?.modal) {
+      window.history.pushState({ modal: true }, '');
+    }
+    setConfirmAction(action);
+  }, []);
+
+  const closeConfirmModal = useCallback(() => {
+    setConfirmAction(null);
+    if (window.history.state?.modal) {
+      isClosingViaCodeRef.current = true;
+      window.history.back();
+    }
+  }, []);
+
+  // Browser Back popstate listener to close topmost modal first
   useEffect(() => {
-    if (!window.history.state || window.history.state.layer !== 'base') {
-      window.history.replaceState({ layer: 'base' }, '');
-    }
-    if (showOnboarding) {
-      window.history.pushState({ layer: 'home' }, '');
-    }
-
     const handlePopState = () => {
-      const cur = openLayersRef.current;
-
-      // 1. Close any open modal first
-      if (cur.pendingOverwrite) {
-        setPendingOverwrite(null);
+      if (isClosingViaCodeRef.current) {
+        isClosingViaCodeRef.current = false;
+        return;
+      }
+      const cur = openModalsRef.current;
+      if (cur.confirmAction) {
+        setConfirmAction(null);
         return;
       }
       if (cur.isUploadModalOpen) {
@@ -370,15 +484,6 @@ export const App: React.FC = () => {
         setIsCommandPaletteOpen(false);
         return;
       }
-
-      // 2. If no modal, close Home (if open and user already has data)
-      if (cur.showOnboarding && cur.hasResumeData) {
-        setShowOnboarding(false);
-        return;
-      }
-
-      // 3. Never exit the app — re-push base state so user stays in app
-      window.history.pushState({ layer: 'base' }, '');
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -392,10 +497,15 @@ export const App: React.FC = () => {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => {
           if (!prev) {
-            window.history.pushState({ layer: 'modal' }, '');
+            if (!window.history.state?.modal) {
+              window.history.pushState({ modal: true }, '');
+            }
             return true;
           } else {
-            closeLayer();
+            if (window.history.state?.modal) {
+              isClosingViaCodeRef.current = true;
+              window.history.back();
+            }
             return false;
           }
         });
@@ -403,137 +513,161 @@ export const App: React.FC = () => {
     };
     window.addEventListener('keydown', handleCommandPaletteKey);
     return () => window.removeEventListener('keydown', handleCommandPaletteKey);
-  }, [closeLayer]);
+  }, []);
 
-  // Live ATS Scoring with activeProfileId
-  const atsResult = useMemo(() => {
-    return calculateLiveATSScore(resumeData, activeProfileId);
-  }, [resumeData, activeProfileId]);
-
-  // Esc key closes Home layer if user already has data and no modal is open
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        const cur = openLayersRef.current;
-        // Modals manage their own Escape key via Modal component
-        if (
-          cur.pendingOverwrite ||
-          cur.isUploadModalOpen ||
-          cur.isJobMatcherOpen ||
-          cur.isJobRadarOpen ||
-          cur.isTrendAdvisorOpen ||
-          cur.isApiKeyModalOpen ||
-          cur.isCommandPaletteOpen
-        ) {
-          return;
-        }
-        if (cur.showOnboarding && cur.hasResumeData) {
-          closeLayer();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [closeLayer]);
-
-  // Execute confirmed overwrite
-  const handleExecuteOverwrite = (saveFirst = false) => {
-    if (saveFirst) {
-      handleExportJson();
-    }
-    if (!pendingOverwrite) return;
-
-    if (pendingOverwrite.type === 'blank') {
-      pushHistory(blankResumeData);
-      setShowOnboarding(false);
-      localStorage.setItem('resume-data', JSON.stringify(blankResumeData));
-      showToast('Started with a blank resume', 'info');
-    } else if (pendingOverwrite.type === 'sample' && pendingOverwrite.key) {
-      const sample = sampleProfiles[pendingOverwrite.key];
-      if (sample) {
-        pushHistory(sample);
-        setShowOnboarding(false);
-        localStorage.setItem('resume-data', JSON.stringify(sample));
-        showToast(`Loaded sample: ${pendingOverwrite.key}`, 'success');
-        confetti({ particleCount: 50, spread: 60 });
-      }
-    }
-    setPendingOverwrite(null);
-    window.history.replaceState({ layer: 'base' }, '');
+  const handleOpenCustomAts = () => {
+    setJobMatcherInitialTab('create_profile');
+    openModal(setIsJobMatcherOpen);
   };
 
-  // Safe handler for clicking sample
-  const handleRequestSample = (key: string) => {
-    if (!isResumeEmpty(resumeData)) {
-      window.history.pushState({ layer: 'modal' }, '');
-      setPendingOverwrite({ type: 'sample', key });
-    } else {
-      handleLoadSample(key);
-      setShowOnboarding(false);
-      localStorage.setItem('resume-data', JSON.stringify(sampleProfiles[key]));
-    }
+  // --- RESUME CRUD & LIBRARY HANDLERS ---
+
+  // 1. Create New Blank Resume
+  const handleCreateNew = () => {
+    const newId = createResume(blankResumeData, 'Untitled resume');
+    setResumeIndex(getResumeIndex());
+    window.location.hash = `#/r/${newId}`;
+    showToast('Created new blank resume', 'info');
   };
 
-  // Safe handler for clicking blank
-  const handleRequestBlank = () => {
-    if (!isResumeEmpty(resumeData)) {
-      window.history.pushState({ layer: 'modal' }, '');
-      setPendingOverwrite({ type: 'blank' });
-    } else {
-      pushHistory(blankResumeData);
-      setShowOnboarding(false);
-      localStorage.setItem('resume-data', JSON.stringify(blankResumeData));
-      showToast('Started with a blank resume', 'info');
-    }
-  };
-
-  // Load preset sample
+  // 2. Start from Sample
   const handleLoadSample = (key: string) => {
-    if (sampleProfiles[key]) {
-      pushHistory(sampleProfiles[key]);
-      showToast(`Loaded sample profile: ${key}`, 'info');
-      confetti({
-        particleCount: 50,
-        spread: 60,
-        origin: { y: 0.1 },
-      });
+    const sample = sampleProfiles[key];
+    if (sample) {
+      const sampleNames: Record<string, string> = {
+        aiEngineer: 'AI Engineer Resume',
+        fullStack: 'Full-Stack Developer Resume',
+        fresherStudent: 'Graduate Student Resume',
+      };
+      const name = sampleNames[key] || 'Sample Resume';
+      const newId = createResume(sample, name);
+      setResumeIndex(getResumeIndex());
+      window.location.hash = `#/r/${newId}`;
+      showToast(`Created resume from sample: ${name}`, 'success');
+      confetti({ particleCount: 50, spread: 60 });
     }
+  };
+
+  // 3. Upload handlers
+  const handleUploadSaveAsNew = (importedData: Partial<ResumeData>, fileName?: string) => {
+    closeModal(setIsUploadModalOpen);
+    const resolvedName = fileName
+      ? fileName.replace(/\.[^/.]+$/, '')
+      : importedData.personalInfo?.fullName || 'Imported Resume';
+    const newId = createResume(importedData, resolvedName);
+    setResumeIndex(getResumeIndex());
+    window.location.hash = `#/r/${newId}`;
+    showToast('Imported and saved as new resume!', 'success');
+    confetti({ particleCount: 70, spread: 80 });
+  };
+
+  const handleUploadReplaceCurrent = (importedData: Partial<ResumeData>) => {
+    closeModal(setIsUploadModalOpen);
+    openConfirmModal({
+      type: 'replace',
+      dataToReplace: importedData,
+      resumeName: currentResumeName,
+    });
+  };
+
+  // 4. Duplicate Resume
+  const handleDuplicateResume = (id: string) => {
+    const newId = duplicateResume(id);
+    if (newId) {
+      setResumeIndex(getResumeIndex());
+      showToast('Resume duplicated', 'success');
+    }
+  };
+
+  // 5. Rename Resume
+  const handleRenameResume = (id: string, newName: string) => {
+    renameResume(id, newName);
+    setResumeIndex(getResumeIndex());
+    if (route.type === 'editor' && route.resumeId === id) {
+      setResumeData((prev) => ({
+        ...prev,
+        personalInfo: {
+          ...prev.personalInfo,
+          fullName: newName.trim() || prev.personalInfo.fullName,
+        },
+      }));
+    }
+    showToast('Resume renamed', 'info');
+  };
+
+  // 6. Delete Resume
+  const handleDeleteResume = (id: string, name: string) => {
+    openConfirmModal({
+      type: 'delete',
+      resumeId: id,
+      resumeName: name,
+    });
+  };
+
+  // 7. Execute Confirm Dialog (Delete or Replace)
+  const handleExecuteConfirm = () => {
+    if (!confirmAction) return;
+
+    if (confirmAction.type === 'delete' && confirmAction.resumeId) {
+      const id = confirmAction.resumeId;
+      deleteResume(id);
+      const updated = getResumeIndex();
+      setResumeIndex(updated);
+      closeConfirmModal();
+      showToast('Resume deleted', 'info');
+
+      if (route.type === 'editor' && route.resumeId === id) {
+        window.location.hash = '#/';
+      }
+    } else if (
+      confirmAction.type === 'replace' &&
+      confirmAction.dataToReplace &&
+      route.type === 'editor'
+    ) {
+      const importedData = confirmAction.dataToReplace;
+      const merged: ResumeData = {
+        ...resumeData,
+        ...importedData,
+        personalInfo: {
+          ...resumeData.personalInfo,
+          ...(importedData.personalInfo || {}),
+        },
+        experience: importedData.experience || resumeData.experience,
+        education: importedData.education || resumeData.education,
+        projects: importedData.projects || resumeData.projects,
+        skills: importedData.skills || resumeData.skills,
+        certifications: importedData.certifications || resumeData.certifications,
+      };
+      pushHistory(merged);
+      closeConfirmModal();
+      showToast('Resume replaced with imported data', 'success');
+      confetti({ particleCount: 70, spread: 80 });
+    }
+  };
+
+  // Card inline rename finish
+  const handleFinishCardRename = (id: string) => {
+    if (cardRenameValue.trim()) {
+      handleRenameResume(id, cardRenameValue);
+    }
+    setRenamingCardId(null);
   };
 
   // Export JSON backup
-  const handleExportJson = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(resumeData, null, 2));
+  const handleExportJson = (targetId?: string) => {
+    const idToExport = targetId || (route.type === 'editor' ? route.resumeId : null);
+    if (!idToExport) return;
+    const data = getResume(idToExport);
+    if (!data) return;
+    const fileName = `${data.personalInfo.fullName.replace(/\s+/g, '_') || 'My'}_Resume.json`;
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(data, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `${resumeData.personalInfo.fullName.replace(/\s+/g, '_') || 'My'}_Resume.json`);
+    downloadAnchor.setAttribute('download', fileName);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
     showToast('Resume JSON backup exported', 'success');
-  };
-
-  // Confirm resume upload from parser
-  const handleConfirmUpload = (importedData: Partial<ResumeData>) => {
-    const merged: ResumeData = {
-      ...resumeData,
-      ...importedData,
-      personalInfo: {
-        ...resumeData.personalInfo,
-        ...(importedData.personalInfo || {}),
-      },
-      experience: importedData.experience || resumeData.experience,
-      education: importedData.education || resumeData.education,
-      projects: importedData.projects || resumeData.projects,
-      skills: importedData.skills || resumeData.skills,
-      certifications: importedData.certifications || resumeData.certifications,
-    };
-    pushHistory(merged);
-    setShowOnboarding(false);
-    setIsUploadModalOpen(false);
-    localStorage.setItem('resume-data', JSON.stringify(merged));
-    window.history.replaceState({ layer: 'base' }, '');
-    showToast('Resume imported and structured successfully!', 'success');
-    confetti({ particleCount: 70, spread: 80 });
   };
 
   // Apply AI tailoring changes from JobMatcherModal
@@ -570,6 +704,13 @@ export const App: React.FC = () => {
       setIsDownloadingPdf(false);
     }
   };
+
+  // Current Resume Name computed for Header
+  const currentResumeName = useMemo(() => {
+    if (route.type !== 'editor') return '';
+    const item = resumeIndex.find((i) => i.id === route.resumeId);
+    return item?.name || resumeData.personalInfo.fullName || 'Untitled resume';
+  }, [route, resumeIndex, resumeData.personalInfo.fullName]);
 
   const renderSectionItem = (sectionId: string) => {
     const isHidden = hiddenSections.has(sectionId);
@@ -760,7 +901,7 @@ export const App: React.FC = () => {
         onOpenTrendAdvisor={() => openModal(setIsTrendAdvisorOpen)}
         onOpenApiKeyModal={() => openModal(setIsApiKeyModalOpen)}
         onLoadSample={handleLoadSample}
-        onExportJson={handleExportJson}
+        onExportJson={() => handleExportJson()}
         onPrint={printResume}
         onDownloadPdf={handleDownloadPdf}
         isDownloadingPdf={isDownloadingPdf}
@@ -770,197 +911,292 @@ export const App: React.FC = () => {
         canRedo={historyIndex < history.length - 1}
         savedAt={savedAt}
         onOpenUpload={() => openModal(setIsUploadModalOpen)}
-        onOpenHome={openHome}
-        onNewResume={() => {
-          if (!isResumeEmpty(resumeData)) {
-            window.history.pushState({ layer: 'modal' }, '');
-            setPendingOverwrite({ type: 'blank' });
-          } else {
-            pushHistory(blankResumeData);
-            showToast('Started blank resume', 'info');
-          }
+        onOpenHome={() => {
+          window.location.hash = '#/';
         }}
+        onNewResume={handleCreateNew}
         allProfiles={allProfiles}
         activeProfileId={activeProfileId}
         onSelectProfileId={handleSelectProfileId}
         currentTheme={currentTheme}
         onToggleTheme={handleToggleTheme}
         onOpenCustomAts={handleOpenCustomAts}
-        isHomeOpen={showOnboarding}
-        canContinue={!isResumeEmpty(resumeData)}
-        onCloseHome={closeLayer}
+        isHome={route.type === 'home'}
+        currentResumeId={route.type === 'editor' ? route.resumeId : null}
+        currentResumeName={currentResumeName}
+        onRenameResume={handleRenameResume}
+        resumeList={resumeIndex}
+        onSelectResume={(id) => {
+          window.location.hash = `#/r/${id}`;
+        }}
       />
 
-      {/* Full-Screen Centered Onboarding / Home Layer (fixed inset-0 top-14) */}
-      {showOnboarding && (
-        <div className="fixed inset-0 top-14 z-30 bg-canvas overflow-y-auto flex items-center justify-center p-4 sm:p-6 min-h-[calc(100vh-3.5rem)] animate-in fade-in duration-150">
-          <div className="w-full max-w-5xl py-6 sm:py-10 text-center space-y-6 sm:space-y-8 relative">
-            {/* Close button if user already has data */}
-            {!isResumeEmpty(resumeData) && (
-              <button
-                type="button"
-                onClick={closeLayer}
-                className="absolute top-0 right-0 p-2 rounded-xl text-ink/40 hover:text-ink hover:bg-muted transition cursor-pointer"
-                title="Continue editing (Esc)"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            )}
-
+      {/* VIEW A: HOME SCREEN ("Your resumes") */}
+      {route.type === 'home' && (
+        <div className="flex-1 w-full max-w-6xl mx-auto px-4 py-8 sm:py-10 flex flex-col justify-start min-h-[calc(100vh-3.5rem)] animate-in fade-in duration-150">
+          {/* Header row */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-line">
             <div>
-              <div className="inline-flex p-3 rounded-2xl bg-brand-50 text-brand-600 mb-2 shadow-soft">
-                <FileText className="w-7 h-7" />
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-bold font-display text-ink tracking-tight">
-                ResumeCraft AI Studio
+              <h1 className="text-2xl sm:text-3xl font-bold font-display text-ink tracking-tight flex items-center gap-2.5">
+                <span>Your Resumes</span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-600 font-semibold font-sans">
+                  {resumeIndex.length}
+                </span>
               </h1>
-              <p className="text-xs sm:text-sm text-ink/60 mt-1 max-w-md mx-auto">
-                Build, optimize, and tailor your executive ATS-ready resume with Gemini 3.8 AI
+              <p className="text-xs sm:text-sm text-ink/60 mt-1">
+                Manage, optimize, and tailor your resumes with Gemini 3.8 AI
               </p>
             </div>
-
-            {/* Main Options Grid */}
-            <div className={`grid grid-cols-1 ${!isResumeEmpty(resumeData) ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2 lg:grid-cols-3'} gap-4 text-left items-stretch`}>
-              {/* Card 0: Continue Editing (when resume has content) */}
-              {!isResumeEmpty(resumeData) && (
-                <button
-                  type="button"
-                  onClick={closeLayer}
-                  className="card p-5 border border-brand-500/30 bg-card hover:ring-2 hover:ring-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500 transition-all cursor-pointer text-left flex flex-col justify-between h-full group"
-                >
-                  <div>
-                    <div className="p-2.5 rounded-xl bg-brand-50 text-brand-600 w-fit mb-3 group-hover:scale-105 transition-transform">
-                      <ArrowRight className="w-5 h-5" />
-                    </div>
-                    <h3 className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors">
-                      Continue Editing
-                    </h3>
-                    <p className="text-xs text-ink/60 mt-1 leading-relaxed truncate">
-                      {resumeData.personalInfo.fullName || 'Untitled Resume'}
-                    </p>
-                    {savedAt && (
-                      <p className="text-[11px] text-ink/40 mt-1">
-                        Last saved {savedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    )}
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-line text-xs font-medium text-ink/50">
-                    Resume editing current document
-                  </div>
-                </button>
-              )}
-
-              {/* Card 1: Upload Resume */}
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => openModal(setIsUploadModalOpen)}
-                className="card p-5 border border-line bg-card hover:ring-2 hover:ring-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500 transition-all cursor-pointer text-left flex flex-col justify-between h-full group"
+                className="btn-outline h-9 px-3.5 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
               >
-                <div>
-                  <div className="p-2.5 rounded-xl bg-brand-50 text-brand-600 w-fit mb-3 group-hover:scale-105 transition-transform">
-                    <Upload className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors">
-                    Upload Resume
-                  </h3>
-                  <p className="text-xs text-ink/60 mt-1 leading-relaxed">
-                    Import existing PDF, Word, JSON, or TXT file. Gemini extracts and structures your data automatically.
-                  </p>
-                </div>
-                <div className="mt-4 pt-3 border-t border-line text-xs font-medium text-ink/50">
-                  PDF, DOCX, TXT, or JSON
-                </div>
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload Resume</span>
               </button>
-
-              {/* Card 2: Start from Sample */}
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => handleRequestSample('aiEngineer')}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    handleRequestSample('aiEngineer');
-                  }
-                }}
-                className="card p-5 border border-line bg-card hover:ring-2 hover:ring-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500 transition-all cursor-pointer text-left flex flex-col justify-between h-full group"
-              >
-                <div>
-                  <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 w-fit mb-3 group-hover:scale-105 transition-transform">
-                    <User className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors">
-                    Start from Sample
-                  </h3>
-                  <p className="text-xs text-ink/60 mt-1 leading-relaxed">
-                    Pick a curated sample profile to customize.
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRequestSample('aiEngineer');
-                      }}
-                      className="px-2 py-1 text-[11px] font-semibold rounded-md bg-muted hover:bg-brand-50 hover:text-brand-600 transition text-ink/80 cursor-pointer"
-                    >
-                      AI Engineer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRequestSample('fullStack');
-                      }}
-                      className="px-2 py-1 text-[11px] font-semibold rounded-md bg-muted hover:bg-brand-50 hover:text-brand-600 transition text-ink/80 cursor-pointer"
-                    >
-                      Full-Stack Dev
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRequestSample('fresherStudent');
-                      }}
-                      className="px-2 py-1 text-[11px] font-semibold rounded-md bg-muted hover:bg-brand-50 hover:text-brand-600 transition text-ink/80 cursor-pointer"
-                    >
-                      Graduate
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-4 pt-3 border-t border-line text-xs font-medium text-ink/50">
-                  Pre-filled industry samples
-                </div>
-              </div>
-
-              {/* Card 3: Start Blank */}
               <button
                 type="button"
-                onClick={handleRequestBlank}
-                className="card p-5 border border-line bg-card hover:ring-2 hover:ring-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500 transition-all cursor-pointer text-left flex flex-col justify-between h-full group"
+                onClick={handleCreateNew}
+                className="btn-primary h-9 px-4 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-soft"
               >
-                <div>
-                  <div className="p-2.5 rounded-xl bg-muted text-ink/70 w-fit mb-3 group-hover:scale-105 transition-transform">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors">
-                    Start Blank
-                  </h3>
-                  <p className="text-xs text-ink/60 mt-1 leading-relaxed">
-                    Build from scratch with a clean slate, filling each section guided by AI suggestions.
-                  </p>
-                </div>
-                <div className="mt-4 pt-3 border-t border-line text-xs font-medium text-ink/50">
-                  Clean slate with AI suggestions
-                </div>
+                <Plus className="w-4 h-4" />
+                <span>New Resume</span>
               </button>
             </div>
+          </div>
 
-            {/* Custom ATS banner: full-width slim row below the grid */}
+          {/* Resumes Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pt-6 items-stretch">
+            {/* Card 1: New Resume */}
+            <button
+              type="button"
+              onClick={handleCreateNew}
+              className="card p-5 border-2 border-dashed border-line hover:border-brand-500 bg-card/60 hover:bg-card transition-all cursor-pointer text-left flex flex-col justify-between h-[280px] group hover:shadow-soft"
+            >
+              <div className="flex flex-col items-center justify-center h-full text-center py-6">
+                <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mb-3 group-hover:scale-110 group-hover:bg-brand-500 group-hover:text-white transition-all shadow-soft">
+                  <Plus className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors">
+                  New Blank Resume
+                </h3>
+                <p className="text-xs text-ink/50 mt-1 max-w-[200px] leading-relaxed">
+                  Start from scratch with clean sections and live AI assistance
+                </p>
+              </div>
+            </button>
+
+            {/* Cards 2..N: Existing Resumes */}
+            {resumeIndex.map((entry) => (
+              <div
+                key={entry.id}
+                className="card border border-line bg-card hover:border-brand-500/80 hover:shadow-paper transition-all flex flex-col justify-between h-[280px] relative group"
+              >
+                {/* Click area to open */}
+                <div
+                  onClick={() => {
+                    window.location.hash = `#/r/${entry.id}`;
+                  }}
+                  className="p-4 flex-1 flex flex-col justify-between cursor-pointer"
+                >
+                  {/* Miniature Visual Mockup Thumbnail */}
+                  <div className="w-full h-28 bg-canvas rounded-lg p-2.5 border border-line flex flex-col justify-between overflow-hidden relative group-hover:border-brand-500/30 transition-colors">
+                    <div className="h-1 w-1/3 rounded-full bg-brand-500 mb-1.5" />
+                    <div className="space-y-1">
+                      <div className="h-2 w-3/4 bg-ink/20 rounded" />
+                      <div className="h-1.5 w-1/2 bg-ink/10 rounded" />
+                    </div>
+                    <div className="space-y-1 my-auto">
+                      <div className="h-1 w-full bg-ink/10 rounded" />
+                      <div className="h-1 w-5/6 bg-ink/10 rounded" />
+                      <div className="h-1 w-4/6 bg-ink/10 rounded" />
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-line/60">
+                      <div className="flex gap-1">
+                        <div className="h-1 w-6 bg-brand-500/30 rounded" />
+                        <div className="h-1 w-6 bg-brand-500/30 rounded" />
+                      </div>
+                      {entry.score !== undefined && (
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                            entry.score >= 80
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                              : entry.score >= 60
+                              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+                              : 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+                          }`}
+                        >
+                          ATS {entry.score}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Title & Info */}
+                  <div className="mt-3">
+                    {renamingCardId === entry.id ? (
+                      <input
+                        type="text"
+                        value={cardRenameValue}
+                        onChange={(e) => setCardRenameValue(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleFinishCardRename(entry.id);
+                          if (e.key === 'Escape') setRenamingCardId(null);
+                        }}
+                        onBlur={() => handleFinishCardRename(entry.id)}
+                        autoFocus
+                        className="w-full text-xs font-bold px-2 py-1 rounded bg-card border border-brand-500 text-ink focus:outline-none"
+                      />
+                    ) : (
+                      <h3
+                        className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors truncate"
+                        title={entry.name}
+                      >
+                        {entry.name}
+                      </h3>
+                    )}
+                    <p className="text-xs text-ink/60 truncate mt-0.5">
+                      {entry.title || 'General Resume'}
+                    </p>
+                  </div>
+
+                  {/* Footer info: last edited */}
+                  <div className="mt-2 pt-2 border-t border-line flex items-center justify-between text-[11px] text-ink/40">
+                    <span>{formatRelativeTime(entry.updatedAt)}</span>
+                    <span className="text-brand-600 font-medium group-hover:underline flex items-center gap-0.5">
+                      <span>Edit</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </span>
+                  </div>
+                </div>
+
+                {/* Top-Right Menu Trigger */}
+                <div className="absolute top-2.5 right-2.5">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenCardMenuId((prev) => (prev === entry.id ? null : entry.id));
+                    }}
+                    className="p-1.5 rounded-lg bg-card/80 backdrop-blur-sm border border-line text-ink/60 hover:text-ink hover:bg-muted transition cursor-pointer shadow-xs"
+                    title="More actions"
+                  >
+                    <MoreVertical className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Card Dropdown Menu */}
+                  {openCardMenuId === entry.id && (
+                    <div
+                      ref={cardMenuRef}
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute right-0 top-8 w-44 card shadow-paper py-1 z-20 border border-line bg-card animate-in fade-in zoom-in-95 duration-100"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenCardMenuId(null);
+                          window.location.hash = `#/r/${entry.id}`;
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5 text-ink/60" />
+                        <span>Open</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenCardMenuId(null);
+                          setRenamingCardId(entry.id);
+                          setCardRenameValue(entry.name);
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-ink/60" />
+                        <span>Rename</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenCardMenuId(null);
+                          handleDuplicateResume(entry.id);
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                      >
+                        <Copy className="w-3.5 h-3.5 text-ink/60" />
+                        <span>Duplicate</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenCardMenuId(null);
+                          handleExportJson(entry.id);
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5 text-ink/60" />
+                        <span>Export JSON</span>
+                      </button>
+                      <div className="my-1 border-t border-line" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenCardMenuId(null);
+                          handleDeleteResume(entry.id, entry.name);
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Quick action row below the grid */}
+          <div className="mt-8 pt-6 border-t border-line space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-card border border-line">
+              <div>
+                <h3 className="text-xs font-bold text-ink uppercase tracking-wider">
+                  Start from Curated Sample
+                </h3>
+                <p className="text-xs text-ink/60 mt-0.5">
+                  Create a new resume pre-filled with industry-tested profiles
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleLoadSample('aiEngineer')}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-muted hover:bg-brand-50 hover:text-brand-600 border border-line transition cursor-pointer text-ink"
+                >
+                  AI Engineer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleLoadSample('fullStack')}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-muted hover:bg-brand-50 hover:text-brand-600 border border-line transition cursor-pointer text-ink"
+                >
+                  Full-Stack Developer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleLoadSample('fresherStudent')}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-muted hover:bg-brand-50 hover:text-brand-600 border border-line transition cursor-pointer text-ink"
+                >
+                  Graduate / Fresher
+                </button>
+              </div>
+            </div>
+
+            {/* Custom ATS banner */}
             <div
-              onClick={() => {
-                closeLayer();
-                handleOpenCustomAts();
-              }}
+              onClick={handleOpenCustomAts}
               className="w-full p-3.5 bg-muted border border-line rounded-xl flex items-center justify-between cursor-pointer hover:border-brand-500/50 transition group"
             >
               <div className="flex items-center gap-2.5 text-xs text-ink/70 group-hover:text-ink">
@@ -976,181 +1212,188 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* Mobile Tab Toggle */}
-      <div className="no-print lg:hidden flex border-b border-line bg-card sticky top-14 z-20">
-        <button
-          onClick={() => setMobileTab('edit')}
-          className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition-colors ${
-            mobileTab === 'edit'
-              ? 'border-brand-600 text-brand-600'
-              : 'border-transparent text-ink/50 hover:text-ink'
-          }`}
-        >
-          <Edit3 className="w-3.5 h-3.5" strokeWidth={1.75} />
-          <span>Editor</span>
-        </button>
-        <button
-          onClick={() => setMobileTab('preview')}
-          className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition-colors ${
-            mobileTab === 'preview'
-              ? 'border-brand-600 text-brand-600'
-              : 'border-transparent text-ink/50 hover:text-ink'
-          }`}
-        >
-          <Eye className="w-3.5 h-3.5" strokeWidth={1.75} />
-          <span>Preview (ATS: {atsResult.score})</span>
-        </button>
-      </div>
-
-      {/* Main Split-Screen Workspace */}
-      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden h-[calc(100vh-56px)]">
-        {/* Left: Editor Panel */}
-        <div
-          className={`no-print w-full lg:w-[420px] xl:w-[480px] lg:shrink-0 h-full overflow-y-auto p-4 space-y-3 border-r border-line bg-canvas ${
-            mobileTab === 'edit' ? 'block' : 'hidden lg:block'
-          }`}
-        >
-          <div className="flex items-center justify-between py-1">
-            <div>
-              <h2 className="text-sm font-semibold text-ink tracking-tight">Resume Content</h2>
-              <p className="text-[11px] text-ink/40 mt-0.5">Live preview updates in real-time.</p>
-            </div>
-            <div className="badge">
-              <Sparkles className="w-3 h-3 mr-1" strokeWidth={1.75} />
-              AI Active
-            </div>
-          </div>
-
-          {/* Quick Actions: Upload Resume & Custom ATS format (Always Visible) */}
-          <div className="grid grid-cols-2 gap-2 w-full">
+      {/* VIEW B: EDITOR WORKSPACE */}
+      {route.type === 'editor' && (
+        <>
+          {/* Mobile Tab Toggle */}
+          <div className="no-print lg:hidden flex border-b border-line bg-card sticky top-14 z-20">
             <button
-              type="button"
-              onClick={() => openModal(setIsUploadModalOpen)}
-              className="p-2.5 rounded-xl border border-line bg-card hover:border-brand-500 hover:shadow-soft transition text-left flex items-start gap-2.5 group cursor-pointer"
+              onClick={() => setMobileTab('edit')}
+              className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition-colors ${
+                mobileTab === 'edit'
+                  ? 'border-brand-600 text-brand-600'
+                  : 'border-transparent text-ink/50 hover:text-ink'
+              }`}
             >
-              <div className="p-1.5 rounded-lg bg-brand-50 text-brand-600 shrink-0 group-hover:scale-105 transition-transform">
-                <Upload className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <span className="block text-xs font-bold text-ink group-hover:text-brand-600 transition truncate">
-                  Upload resume
-                </span>
-                <span className="block text-[10px] text-ink/50 truncate">
-                  PDF/DOCX/JSON/TXT
-                </span>
-              </div>
+              <Edit3 className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <span>Editor</span>
             </button>
-
             <button
-              type="button"
-              onClick={handleOpenCustomAts}
-              className="p-2.5 rounded-xl border border-line bg-card hover:border-brand-500 hover:shadow-soft transition text-left flex items-start gap-2.5 group cursor-pointer"
+              onClick={() => setMobileTab('preview')}
+              className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition-colors ${
+                mobileTab === 'preview'
+                  ? 'border-brand-600 text-brand-600'
+                  : 'border-transparent text-ink/50 hover:text-ink'
+              }`}
             >
-              <div className="p-1.5 rounded-lg bg-brand-50 text-brand-600 shrink-0 group-hover:scale-105 transition-transform">
-                <Sliders className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <span className="block text-xs font-bold text-ink group-hover:text-brand-600 transition truncate">
-                  Custom ATS format
-                </span>
-                <span className="block text-[10px] text-ink/50 truncate">
-                  paste or upload rubric
-                </span>
-              </div>
+              <Eye className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <span>Preview (ATS: {atsResult.score})</span>
             </button>
           </div>
 
-          {/* Completeness Bar */}
-          <CompletenessBar data={resumeData} />
+          {/* Main Split-Screen Workspace */}
+          <main className="flex-1 flex flex-col lg:flex-row overflow-hidden h-[calc(100vh-56px)]">
+            {/* Left: Editor Panel */}
+            <div
+              className={`no-print w-full lg:w-[420px] xl:w-[480px] lg:shrink-0 h-full overflow-y-auto p-4 space-y-3 border-r border-line bg-canvas ${
+                mobileTab === 'edit' ? 'block' : 'hidden lg:block'
+              }`}
+            >
+              <div className="flex items-center justify-between py-1">
+                <div>
+                  <h2 className="text-sm font-semibold text-ink tracking-tight">Resume Content</h2>
+                  <p className="text-[11px] text-ink/40 mt-0.5">Live preview updates in real-time.</p>
+                </div>
+                <div className="badge">
+                  <Sparkles className="w-3 h-3 mr-1" strokeWidth={1.75} />
+                  AI Active
+                </div>
+              </div>
 
-          {/* Section Nav */}
-          <SectionNav onOpenSection={handleOpenSection} />
+              {/* Quick Actions: Upload Resume & Custom ATS format */}
+              <div className="grid grid-cols-2 gap-2 w-full">
+                <button
+                  type="button"
+                  onClick={() => openModal(setIsUploadModalOpen)}
+                  className="p-2.5 rounded-xl border border-line bg-card hover:border-brand-500 hover:shadow-soft transition text-left flex items-start gap-2.5 group cursor-pointer"
+                >
+                  <div className="p-1.5 rounded-lg bg-brand-50 text-brand-600 shrink-0 group-hover:scale-105 transition-transform">
+                    <Upload className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block text-xs font-bold text-ink group-hover:text-brand-600 transition truncate">
+                      Upload resume
+                    </span>
+                    <span className="block text-[10px] text-ink/50 truncate">
+                      PDF/DOCX/JSON/TXT
+                    </span>
+                  </div>
+                </button>
 
-          {/* Form Sections (Orderable & Hideable) */}
-          <div className="space-y-3">
-            {sectionOrder.map((secId) => renderSectionItem(secId))}
-          </div>
-        </div>
+                <button
+                  type="button"
+                  onClick={handleOpenCustomAts}
+                  className="p-2.5 rounded-xl border border-line bg-card hover:border-brand-500 hover:shadow-soft transition text-left flex items-start gap-2.5 group cursor-pointer"
+                >
+                  <div className="p-1.5 rounded-lg bg-brand-50 text-brand-600 shrink-0 group-hover:scale-105 transition-transform">
+                    <Sliders className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block text-xs font-bold text-ink group-hover:text-brand-600 transition truncate">
+                      Custom ATS format
+                    </span>
+                    <span className="block text-[10px] text-ink/50 truncate">
+                      paste or upload rubric
+                    </span>
+                  </div>
+                </button>
+              </div>
 
-        {/* Right: Live Preview */}
-        <div
-          className={`w-full lg:flex-1 h-full overflow-hidden ${
-            mobileTab === 'preview' ? 'block' : 'hidden lg:block'
-          }`}
-        >
-          <ResumePreview
-            data={resumeData}
-            activeTemplate={activeTemplate}
-            onChangeTemplate={setActiveTemplate}
-            theme={theme}
-            onChangeTheme={setTheme}
-            onOpenUpload={() => openModal(setIsUploadModalOpen)}
-            onOpenCustomAts={handleOpenCustomAts}
-            onLoadSample={handleLoadSample}
-          />
-        </div>
-      </main>
+              {/* Completeness Bar */}
+              <CompletenessBar data={resumeData} />
 
-      {/* Overwrite Confirmation Modal */}
+              {/* Section Nav */}
+              <SectionNav onOpenSection={handleOpenSection} />
+
+              {/* Form Sections (Orderable & Hideable) */}
+              <div className="space-y-3">
+                {sectionOrder.map((secId) => renderSectionItem(secId))}
+              </div>
+            </div>
+
+            {/* Right: Live Preview */}
+            <div
+              className={`w-full lg:flex-1 h-full overflow-hidden ${
+                mobileTab === 'preview' ? 'block' : 'hidden lg:block'
+              }`}
+            >
+              <ResumePreview
+                data={resumeData}
+                activeTemplate={activeTemplate}
+                onChangeTemplate={setActiveTemplate}
+                theme={theme}
+                onChangeTheme={setTheme}
+                onOpenUpload={() => openModal(setIsUploadModalOpen)}
+                onOpenCustomAts={handleOpenCustomAts}
+                onLoadSample={handleLoadSample}
+              />
+            </div>
+          </main>
+        </>
+      )}
+
+      {/* Confirmation Modal (for Delete or Replace) */}
       <Modal
-        isOpen={!!pendingOverwrite}
-        onClose={closeLayer}
-        title="Existing Resume Detected"
-        icon={<AlertTriangle className="w-5 h-5 text-amber-600" />}
+        isOpen={!!confirmAction}
+        onClose={closeConfirmModal}
+        title={confirmAction?.type === 'delete' ? 'Delete Resume' : 'Replace Current Resume'}
+        icon={<AlertTriangle className="w-5 h-5 text-rose-500" />}
         maxWidth="max-w-md"
         footer={
-          <div className="flex flex-wrap items-center justify-end gap-2 w-full">
+          <div className="flex items-center justify-end gap-2 w-full">
             <button
               type="button"
-              onClick={closeLayer}
+              onClick={closeConfirmModal}
               className="btn-ghost h-9 px-3.5 text-xs font-semibold"
             >
               Cancel
             </button>
             <button
               type="button"
-              onClick={() => handleExecuteOverwrite(false)}
-              className="btn-outline h-9 px-3.5 text-xs font-semibold text-rose-600 dark:text-rose-400 border-rose-300 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+              onClick={handleExecuteConfirm}
+              className={`h-9 px-4 text-xs font-semibold rounded-xl text-white transition ${
+                confirmAction?.type === 'delete'
+                  ? 'bg-rose-600 hover:bg-rose-700'
+                  : 'bg-brand-600 hover:bg-brand-700'
+              }`}
             >
-              Overwrite Without Saving
-            </button>
-            <button
-              type="button"
-              onClick={() => handleExecuteOverwrite(true)}
-              className="btn-primary h-9 px-3.5 text-xs font-semibold flex items-center gap-1.5"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Save Backup & Continue</span>
+              {confirmAction?.type === 'delete' ? 'Delete Resume' : 'Replace Resume'}
             </button>
           </div>
         }
       >
-        <div className="p-5 space-y-3 bg-card">
-          <p className="text-xs text-ink/80 leading-relaxed">
-            You already have resume content in memory ({resumeData.personalInfo.fullName || 'Active Resume'}). Loading a new profile or starting blank will replace your current workspace.
-          </p>
-          <p className="text-[11px] text-ink/60">
-            Would you like to export your current resume as a JSON backup first?
-          </p>
+        <div className="p-5 space-y-2 bg-card">
+          {confirmAction?.type === 'delete' ? (
+            <p className="text-xs text-ink/80 leading-relaxed">
+              Are you sure you want to delete{' '}
+              <strong className="text-ink">{confirmAction.resumeName || 'this resume'}</strong>? This action cannot be undone.
+            </p>
+          ) : (
+            <p className="text-xs text-ink/80 leading-relaxed">
+              Are you sure you want to replace the contents of{' '}
+              <strong className="text-ink">{confirmAction?.resumeName || 'current resume'}</strong>{' '}
+              with the uploaded file? You can also save it as a new resume instead.
+            </p>
+          )}
         </div>
       </Modal>
 
       {/* Feature Modals */}
       <JobRadarModal
         isOpen={isJobRadarOpen}
-        onClose={closeLayer}
+        onClose={() => closeModal(setIsJobRadarOpen)}
         resumeData={resumeData}
       />
 
       <TrendAdvisorModal
         isOpen={isTrendAdvisorOpen}
-        onClose={closeLayer}
+        onClose={() => closeModal(setIsTrendAdvisorOpen)}
         resumeData={resumeData}
       />
 
       <JobMatcherModal
         isOpen={isJobMatcherOpen}
-        onClose={closeLayer}
+        onClose={() => closeModal(setIsJobMatcherOpen)}
         resumeData={resumeData}
         initialAtsResult={atsResult}
         initialTab={jobMatcherInitialTab}
@@ -1163,27 +1406,29 @@ export const App: React.FC = () => {
 
       <ApiKeyModal
         isOpen={isApiKeyModalOpen}
-        onClose={closeLayer}
+        onClose={() => closeModal(setIsApiKeyModalOpen)}
         currentTheme={currentTheme}
         onThemeChange={handleSelectTheme}
       />
 
       <ResumeUploadModal
         isOpen={isUploadModalOpen}
-        onClose={closeLayer}
-        onConfirm={handleConfirmUpload}
+        onClose={() => closeModal(setIsUploadModalOpen)}
+        onSaveAsNew={handleUploadSaveAsNew}
+        onReplaceCurrent={handleUploadReplaceCurrent}
+        canReplace={route.type === 'editor'}
       />
 
       <CommandPalette
         isOpen={isCommandPaletteOpen}
-        onClose={closeLayer}
+        onClose={() => closeModal(setIsCommandPaletteOpen)}
         onSelectTemplate={setActiveTemplate}
         onJumpSection={(id) => {
           handleOpenSection(id);
           document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }}
         onOpenUpload={() => openModal(setIsUploadModalOpen)}
-        onExportJson={handleExportJson}
+        onExportJson={() => handleExportJson()}
         onLoadSample={handleLoadSample}
         onDownloadPdf={handleDownloadPdf}
       />

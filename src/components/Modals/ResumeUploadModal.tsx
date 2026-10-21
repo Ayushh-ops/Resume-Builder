@@ -16,7 +16,9 @@ import { parseAndStructureResume, type ParsedResumeResult } from '../../services
 interface ResumeUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (data: Partial<ResumeData>) => void;
+  onSaveAsNew: (data: Partial<ResumeData>, fileName?: string) => void;
+  onReplaceCurrent?: (data: Partial<ResumeData>) => void;
+  canReplace?: boolean;
 }
 
 type UploadStep = 'upload' | 'parsing' | 'review' | 'error';
@@ -24,11 +26,14 @@ type UploadStep = 'upload' | 'parsing' | 'review' | 'error';
 export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
   isOpen,
   onClose,
-  onConfirm,
+  onSaveAsNew,
+  onReplaceCurrent,
+  canReplace = false,
 }) => {
   const [step, setStep] = useState<UploadStep>('upload');
   const [dragActive, setDragActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [fileName, setFileName] = useState('');
   const [parsingStage, setParsingStage] = useState<1 | 2 | 3>(1);
   const [parsedResult, setParsedResult] = useState<ParsedResumeResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -37,6 +42,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
     if (isOpen) {
       setStep('upload');
       setErrorMessage('');
+      setFileName('');
       setParsedResult(null);
       setParsingStage(1);
     }
@@ -45,6 +51,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
   if (!isOpen) return null;
 
   const handleFileProcess = async (file: File) => {
+    setFileName(file.name.replace(/\.[^/.]+$/, ''));
     // 5MB limit
     if (file.size > 5 * 1024 * 1024) {
       setErrorMessage('File size exceeds the 5MB limit. Please upload a smaller resume.');
@@ -117,25 +124,38 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
       maxWidth="max-w-2xl"
       footer={
         step === 'review' && parsedResult ? (
-          <>
+          <div className="flex flex-wrap items-center justify-end gap-2 w-full">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-1.5 font-semibold text-xs text-ink/70 hover:bg-muted rounded-lg transition-colors"
+              className="px-3.5 py-1.5 font-semibold text-xs text-ink/70 hover:bg-muted rounded-lg transition-colors cursor-pointer"
             >
               Cancel
             </button>
+            {canReplace && onReplaceCurrent && (
+              <button
+                type="button"
+                onClick={() => {
+                  onReplaceCurrent(parsedResult.data);
+                  onClose();
+                }}
+                className="btn-outline h-8 px-3 text-xs font-semibold text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/30 cursor-pointer"
+              >
+                Replace current resume
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
-                onConfirm(parsedResult.data);
+                onSaveAsNew(parsedResult.data, fileName);
                 onClose();
               }}
-              className="btn-primary"
+              className="btn-primary h-8 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
             >
-              Confirm & Import
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Save as new resume</span>
             </button>
-          </>
+          </div>
         ) : (
           <button
             type="button"

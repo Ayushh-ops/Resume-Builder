@@ -118,25 +118,24 @@ export const TemplateThumbnail: React.FC<TemplateThumbnailProps> = ({
       type="button"
       onClick={onClick}
       title={`Template: ${label}`}
-      className={`group flex flex-col items-center gap-0.5 transition-all focus:outline-none`}
+      className="group flex flex-col items-center justify-center transition-all focus:outline-none w-[44px] shrink-0 cursor-pointer"
     >
       <div
-        className={`w-[40px] h-[52px] rounded-sm border overflow-hidden shadow-2xs transition-all ${
+        className={`w-[40px] h-[52px] min-w-[40px] min-h-[52px] max-w-[40px] max-h-[52px] rounded-sm border overflow-hidden transition-all ${
           isActive
-            ? 'ring-2 ring-brand-500 scale-105 border-brand-500/40 shadow-soft'
-            : 'border-line opacity-70 group-hover:opacity-100 group-hover:scale-100'
+            ? 'ring-2 ring-brand-500 border-brand-500/40 shadow-soft'
+            : 'border-line opacity-70 group-hover:opacity-100'
         }`}
       >
         {renderLayoutPreview()}
       </div>
-      {/* Label only under the active template */}
-      {isActive ? (
-        <span className="text-[10px] font-bold text-brand-600 leading-tight">
-          {label}
-        </span>
-      ) : (
-        <span className="h-3 w-1" />
-      )}
+      <span
+        className={`text-[10px] font-bold leading-tight mt-0.5 truncate max-w-full text-center ${
+          isActive ? 'text-brand-600 opacity-100' : 'opacity-0 select-none pointer-events-none'
+        }`}
+      >
+        {label}
+      </span>
     </button>
   );
 };

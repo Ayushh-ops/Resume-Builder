@@ -270,3 +270,7 @@ html, body, #root {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgb(var(--ink) / 0.2); border-radius: 9999px; }
 ::-webkit-scrollbar-thumb:hover { background: rgb(var(--ink) / 0.35); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

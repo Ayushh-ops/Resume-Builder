@@ -53,9 +53,12 @@ interface HeaderProps {
   onSelectProfileId?: (id: string) => void;
   currentTheme?: ThemeId;
   onToggleTheme?: () => void;
-  isHomeOpen?: boolean;
-  canContinue?: boolean;
-  onCloseHome?: () => void;
+  isHome?: boolean;
+  currentResumeId?: string | null;
+  currentResumeName?: string;
+  onRenameResume?: (id: string, newName: string) => void;
+  resumeList?: Array<{ id: string; name: string; title?: string }>;
+  onSelectResume?: (id: string) => void;
 }
 
 const getScoreColors = (score: number, isEmpty?: boolean) => {
@@ -116,17 +119,29 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectProfileId,
   currentTheme = 'light',
   onToggleTheme,
-  isHomeOpen = false,
-  canContinue = false,
-  onCloseHome,
+  isHome = false,
+  currentResumeId = null,
+  currentResumeName = 'Untitled resume',
+  onRenameResume,
+  resumeList = [],
+  onSelectResume,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [samplesExpanded, setSamplesExpanded] = useState(false);
   const [atsPopoverOpen, setAtsPopoverOpen] = useState(false);
+  const [resumeMenuOpen, setResumeMenuOpen] = useState(false);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [nameInput, setNameInput] = useState(currentResumeName || '');
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const atsRef = useRef<HTMLDivElement>(null);
+  const resumeMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setNameInput(currentResumeName || '');
+  }, [currentResumeName]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -141,12 +156,20 @@ export const Header: React.FC<HeaderProps> = ({
       if (atsRef.current && !atsRef.current.contains(e.target as Node)) {
         setAtsPopoverOpen(false);
       }
+      if (
+        resumeMenuRef.current &&
+        !resumeMenuRef.current.contains(e.target as Node)
+      ) {
+        setResumeMenuOpen(false);
+      }
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setMenuOpen(false);
         setAtsPopoverOpen(false);
+        setResumeMenuOpen(false);
+        setIsRenaming(false);
       }
     };
 
@@ -157,6 +180,15 @@ export const Header: React.FC<HeaderProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
+
+  const handleFinishRename = () => {
+    setIsRenaming(false);
+    if (nameInput.trim() && currentResumeId && onRenameResume) {
+      onRenameResume(currentResumeId, nameInput.trim());
+    } else {
+      setNameInput(currentResumeName || '');
+    }
+  };
 
   const handleToggleMenu = () => {
     if (!menuOpen && menuBtnRef.current) {
@@ -179,23 +211,127 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="no-print sticky top-0 z-40 h-14 flex items-center bg-card/85 backdrop-blur-xl border-b border-border border-t-0 px-4 lg:px-6 outline-none transition-colors">
       <div className="w-full flex items-center justify-between gap-4">
 
-        {/* Logo (Clickable -> Opens Home Overlay) */}
-        <div
-          onClick={onOpenHome}
-          className="flex items-center gap-2.5 shrink-0 cursor-pointer group select-none"
-          title="Click to open Home & Welcome Menu"
-        >
-          <div className="h-8 w-8 rounded-xl bg-brand-600 flex items-center justify-center text-white shadow-soft group-hover:scale-105 transition-transform">
-            <FileText className="w-4 h-4" strokeWidth={2} />
+        {/* Left: Logo & Resume Selector */}
+        <div className="flex items-center gap-3 shrink-0 min-w-0">
+          <div
+            onClick={onOpenHome}
+            className="flex items-center gap-2.5 shrink-0 cursor-pointer group select-none"
+            title="All resumes (Home)"
+          >
+            <div className="h-8 w-8 rounded-xl bg-brand-600 flex items-center justify-center text-white shadow-soft group-hover:scale-105 transition-transform">
+              <FileText className="w-4 h-4" strokeWidth={2} />
+            </div>
+            <span className="font-display font-semibold text-ink text-[17px] tracking-tight leading-none group-hover:text-brand-600 transition-colors">
+              ResumeCraft
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-brand-50 text-brand-600 border border-brand-500/20 uppercase tracking-wider">
+              AI
+            </span>
           </div>
-          <span className="font-display font-semibold text-ink text-[17px] tracking-tight leading-none group-hover:text-brand-600 transition-colors">
-            ResumeCraft
-          </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-brand-50 text-brand-600 border border-brand-500/20 uppercase tracking-wider">
-            AI
-          </span>
-          {savedAt && (
-            <span className="text-[11px] text-ink/40 ml-1.5 hidden md:inline transition-opacity duration-300">
+
+          {/* Current Resume Title & Switcher dropdown (only in Editor mode) */}
+          {!isHome && currentResumeId && (
+            <div className="flex items-center gap-1.5 pl-3 border-l border-line relative min-w-0" ref={resumeMenuRef}>
+              {isRenaming ? (
+                <input
+                  type="text"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  onBlur={handleFinishRename}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleFinishRename();
+                    if (e.key === 'Escape') {
+                      setNameInput(currentResumeName || '');
+                      setIsRenaming(false);
+                    }
+                  }}
+                  autoFocus
+                  className="text-xs font-semibold px-2 py-1 rounded bg-card border border-brand-500 text-ink focus:outline-none max-w-[140px] sm:max-w-[200px]"
+                />
+              ) : (
+                <div className="flex items-center gap-1 min-w-0">
+                  <span
+                    onClick={() => {
+                      setNameInput(currentResumeName || '');
+                      setIsRenaming(true);
+                    }}
+                    className="text-xs font-semibold text-ink hover:text-brand-600 cursor-pointer truncate max-w-[110px] sm:max-w-[170px] transition"
+                    title="Click to rename"
+                  >
+                    {currentResumeName || 'Untitled resume'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setResumeMenuOpen((v) => !v)}
+                    className="p-1 rounded hover:bg-muted text-ink/40 hover:text-ink transition cursor-pointer shrink-0"
+                    title="Switch resume"
+                  >
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${resumeMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
+              )}
+
+              {/* Resume Switcher Dropdown */}
+              {resumeMenuOpen && (
+                <div className="absolute top-9 left-2 w-64 card shadow-paper py-1.5 z-50 border border-line bg-card animate-in fade-in zoom-in-95 duration-100 max-h-[60vh] overflow-y-auto">
+                  <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-ink/40 border-b border-line flex items-center justify-between">
+                    <span>Your Resumes</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResumeMenuOpen(false);
+                        onOpenHome?.();
+                      }}
+                      className="text-brand-600 hover:underline normal-case font-semibold cursor-pointer"
+                    >
+                      All resumes →
+                    </button>
+                  </div>
+
+                  <div className="py-1">
+                    {resumeList.map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => {
+                          setResumeMenuOpen(false);
+                          onSelectResume?.(r.id);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between transition cursor-pointer ${
+                          r.id === currentResumeId
+                            ? 'bg-brand-50 text-brand-600 font-bold'
+                            : 'text-ink/80 hover:bg-muted'
+                        }`}
+                      >
+                        <div className="truncate mr-2">
+                          <span className="block truncate">{r.name}</span>
+                          {r.title && <span className="block text-[10px] text-ink/40 truncate font-normal">{r.title}</span>}
+                        </div>
+                        {r.id === currentResumeId && <CheckCircle2 className="w-3.5 h-3.5 text-brand-600 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="pt-1 border-t border-line">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setResumeMenuOpen(false);
+                        onNewResume?.();
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-brand-600 hover:bg-brand-50 font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <FilePlus2 className="w-3.5 h-3.5" />
+                      <span>+ New resume</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {savedAt && !isHome && (
+            <span className="text-[11px] text-ink/40 hidden md:inline transition-opacity duration-300">
               {formatSavedTime(savedAt)}
             </span>
           )}
@@ -204,14 +340,14 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Right cluster */}
         <div className="flex items-center gap-2">
 
-          {/* Undo / Redo (hidden when Home is open) */}
-          {!isHomeOpen && (
+          {/* Undo / Redo (hidden on Home) */}
+          {!isHome && (
             <div className="flex items-center gap-0.5 mr-1">
               <button
                 type="button"
                 onClick={onUndo}
                 disabled={!canUndo}
-                className="p-1.5 rounded-lg text-ink/50 hover:text-ink hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition"
+                className="p-1.5 rounded-lg text-ink/50 hover:text-ink hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition cursor-pointer"
                 title="Undo (Ctrl+Z)"
               >
                 <Undo2 className="w-4 h-4" strokeWidth={1.75} />
@@ -220,7 +356,7 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={onRedo}
                 disabled={!canRedo}
-                className="p-1.5 rounded-lg text-ink/50 hover:text-ink hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition"
+                className="p-1.5 rounded-lg text-ink/50 hover:text-ink hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition cursor-pointer"
                 title="Redo (Ctrl+Shift+Z)"
               >
                 <Redo2 className="w-4 h-4" strokeWidth={1.75} />
@@ -228,13 +364,13 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* ATS Score badge with Popover (hidden when Home is open) */}
-          {!isHomeOpen && (
+          {/* ATS Score badge with Popover (hidden on Home) */}
+          {!isHome && (
             <div className="relative" ref={atsRef}>
               <button
                 type="button"
                 onClick={() => setAtsPopoverOpen((v) => !v)}
-                className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold transition hover:shadow-sm ${scoreInfo.badge}`}
+                className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold transition hover:shadow-sm cursor-pointer ${scoreInfo.badge}`}
                 title="Toggle ATS Profile & Breakdown"
               >
                 <span className="relative flex h-2 w-2">
@@ -331,7 +467,7 @@ export const Header: React.FC<HeaderProps> = ({
                         if (onOpenCustomAts) onOpenCustomAts();
                         else onOpenJobMatcher();
                       }}
-                      className="w-full py-1 text-center text-[11px] font-bold text-brand-600 hover:bg-brand-50 rounded transition flex items-center justify-center gap-1"
+                      className="w-full py-1 text-center text-[11px] font-bold text-brand-600 hover:bg-brand-50 rounded transition flex items-center justify-center gap-1 cursor-pointer"
                     >
                       <span>+ Add custom ATS format</span>
                     </button>
@@ -341,7 +477,7 @@ export const Header: React.FC<HeaderProps> = ({
                         setAtsPopoverOpen(false);
                         onOpenJobMatcher();
                       }}
-                      className="w-full py-0.5 text-center text-[10px] text-ink/60 hover:text-ink transition"
+                      className="w-full py-0.5 text-center text-[10px] text-ink/60 hover:text-ink transition cursor-pointer"
                     >
                       Open Full ATS & Profile Studio →
                     </button>
@@ -351,23 +487,12 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {/* Back to editor primary CTA (shown only when on Home and data exists) */}
-          {isHomeOpen && canContinue && onCloseHome && (
-            <button
-              type="button"
-              onClick={onCloseHome}
-              className="btn-primary"
-            >
-              <span>Back to editor</span>
-            </button>
-          )}
-
           {/* Quick Light / Dark Mode Toggle */}
           {onToggleTheme && (
             <button
               type="button"
               onClick={onToggleTheme}
-              className="p-2 rounded-lg text-ink/50 hover:text-ink hover:bg-muted transition active:scale-95"
+              className="p-2 rounded-lg text-ink/50 hover:text-ink hover:bg-muted transition active:scale-95 cursor-pointer"
               title={isDarkTheme(currentTheme) ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
               {isDarkTheme(currentTheme) ? (
@@ -381,20 +506,20 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Settings icon */}
           <button
             onClick={onOpenApiKeyModal}
-            className="p-2 rounded-lg text-ink/50 hover:text-ink hover:bg-muted transition active:scale-95"
+            className="p-2 rounded-lg text-ink/50 hover:text-ink hover:bg-muted transition active:scale-95 cursor-pointer"
             title="Appearance & Gemini AI settings"
           >
             <Settings className="w-4 h-4" strokeWidth={1.75} />
           </button>
 
           {/* More dropdown (hidden on Home) */}
-          {!isHomeOpen && (
+          {!isHome && (
             <div className="relative">
               <button
                 ref={menuBtnRef}
                 onClick={handleToggleMenu}
                 aria-expanded={menuOpen}
-                className="btn-outline hidden sm:inline-flex"
+                className="btn-outline hidden sm:inline-flex cursor-pointer"
               >
                 <MoreHorizontal className="w-4 h-4" strokeWidth={1.75} />
                 <span>More</span>
@@ -418,7 +543,7 @@ export const Header: React.FC<HeaderProps> = ({
                         onNewResume?.();
                         close();
                       }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer"
                     >
                       <FilePlus2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                       <span>New Resume</span>
@@ -428,13 +553,13 @@ export const Header: React.FC<HeaderProps> = ({
 
                     {/* Tools */}
                     <p className="label px-3 pt-1 pb-1">AI Tools</p>
-                    <button onClick={() => { onOpenJobRadar(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition">
+                    <button onClick={() => { onOpenJobRadar(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer">
                       <Radar className="w-3.5 h-3.5" strokeWidth={1.75} /> Job Radar
                     </button>
-                    <button onClick={() => { onOpenTrendAdvisor(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition">
+                    <button onClick={() => { onOpenTrendAdvisor(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer">
                       <TrendingUp className="w-3.5 h-3.5" strokeWidth={1.75} /> 2026 Upgrade Tips
                     </button>
-                    <button onClick={() => { onOpenJobMatcher(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition">
+                    <button onClick={() => { onOpenJobMatcher(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer">
                       <Target className="w-3.5 h-3.5" strokeWidth={1.75} /> JD & ATS Studio
                     </button>
 
@@ -462,7 +587,7 @@ export const Header: React.FC<HeaderProps> = ({
                             onLoadSample('aiEngineer');
                             close();
                           }}
-                          className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-ink/80 hover:text-brand-600 hover:bg-muted rounded transition"
+                          className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-ink/80 hover:text-brand-600 hover:bg-muted rounded transition cursor-pointer"
                         >
                           <User className="w-3.5 h-3.5" strokeWidth={1.75} />
                           <span>AI Engineer</span>
@@ -472,7 +597,7 @@ export const Header: React.FC<HeaderProps> = ({
                             onLoadSample('fullStack');
                             close();
                           }}
-                          className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-ink/80 hover:text-brand-600 hover:bg-muted rounded transition"
+                          className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-ink/80 hover:text-brand-600 hover:bg-muted rounded transition cursor-pointer"
                         >
                           <Code2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                           <span>Full-Stack Dev</span>
@@ -482,7 +607,7 @@ export const Header: React.FC<HeaderProps> = ({
                             onLoadSample('fresherStudent');
                             close();
                           }}
-                          className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-ink/80 hover:text-brand-600 hover:bg-muted rounded transition"
+                          className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-ink/80 hover:text-brand-600 hover:bg-muted rounded transition cursor-pointer"
                         >
                           <GraduationCap className="w-3.5 h-3.5" strokeWidth={1.75} />
                           <span>Graduate / Fresher</span>
@@ -494,10 +619,10 @@ export const Header: React.FC<HeaderProps> = ({
 
                     {/* Data */}
                     <p className="label px-3 pt-1 pb-1">Data & Export</p>
-                    <button onClick={() => { onExportJson(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition">
+                    <button onClick={() => { onExportJson(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer">
                       <FolderOpen className="w-3.5 h-3.5" strokeWidth={1.75} /> Export JSON
                     </button>
-                    <button onClick={() => { onPrint(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition">
+                    <button onClick={() => { onPrint(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer">
                       <Printer className="w-3.5 h-3.5" strokeWidth={1.75} /> Print
                     </button>
                   </div>,
@@ -507,11 +632,11 @@ export const Header: React.FC<HeaderProps> = ({
           )}
 
           {/* Upload Button: on screens < 1280px (xl), collapse "Upload Resume" to icon-only with tooltip (hidden on Home) */}
-          {!isHomeOpen && onOpenUpload && (
+          {!isHome && onOpenUpload && (
             <button
               type="button"
               onClick={onOpenUpload}
-              className="btn-outline hidden sm:inline-flex items-center gap-1.5"
+              className="btn-outline hidden sm:inline-flex items-center gap-1.5 cursor-pointer"
               title="Upload Resume (PDF, DOCX, JSON, TXT)"
             >
               <Upload className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -519,8 +644,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Download PDF — primary CTA (hidden when Home is open) */}
-          {!isHomeOpen && (
+          {/* Download PDF — primary CTA (hidden on Home) */}
+          {!isHome && (
             <button
               onClick={onDownloadPdf}
               disabled={isDownloadingPdf}
