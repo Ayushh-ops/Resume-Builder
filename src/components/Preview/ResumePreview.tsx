@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ZoomIn, ZoomOut, RotateCcw, Palette, Type, Upload, User, Sparkles } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, Palette, Type, Upload, User, Sparkles, Sliders } from 'lucide-react';
 import type { ResumeData, ResumeTheme, TemplateType } from '../../types/resume';
 import { isResumeEmpty } from '../../services/atsScorer';
 import { ModernTemplate } from './templates/ModernTemplate';
@@ -15,6 +15,7 @@ interface ResumePreviewProps {
   theme: ResumeTheme;
   onChangeTheme: (theme: ResumeTheme) => void;
   onOpenUpload?: () => void;
+  onOpenCustomAts?: () => void;
   onLoadSample?: (key: string) => void;
 }
 
@@ -39,6 +40,7 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
   theme,
   onChangeTheme,
   onOpenUpload,
+  onOpenCustomAts,
   onLoadSample,
 }) => {
   const [zoom, setZoom] = useState(100);
@@ -183,25 +185,37 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
                     Upload an existing document or load a pre-filled sample profile to start optimizing.
                   </p>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                  {onOpenUpload && (
-                    <button
-                      type="button"
-                      onClick={onOpenUpload}
-                      className="btn-primary flex-1 justify-center py-2"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>Upload Resume</span>
-                    </button>
-                  )}
+                <div className="flex flex-col gap-2 pt-1">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    {onOpenUpload && (
+                      <button
+                        type="button"
+                        onClick={onOpenUpload}
+                        className="btn-primary flex-1 justify-center py-2"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload Resume</span>
+                      </button>
+                    )}
+                    {onOpenCustomAts && (
+                      <button
+                        type="button"
+                        onClick={onOpenCustomAts}
+                        className="btn-outline flex-1 justify-center py-2 text-brand-600 border-brand-500/30"
+                      >
+                        <Sliders className="w-3.5 h-3.5" />
+                        <span>Custom ATS</span>
+                      </button>
+                    )}
+                  </div>
                   {onLoadSample && (
                     <button
                       type="button"
                       onClick={() => onLoadSample('aiEngineer')}
-                      className="btn-ghost flex-1 justify-center py-2"
+                      className="btn-ghost w-full justify-center py-2"
                     >
                       <User className="w-3.5 h-3.5" />
-                      <span>Load Sample</span>
+                      <span>Load Sample Profile</span>
                     </button>
                   )}
                 </div>

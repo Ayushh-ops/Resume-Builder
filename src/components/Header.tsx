@@ -26,6 +26,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import type { ATSCheckResult, ATSProfile } from '../types/resume';
+import { type ThemeId, isDarkTheme } from '../services/themeService';
 
 interface HeaderProps {
   atsResult: ATSCheckResult;
@@ -45,20 +46,21 @@ interface HeaderProps {
   canRedo?: boolean;
   savedAt?: Date | null;
   onOpenUpload?: () => void;
+  onOpenCustomAts?: () => void;
   onOpenHome?: () => void;
   onNewResume?: () => void;
   allProfiles?: ATSProfile[];
   activeProfileId?: string;
   onSelectProfileId?: (id: string) => void;
-  themeMode?: 'light' | 'dark';
-  onToggleThemeMode?: () => void;
+  currentTheme?: ThemeId;
+  onToggleTheme?: () => void;
   isHomeOpen?: boolean;
 }
 
 const getScoreColors = (score: number, isEmpty?: boolean) => {
   if (isEmpty) {
     return {
-      badge: 'text-ink/40 bg-black/[0.04] dark:bg-white/[0.05] border-border',
+      badge: 'text-ink/40 bg-muted border-line',
       dot: 'bg-ink/30',
       ping: 'bg-ink/20',
       label: 'ATS --',
@@ -105,13 +107,14 @@ export const Header: React.FC<HeaderProps> = ({
   canRedo = false,
   savedAt = null,
   onOpenUpload,
+  onOpenCustomAts,
   onOpenHome,
   onNewResume,
   allProfiles = [],
   activeProfileId = 'default',
   onSelectProfileId,
-  themeMode = 'light',
-  onToggleThemeMode,
+  currentTheme = 'light',
+  onToggleTheme,
   isHomeOpen = false,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -304,14 +307,25 @@ export const Header: React.FC<HeaderProps> = ({
                     )}
                   </div>
 
-                  <div className="pt-1 border-t border-line flex items-center justify-between">
+                  <div className="pt-1.5 border-t border-line flex flex-col gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAtsPopoverOpen(false);
+                        if (onOpenCustomAts) onOpenCustomAts();
+                        else onOpenJobMatcher();
+                      }}
+                      className="w-full py-1 text-center text-[11px] font-bold text-brand-600 hover:bg-brand-50 rounded transition flex items-center justify-center gap-1"
+                    >
+                      <span>+ Add custom ATS format</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
                         setAtsPopoverOpen(false);
                         onOpenJobMatcher();
                       }}
-                      className="w-full py-1 text-center text-[11px] font-bold text-brand-600 hover:bg-muted rounded transition"
+                      className="w-full py-0.5 text-center text-[10px] text-ink/60 hover:text-ink transition"
                     >
                       Open Full ATS & Profile Studio →
                     </button>
@@ -322,14 +336,14 @@ export const Header: React.FC<HeaderProps> = ({
           )}
 
           {/* Quick Light / Dark Mode Toggle */}
-          {onToggleThemeMode && (
+          {onToggleTheme && (
             <button
               type="button"
-              onClick={onToggleThemeMode}
+              onClick={onToggleTheme}
               className="p-2 rounded-lg text-ink/50 hover:text-ink hover:bg-muted transition active:scale-95"
-              title={themeMode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              title={isDarkTheme(currentTheme) ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
-              {themeMode === 'dark' ? (
+              {isDarkTheme(currentTheme) ? (
                 <Sun className="w-4 h-4 text-amber-400" strokeWidth={1.75} />
               ) : (
                 <Moon className="w-4 h-4" strokeWidth={1.75} />

@@ -42,6 +42,7 @@ interface JobMatcherModalProps {
   onClose: () => void;
   resumeData: ResumeData;
   initialAtsResult: ATSCheckResult;
+  initialTab?: 'jd_matcher' | 'ats_profile' | 'create_profile';
   onApplyTailoring?: (changes: TailoredChanges) => void;
   onProfileChanged?: (profileId: string) => void;
 }
@@ -51,10 +52,11 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
   onClose,
   resumeData,
   initialAtsResult,
+  initialTab = 'jd_matcher',
   onApplyTailoring,
   onProfileChanged,
 }) => {
-  const [activeTab, setActiveTab] = useState<'jd_matcher' | 'ats_profile' | 'create_profile'>('jd_matcher');
+  const [activeTab, setActiveTab] = useState<'jd_matcher' | 'ats_profile' | 'create_profile'>(initialTab);
 
   // JD Matcher states
   const [jobDescription, setJobDescription] = useState('');
@@ -82,6 +84,9 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      if (initialTab) {
+        setActiveTab(initialTab);
+      }
       const profiles = getAllATSProfiles();
       setAllProfiles(profiles);
       const currentId = getActiveProfileId();
@@ -89,7 +94,7 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
       const res = calculateLiveATSScore(resumeData, currentId);
       setProfileAtsResult(res);
     }
-  }, [isOpen, resumeData]);
+  }, [isOpen, initialTab, resumeData]);
 
   if (!isOpen) return null;
 
@@ -506,8 +511,8 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                   </div>
 
                   {/* Results Display */}
-                  <div className="p-5 bg-canvas/60 border border-border rounded-2xl space-y-5">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+                  <div className="p-5 bg-muted border border-line rounded-2xl space-y-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line pb-4">
                       <div>
                         <span className="text-[11px] font-bold text-ink/40 uppercase tracking-wider">
                           {hasScanned ? 'Job Posting ATS Compatibility' : 'General Resume ATS Health'}
@@ -710,7 +715,7 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                                   <div className="min-w-0">
                                     <div className="flex items-center gap-2">
                                       <span className="text-xs font-bold text-ink">{cr.criterion.label}</span>
-                                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-black/[0.04] dark:bg-white/[0.05] text-ink/50 uppercase font-mono">
+                                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-muted border border-line text-ink/60 uppercase font-mono">
                                         {cr.criterion.type}
                                       </span>
                                     </div>

@@ -16,6 +16,8 @@ import {
   ArrowRight,
   AlertTriangle,
   Download,
+  Sliders,
+  Target,
 } from 'lucide-react';
 import type { ResumeData, ResumeTheme, TemplateType, ATSProfile } from './types/resume';
 import { sampleProfiles } from './data/sampleData';
@@ -27,11 +29,10 @@ import {
   setActiveProfileId,
 } from './services/atsScorer';
 import {
-  getInitialThemeMode,
-  getInitialThemeAccent,
-  applyAppTheme,
-  type ThemeMode,
-  type ThemeAccent,
+  getInitialTheme,
+  applyTheme,
+  toggleLightDarkTheme,
+  type ThemeId,
 } from './services/themeService';
 import { Header } from './components/Header';
 import { FormSection } from './components/Form/FormSection';
@@ -173,20 +174,24 @@ export const App: React.FC = () => {
     accentColor: '#818cf8',
   });
 
-  // App Theme & Accent State
-  const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode());
-  const [themeAccent, setThemeAccent] = useState<ThemeAccent>(getInitialThemeAccent());
+  // Single Unified App Theme State
+  const [currentTheme, setCurrentTheme] = useState<ThemeId>(getInitialTheme);
 
-  const handleToggleThemeMode = () => {
-    const nextMode: ThemeMode = themeMode === 'dark' ? 'light' : 'dark';
-    setThemeMode(nextMode);
-    applyAppTheme(nextMode, themeAccent);
+  const handleToggleTheme = () => {
+    setCurrentTheme((prev) => toggleLightDarkTheme(prev));
   };
 
-  const handleThemeChange = (mode: ThemeMode, accent: ThemeAccent) => {
-    setThemeMode(mode);
-    setThemeAccent(accent);
-    applyAppTheme(mode, accent);
+  const handleSelectTheme = (themeId: ThemeId) => {
+    setCurrentTheme(themeId);
+    applyTheme(themeId);
+  };
+
+  // Job Matcher Initial Tab State (for Custom ATS shortcuts)
+  const [jobMatcherInitialTab, setJobMatcherInitialTab] = useState<'jd_matcher' | 'ats_profile' | 'create_profile'>('jd_matcher');
+
+  const handleOpenCustomAts = () => {
+    setJobMatcherInitialTab('create_profile');
+    openModal(setIsJobMatcherOpen);
   };
 
   // ATS Profiles state
@@ -778,8 +783,9 @@ export const App: React.FC = () => {
         allProfiles={allProfiles}
         activeProfileId={activeProfileId}
         onSelectProfileId={handleSelectProfileId}
-        themeMode={themeMode}
-        onToggleThemeMode={handleToggleThemeMode}
+        currentTheme={currentTheme}
+        onToggleTheme={handleToggleTheme}
+        onOpenCustomAts={handleOpenCustomAts}
         isHomeOpen={showOnboarding}
       />
 
@@ -919,6 +925,24 @@ export const App: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Slim Banner: Add Custom ATS Profile */}
+            <div
+              onClick={() => {
+                closeLayer();
+                handleOpenCustomAts();
+              }}
+              className="p-3 bg-muted/60 border border-line rounded-xl flex items-center justify-between cursor-pointer hover:border-brand-500 hover:bg-muted transition text-xs group"
+            >
+              <div className="flex items-center gap-2 text-ink/70 group-hover:text-ink">
+                <Target className="w-4 h-4 text-brand-600 shrink-0" />
+                <span>Have your own ATS format?</span>
+              </div>
+              <span className="font-bold text-brand-600 group-hover:underline flex items-center gap-1">
+                <span>Add a custom ATS profile</span>
+                <span>→</span>
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -968,6 +992,45 @@ export const App: React.FC = () => {
             </div>
           </div>
 
+          {/* Quick Actions: Upload Resume & Custom ATS format (Always Visible) */}
+          <div className="grid grid-cols-2 gap-2 w-full">
+            <button
+              type="button"
+              onClick={() => openModal(setIsUploadModalOpen)}
+              className="p-2.5 rounded-xl border border-line bg-card hover:border-brand-500 hover:shadow-soft transition text-left flex items-start gap-2.5 group cursor-pointer"
+            >
+              <div className="p-1.5 rounded-lg bg-brand-50 text-brand-600 shrink-0 group-hover:scale-105 transition-transform">
+                <Upload className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <span className="block text-xs font-bold text-ink group-hover:text-brand-600 transition truncate">
+                  Upload resume
+                </span>
+                <span className="block text-[10px] text-ink/50 truncate">
+                  PDF/DOCX/JSON/TXT
+                </span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenCustomAts}
+              className="p-2.5 rounded-xl border border-line bg-card hover:border-brand-500 hover:shadow-soft transition text-left flex items-start gap-2.5 group cursor-pointer"
+            >
+              <div className="p-1.5 rounded-lg bg-brand-50 text-brand-600 shrink-0 group-hover:scale-105 transition-transform">
+                <Sliders className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <span className="block text-xs font-bold text-ink group-hover:text-brand-600 transition truncate">
+                  Custom ATS format
+                </span>
+                <span className="block text-[10px] text-ink/50 truncate">
+                  paste or upload rubric
+                </span>
+              </div>
+            </button>
+          </div>
+
           {/* Completeness Bar */}
           <CompletenessBar data={resumeData} />
 
@@ -993,6 +1056,7 @@ export const App: React.FC = () => {
             theme={theme}
             onChangeTheme={setTheme}
             onOpenUpload={() => openModal(setIsUploadModalOpen)}
+            onOpenCustomAts={handleOpenCustomAts}
             onLoadSample={handleLoadSample}
           />
         </div>
@@ -1010,21 +1074,21 @@ export const App: React.FC = () => {
             <button
               type="button"
               onClick={closeLayer}
-              className="btn-ghost text-xs"
+              className="btn-ghost h-9 px-3.5 text-xs font-semibold"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={() => handleExecuteOverwrite(false)}
-              className="btn-outline text-xs text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+              className="btn-outline h-9 px-3.5 text-xs font-semibold text-rose-600 dark:text-rose-400 border-rose-300 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/30"
             >
               Overwrite Without Saving
             </button>
             <button
               type="button"
               onClick={() => handleExecuteOverwrite(true)}
-              className="btn bg-amber-600 text-white hover:bg-amber-700 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+              className="btn-primary h-9 px-3.5 text-xs font-semibold flex items-center gap-1.5"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Save Backup & Continue</span>
@@ -1032,11 +1096,11 @@ export const App: React.FC = () => {
           </div>
         }
       >
-        <div className="p-5 space-y-3">
-          <p className="text-xs text-ink/70 leading-relaxed">
+        <div className="p-5 space-y-3 bg-card">
+          <p className="text-xs text-ink/80 leading-relaxed">
             You already have resume content in memory ({resumeData.personalInfo.fullName || 'Active Resume'}). Loading a new profile or starting blank will replace your current workspace.
           </p>
-          <p className="text-[11px] text-ink/50">
+          <p className="text-[11px] text-ink/60">
             Would you like to export your current resume as a JSON backup first?
           </p>
         </div>
@@ -1060,6 +1124,7 @@ export const App: React.FC = () => {
         onClose={closeLayer}
         resumeData={resumeData}
         initialAtsResult={atsResult}
+        initialTab={jobMatcherInitialTab}
         onApplyTailoring={handleApplyTailoring}
         onProfileChanged={(id) => {
           setActiveProfileIdState(id);
@@ -1070,7 +1135,8 @@ export const App: React.FC = () => {
       <ApiKeyModal
         isOpen={isApiKeyModalOpen}
         onClose={closeLayer}
-        onThemeChange={handleThemeChange}
+        currentTheme={currentTheme}
+        onThemeChange={handleSelectTheme}
       />
 
       <ResumeUploadModal

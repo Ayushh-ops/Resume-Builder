@@ -11,10 +11,19 @@
     <script>
       (function() {
         try {
-          var mode = localStorage.getItem('resumecraft_app_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-          var accent = localStorage.getItem('resumecraft_app_accent') || 'indigo';
-          document.documentElement.setAttribute('data-theme', mode);
-          document.documentElement.setAttribute('data-accent', accent);
+          var legacy = localStorage.getItem('resumecraft_app_theme');
+          if (legacy) {
+            localStorage.setItem('rc-theme', legacy === 'dark' ? 'dark' : 'light');
+            localStorage.removeItem('resumecraft_app_theme');
+            localStorage.removeItem('resumecraft_app_accent');
+          }
+          var saved = localStorage.getItem('rc-theme');
+          var valid = ['light', 'dark', 'midnight', 'forest', 'rose', 'slate'];
+          var theme = (saved && valid.indexOf(saved) !== -1)
+            ? saved
+            : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-theme', theme);
+          document.documentElement.removeAttribute('data-accent');
         } catch (e) {}
       })();
     </script>

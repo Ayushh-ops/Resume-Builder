@@ -70,12 +70,16 @@ export const Modal: React.FC<ModalProps> = ({
       {/* Solid bg-card panel */}
       <div
         ref={panelRef}
-        className={`relative w-full ${maxWidth} bg-card text-ink border border-line rounded-2xl shadow-paper flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-150 z-10 ${className}`}
+        style={{ backgroundColor: 'rgb(var(--card))' }}
+        className={`relative w-full ${maxWidth} bg-card text-ink border border-line rounded-2xl shadow-paper flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-150 z-50 ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header (Fixed) */}
         {(title || icon) && (
-          <div className="px-5 py-4 bg-card border-b border-line flex items-center justify-between shrink-0 select-none">
+          <div
+            style={{ backgroundColor: 'rgb(var(--card))' }}
+            className="px-5 py-4 bg-card border-b border-line flex items-center justify-between shrink-0 select-none"
+          >
             <div className="flex items-center gap-3 min-w-0 pr-2">
               {icon && (
                 <div className="p-2 rounded-xl bg-brand-50 text-brand-600 shrink-0">
@@ -104,13 +108,19 @@ export const Modal: React.FC<ModalProps> = ({
         )}
 
         {/* Body (Scrollable) */}
-        <div className={`overflow-y-auto flex-1 p-5 ${bodyClassName}`}>
+        <div
+          style={{ backgroundColor: 'rgb(var(--card))' }}
+          className={`overflow-y-auto flex-1 p-5 bg-card ${bodyClassName}`}
+        >
           {children}
         </div>
 
         {/* Footer (Fixed) */}
         {footer && (
-          <div className="px-5 py-3 border-t border-line bg-card flex items-center justify-end gap-2 shrink-0">
+          <div
+            style={{ backgroundColor: 'rgb(var(--card))' }}
+            className="px-5 py-3 border-t border-line bg-card flex items-center justify-end gap-2 shrink-0"
+          >
             {footer}
           </div>
         )}
