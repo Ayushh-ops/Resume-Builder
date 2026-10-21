@@ -12,10 +12,27 @@ import {
   Eye,
   Edit3,
   Upload,
+  X,
+  ArrowRight,
+  AlertTriangle,
+  Download,
 } from 'lucide-react';
-import type { ResumeData, ResumeTheme, TemplateType } from './types/resume';
+import type { ResumeData, ResumeTheme, TemplateType, ATSProfile } from './types/resume';
 import { sampleProfiles } from './data/sampleData';
-import { calculateLiveATSScore } from './services/atsScorer';
+import {
+  calculateLiveATSScore,
+  isResumeEmpty,
+  getAllATSProfiles,
+  getActiveProfileId,
+  setActiveProfileId,
+} from './services/atsScorer';
+import {
+  getInitialThemeMode,
+  getInitialThemeAccent,
+  applyAppTheme,
+  type ThemeMode,
+  type ThemeAccent,
+} from './services/themeService';
 import { Header } from './components/Header';
 import { FormSection } from './components/Form/FormSection';
 import { PersonalInfoForm } from './components/Form/PersonalInfoForm';
@@ -155,6 +172,31 @@ export const App: React.FC = () => {
     accentColor: '#818cf8',
   });
 
+  // App Theme & Accent State
+  const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode());
+  const [themeAccent, setThemeAccent] = useState<ThemeAccent>(getInitialThemeAccent());
+
+  const handleToggleThemeMode = () => {
+    const nextMode: ThemeMode = themeMode === 'dark' ? 'light' : 'dark';
+    setThemeMode(nextMode);
+    applyAppTheme(nextMode, themeAccent);
+  };
+
+  const handleThemeChange = (mode: ThemeMode, accent: ThemeAccent) => {
+    setThemeMode(mode);
+    setThemeAccent(accent);
+    applyAppTheme(mode, accent);
+  };
+
+  // ATS Profiles state
+  const [activeProfileId, setActiveProfileIdState] = useState<string>(() => getActiveProfileId());
+  const [allProfiles, setAllProfiles] = useState<ATSProfile[]>(() => getAllATSProfiles());
+
+  const handleSelectProfileId = (id: string) => {
+    setActiveProfileIdState(id);
+    setActiveProfileId(id);
+  };
+
   // Section Ordering & Visibility
   const [sectionOrder, setSectionOrder] = useState<string[]>([
     'personal',
@@ -218,10 +260,75 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleCommandPaletteKey);
   }, []);
 
-  // Live ATS Scoring
+  // Live ATS Scoring with activeProfileId
   const atsResult = useMemo(() => {
-    return calculateLiveATSScore(resumeData);
-  }, [resumeData]);
+    return calculateLiveATSScore(resumeData, activeProfileId);
+  }, [resumeData, activeProfileId]);
+
+  // Confirmation state before overwriting resume
+  const [pendingOverwrite, setPendingOverwrite] = useState<{
+    type: 'sample' | 'blank';
+    key?: string;
+  } | null>(null);
+
+  // Esc key closes onboarding/home if user already has data
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showOnboarding && !isResumeEmpty(resumeData)) {
+        setShowOnboarding(false);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [showOnboarding, resumeData]);
+
+  // Execute confirmed overwrite
+  const handleExecuteOverwrite = (saveFirst = false) => {
+    if (saveFirst) {
+      handleExportJson();
+    }
+    if (!pendingOverwrite) return;
+
+    if (pendingOverwrite.type === 'blank') {
+      pushHistory(blankResumeData);
+      setShowOnboarding(false);
+      localStorage.setItem('resume-data', JSON.stringify(blankResumeData));
+      showToast('Started with a blank resume', 'info');
+    } else if (pendingOverwrite.type === 'sample' && pendingOverwrite.key) {
+      const sample = sampleProfiles[pendingOverwrite.key];
+      if (sample) {
+        pushHistory(sample);
+        setShowOnboarding(false);
+        localStorage.setItem('resume-data', JSON.stringify(sample));
+        showToast(`Loaded sample: ${pendingOverwrite.key}`, 'success');
+        confetti({ particleCount: 50, spread: 60 });
+      }
+    }
+    setPendingOverwrite(null);
+  };
+
+  // Safe handler for clicking sample
+  const handleRequestSample = (key: string) => {
+    if (!isResumeEmpty(resumeData)) {
+      setPendingOverwrite({ type: 'sample', key });
+    } else {
+      handleLoadSample(key);
+      setShowOnboarding(false);
+      localStorage.setItem('resume-data', JSON.stringify(sampleProfiles[key]));
+    }
+  };
+
+  // Safe handler for clicking blank
+  const handleRequestBlank = () => {
+    if (!isResumeEmpty(resumeData)) {
+      setPendingOverwrite({ type: 'blank' });
+    } else {
+      pushHistory(blankResumeData);
+      setShowOnboarding(false);
+      localStorage.setItem('resume-data', JSON.stringify(blankResumeData));
+      showToast('Started with a blank resume', 'info');
+    }
+  };
 
   // Load preset sample
   const handleLoadSample = (key: string) => {
@@ -246,30 +353,6 @@ export const App: React.FC = () => {
     downloadAnchor.click();
     downloadAnchor.remove();
     showToast('Resume JSON backup exported', 'success');
-  };
-
-  // Import JSON backup
-  const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const parsed = JSON.parse(event.target?.result as string);
-        if (parsed.personalInfo) {
-          pushHistory(parsed);
-          showToast('JSON resume imported successfully', 'success');
-          confetti({ particleCount: 60, spread: 70 });
-        } else {
-          showToast('Invalid resume JSON format.', 'error');
-        }
-      } catch (err) {
-        showToast('Could not parse JSON file.', 'error');
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
   };
 
   // Confirm resume upload from parser
@@ -519,7 +602,6 @@ export const App: React.FC = () => {
         onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
         onLoadSample={handleLoadSample}
         onExportJson={handleExportJson}
-        onImportJson={handleImportJson}
         onPrint={printResume}
         onDownloadPdf={handleDownloadPdf}
         isDownloadingPdf={isDownloadingPdf}
@@ -529,86 +611,162 @@ export const App: React.FC = () => {
         canRedo={historyIndex < history.length - 1}
         savedAt={savedAt}
         onOpenUpload={() => setIsUploadModalOpen(true)}
+        onOpenHome={() => setShowOnboarding(true)}
+        onNewResume={() => {
+          if (!isResumeEmpty(resumeData)) {
+            setPendingOverwrite({ type: 'blank' });
+            setShowOnboarding(true);
+          } else {
+            pushHistory(blankResumeData);
+            showToast('Started blank resume', 'info');
+          }
+        }}
+        allProfiles={allProfiles}
+        activeProfileId={activeProfileId}
+        onSelectProfileId={handleSelectProfileId}
+        themeMode={themeMode}
+        onToggleThemeMode={handleToggleThemeMode}
       />
 
       {showOnboarding ? (
-        /* Full-Screen Centered Onboarding Flow */
-        <div className="flex-1 flex items-center justify-center p-6 bg-canvas canvas-dots">
-          <div className="w-full max-w-3xl card shadow-paper p-8 text-center space-y-8 animate-in zoom-in-95">
+        /* Full-Screen Centered Onboarding / Home Flow */
+        <div className="flex-1 flex items-center justify-center p-6 bg-canvas canvas-dots relative">
+          <div className="w-full max-w-3xl card shadow-paper p-8 text-center space-y-7 animate-in zoom-in-95 relative border border-border">
+            {/* Close button if user already has data */}
+            {!isResumeEmpty(resumeData) && (
+              <button
+                type="button"
+                onClick={() => setShowOnboarding(false)}
+                className="absolute top-4 right-4 p-2 rounded-xl text-ink/40 hover:text-ink hover:bg-black/5 dark:hover:bg-white/5 transition"
+                title="Continue editing (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+
             <div>
-              <div className="inline-flex p-3 rounded-2xl bg-brand-50 text-brand-600 mb-3 shadow-soft">
-                <FileText className="w-8 h-8" />
+              <div className="inline-flex p-3 rounded-2xl bg-brand-50 text-brand-600 mb-2 shadow-soft">
+                <FileText className="w-7 h-7" />
               </div>
               <h1 className="text-2xl font-bold font-display text-ink tracking-tight">
-                Welcome to ResumeCraft AI
+                ResumeCraft AI Studio
               </h1>
-              <p className="text-sm text-ink/50 mt-1 max-w-md mx-auto">
-                How would you like to build your ATS-optimized executive resume today?
+              <p className="text-xs text-ink/50 mt-1 max-w-md mx-auto">
+                Build, optimize, and tailor your executive ATS-ready resume with Gemini 3.8 AI
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 text-left">
+            {/* Overwrite Confirmation Dialog */}
+            {pendingOverwrite && (
+              <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-2xl text-left space-y-3 animate-in fade-in">
+                <div className="flex items-center gap-2 font-bold text-xs text-amber-800 dark:text-amber-300">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Existing Resume Detected</span>
+                </div>
+                <p className="text-xs text-amber-900/80 dark:text-amber-200/80 leading-relaxed">
+                  You already have resume content in memory. Creating a new resume will replace your current workspace. Would you like to backup your resume first?
+                </p>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteOverwrite(true)}
+                    className="btn bg-amber-600 text-white hover:bg-amber-700 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Save Current as JSON First</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteOverwrite(false)}
+                    className="btn-ghost text-xs text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-800"
+                  >
+                    Overwrite Without Saving
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPendingOverwrite(null)}
+                    className="text-xs font-semibold text-ink/60 hover:text-ink ml-2"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Main Options Grid */}
+            <div className={`grid grid-cols-1 ${!isResumeEmpty(resumeData) ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4 text-left`}>
+              {/* Card 0: Continue Editing (when resume has content) */}
+              {!isResumeEmpty(resumeData) && (
+                <div
+                  onClick={() => setShowOnboarding(false)}
+                  className="card p-4 border border-brand-500/30 bg-brand-50/30 hover:border-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="p-2 rounded-xl bg-brand-50 text-brand-600 w-fit mb-2.5 group-hover:scale-105 transition-transform">
+                      <ArrowRight className="w-4 h-4" />
+                    </div>
+                    <h3 className="text-xs font-bold text-ink group-hover:text-brand-600 transition-colors">
+                      Continue Editing
+                    </h3>
+                    <p className="text-[11px] text-ink/50 mt-1 leading-relaxed">
+                      Resume editing "{resumeData.personalInfo.fullName || 'Untitled'}" with current live changes.
+                    </p>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-border text-[11px] font-bold text-brand-600 flex items-center gap-1">
+                    <span>Back to Workspace →</span>
+                  </div>
+                </div>
+              )}
+
               {/* Card 1: Upload Resume */}
               <div
                 onClick={() => setIsUploadModalOpen(true)}
-                className="card p-5 border border-black/[0.08] hover:border-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
+                className="card p-4 border border-border hover:border-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
               >
                 <div>
-                  <div className="p-2.5 rounded-xl bg-brand-50 text-brand-600 w-fit mb-3 group-hover:scale-105 transition-transform">
-                    <Upload className="w-5 h-5" />
+                  <div className="p-2 rounded-xl bg-brand-50 text-brand-600 w-fit mb-2.5 group-hover:scale-105 transition-transform">
+                    <Upload className="w-4 h-4" />
                   </div>
-                  <h3 className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors">
+                  <h3 className="text-xs font-bold text-ink group-hover:text-brand-600 transition-colors">
                     Upload Resume
                   </h3>
-                  <p className="text-xs text-ink/50 mt-1.5 leading-relaxed">
-                    Import existing PDF, Word, or JSON file. Gemini extracts and structures your data automatically.
+                  <p className="text-[11px] text-ink/50 mt-1 leading-relaxed">
+                    Import existing PDF, Word, JSON, or TXT file. Gemini extracts and structures your data automatically.
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-black/[0.05] text-[11px] font-bold text-brand-600 flex items-center gap-1">
+                <div className="mt-3 pt-2 border-t border-border text-[11px] font-bold text-brand-600 flex items-center gap-1">
                   <span>Import Document →</span>
                 </div>
               </div>
 
               {/* Card 2: Start from Sample */}
-              <div className="card p-5 border border-black/[0.08] hover:border-brand-500 hover:shadow-paper/70 transition-all flex flex-col justify-between">
+              <div className="card p-4 border border-border hover:border-brand-500 hover:shadow-paper/70 transition-all flex flex-col justify-between">
                 <div>
-                  <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 w-fit mb-3">
-                    <User className="w-5 h-5" />
+                  <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 w-fit mb-2.5">
+                    <User className="w-4 h-4" />
                   </div>
-                  <h3 className="text-sm font-bold text-ink">
+                  <h3 className="text-xs font-bold text-ink">
                     Start from Sample
                   </h3>
-                  <p className="text-xs text-ink/50 mt-1.5 leading-relaxed">
-                    Pick a production-grade curated sample profile to edit and customize.
+                  <p className="text-[11px] text-ink/50 mt-1 leading-relaxed">
+                    Pick a production-grade curated sample profile to customize.
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-black/[0.05] space-y-1.5">
+                <div className="mt-3 pt-2 border-t border-border space-y-1">
                   <button
-                    onClick={() => {
-                      handleLoadSample('aiEngineer');
-                      setShowOnboarding(false);
-                      localStorage.setItem('resume-data', JSON.stringify(sampleProfiles.aiEngineer));
-                    }}
+                    onClick={() => handleRequestSample('aiEngineer')}
                     className="w-full text-left px-2 py-1 text-[11px] font-semibold text-ink/70 hover:text-brand-600 hover:bg-brand-50 rounded transition"
                   >
                     • AI Engineer
                   </button>
                   <button
-                    onClick={() => {
-                      handleLoadSample('fullStack');
-                      setShowOnboarding(false);
-                      localStorage.setItem('resume-data', JSON.stringify(sampleProfiles.fullStack));
-                    }}
+                    onClick={() => handleRequestSample('fullStack')}
                     className="w-full text-left px-2 py-1 text-[11px] font-semibold text-ink/70 hover:text-brand-600 hover:bg-brand-50 rounded transition"
                   >
                     • Full-Stack Dev
                   </button>
                   <button
-                    onClick={() => {
-                      handleLoadSample('fresherStudent');
-                      setShowOnboarding(false);
-                      localStorage.setItem('resume-data', JSON.stringify(sampleProfiles.fresherStudent));
-                    }}
+                    onClick={() => handleRequestSample('fresherStudent')}
                     className="w-full text-left px-2 py-1 text-[11px] font-semibold text-ink/70 hover:text-brand-600 hover:bg-brand-50 rounded transition"
                   >
                     • Graduate / Fresher
@@ -618,26 +776,21 @@ export const App: React.FC = () => {
 
               {/* Card 3: Start Blank */}
               <div
-                onClick={() => {
-                  pushHistory(blankResumeData);
-                  setShowOnboarding(false);
-                  localStorage.setItem('resume-data', JSON.stringify(blankResumeData));
-                  showToast('Started with a blank resume', 'info');
-                }}
-                className="card p-5 border border-black/[0.08] hover:border-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
+                onClick={handleRequestBlank}
+                className="card p-4 border border-border hover:border-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
               >
                 <div>
-                  <div className="p-2.5 rounded-xl bg-slate-100 text-slate-700 w-fit mb-3 group-hover:scale-105 transition-transform">
-                    <FileText className="w-5 h-5" />
+                  <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 w-fit mb-2.5 group-hover:scale-105 transition-transform">
+                    <FileText className="w-4 h-4" />
                   </div>
-                  <h3 className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors">
+                  <h3 className="text-xs font-bold text-ink group-hover:text-brand-600 transition-colors">
                     Start Blank
                   </h3>
-                  <p className="text-xs text-ink/50 mt-1.5 leading-relaxed">
-                    Build from scratch with a completely clean slate, filling each section guided by AI suggestions.
+                  <p className="text-[11px] text-ink/50 mt-1 leading-relaxed">
+                    Build from scratch with a clean slate, filling each section guided by AI suggestions.
                   </p>
                 </div>
-                <div className="mt-4 pt-3 border-t border-black/[0.05] text-[11px] font-bold text-ink/60 flex items-center gap-1">
+                <div className="mt-3 pt-2 border-t border-border text-[11px] font-bold text-ink/60 flex items-center gap-1">
                   <span>Create Clean Slate →</span>
                 </div>
               </div>
@@ -715,6 +868,8 @@ export const App: React.FC = () => {
                 onChangeTemplate={setActiveTemplate}
                 theme={theme}
                 onChangeTheme={setTheme}
+                onOpenUpload={() => setIsUploadModalOpen(true)}
+                onLoadSample={handleLoadSample}
               />
             </div>
           </main>
@@ -740,11 +895,16 @@ export const App: React.FC = () => {
         resumeData={resumeData}
         initialAtsResult={atsResult}
         onApplyTailoring={handleApplyTailoring}
+        onProfileChanged={(id) => {
+          setActiveProfileIdState(id);
+          setAllProfiles(getAllATSProfiles());
+        }}
       />
 
       <ApiKeyModal
         isOpen={isApiKeyModalOpen}
         onClose={() => setIsApiKeyModalOpen(false)}
+        onThemeChange={handleThemeChange}
       />
 
       <ResumeUploadModal

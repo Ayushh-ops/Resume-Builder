@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import type { ResumeData, TrendUpgradeTip, ATSCheckResult } from '../types/resume';
+import type { ResumeData, TrendUpgradeTip, ATSCheckResult, ATSProfile } from '../types/resume';
 
 const LOCAL_STORAGE_KEY = 'resumecraft_gemini_api_key';
 const LOCAL_STORAGE_MODEL_KEY = 'resumecraft_gemini_model';
@@ -426,5 +426,143 @@ Return a JSON object strictly in this structure (raw JSON, no markdown):
   return {
     summary: newSummary,
     experienceBullets: tailoredBullets,
+  };
+}
+
+/**
+ * Parses raw text from an ATS rubric / report into structured ATSProfile criteria.
+ */
+export async function parseRubricToATSProfile(rubricText: string): Promise<ATSProfile> {
+  const client = getGenAIClient();
+  const model = getStoredModel();
+
+  if (client) {
+    try {
+      const prompt = `You are an expert ATS (Applicant Tracking System) system architect.
+Parse the following rubric, guidelines, or ATS report text into an ATS scoring profile with weighted criteria.
+The criteria weights MUST sum to approximately 100.
+Allowed types for each criterion:
+- "keyword": searches for specific keywords (params: { keywords: string[], minCount: number, fixSuggestion: string })
+- "section": checks presence and density of sections like 'personal', 'experience', 'education', 'skills', 'projects' (params: { sectionName: string, minCount?: number, fixSuggestion: string })
+- "metric": checks for quantitative impact numbers or strong action verbs (params: { metricType: "numbers"|"actionVerbs", minCount: number, fixSuggestion: string })
+- "length": checks word count of summary (params: { minLength: number, maxLength: number, fixSuggestion: string })
+- "regex": checks for disallowed buzzwords or formatting issues (params: { pattern: string, flags: string, fixSuggestion: string })
+
+Rubric Text:
+"""
+${rubricText.slice(0, 5000)}
+"""
+
+Return ONLY a JSON object strictly in this format (no markdown fences, just pure JSON):
+{
+  "name": "Custom Profile Name",
+  "description": "Short description of the criteria and target role",
+  "criteria": [
+    {
+      "id": "crit_1",
+      "label": "Human readable criterion label",
+      "weight": 20,
+      "type": "keyword",
+      "params": {
+        "keywords": ["React", "TypeScript"],
+        "minCount": 2,
+        "fixSuggestion": "Add required core technologies to your resume"
+      }
+    }
+  ]
+}`;
+
+      const interaction = await client.interactions.create({
+        model: model,
+        input: prompt,
+      });
+
+      const responseText = interaction.output_text || '';
+      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleanJson);
+      if (parsed.criteria && Array.isArray(parsed.criteria)) {
+        return {
+          id: 'custom_' + Date.now(),
+          name: parsed.name || 'Custom ATS Rubric',
+          description: parsed.description || 'Custom evaluation rubric parsed with Gemini AI',
+          isCustom: true,
+          criteria: parsed.criteria.map((c: any, idx: number) => ({
+            id: c.id || `crit_${idx + 1}`,
+            label: c.label || `Criterion ${idx + 1}`,
+            weight: Number(c.weight) || 10,
+            type: c.type || 'keyword',
+            params: c.params || { fixSuggestion: 'Review and optimize this area' },
+          })),
+        };
+      }
+    } catch (err) {
+      console.warn('Failed to parse rubric with Gemini, using fallback:', err);
+    }
+  }
+
+  // Offline heuristic fallback: Extract simple keywords and create a default customized profile
+  const words = rubricText.match(/[A-Za-z0-9+#.-]{3,}/g) || [];
+  const freq: Record<string, number> = {};
+  words.forEach((w) => {
+    const lw = w.toLowerCase();
+    if (!['and', 'the', 'for', 'with', 'that', 'this', 'have', 'from', 'your'].includes(lw)) {
+      freq[w] = (freq[w] || 0) + 1;
+    }
+  });
+  const topKeywords = Object.entries(freq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([w]) => w);
+
+  return {
+    id: 'custom_' + Date.now(),
+    name: 'Custom Rubric (Offline)',
+    description: 'Custom ATS criteria based on provided rubric document',
+    isCustom: true,
+    criteria: [
+      {
+        id: 'c_keywords',
+        label: 'Rubric Target Keywords',
+        weight: 35,
+        type: 'keyword',
+        params: {
+          keywords: topKeywords.length > 0 ? topKeywords : ['Architecture', 'Agile', 'Leadership'],
+          minCount: Math.min(topKeywords.length, 5),
+          fixSuggestion: 'Integrate the top keywords extracted from your rubric',
+        },
+      },
+      {
+        id: 'c_metrics',
+        label: 'Quantified Impact Metrics',
+        weight: 30,
+        type: 'metric',
+        params: {
+          metricType: 'numbers',
+          minCount: 3,
+          fixSuggestion: 'Add hard quantitative numbers (%, $, scale) to bullet points',
+        },
+      },
+      {
+        id: 'c_contact',
+        label: 'Complete Contact & Links',
+        weight: 20,
+        type: 'section',
+        params: {
+          sectionName: 'personal',
+          fixSuggestion: 'Include full name, target title, location, and verified links',
+        },
+      },
+      {
+        id: 'c_experience',
+        label: 'Demonstrated Work Experience',
+        weight: 15,
+        type: 'section',
+        params: {
+          sectionName: 'experience',
+          minCount: 1,
+          fixSuggestion: 'List at least one detailed work experience',
+        },
+      },
+    ],
   };
 }

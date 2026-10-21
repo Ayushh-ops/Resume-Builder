@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Target,
   X,
@@ -10,9 +10,32 @@ import {
   Check,
   CheckSquare,
   Square,
+  FileText,
+  Upload,
+  Plus,
+  Trash2,
+  Copy,
+  Download,
+  Sliders,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
-import type { ResumeData, ATSCheckResult } from '../../types/resume';
-import { analyzeJobMatch, tailorResumeToJob, type TailoredChanges } from '../../services/geminiService';
+import type { ResumeData, ATSCheckResult, ATSProfile, ATSCriterion } from '../../types/resume';
+import {
+  analyzeJobMatch,
+  tailorResumeToJob,
+  parseRubricToATSProfile,
+  type TailoredChanges,
+} from '../../services/geminiService';
+import {
+  getAllATSProfiles,
+  saveCustomProfile,
+  deleteCustomProfile,
+  getActiveProfileId,
+  setActiveProfileId,
+  calculateLiveATSScore,
+} from '../../services/atsScorer';
+import { parseResumeFile } from '../../services/resumeParser';
 
 interface JobMatcherModalProps {
   isOpen: boolean;
@@ -20,6 +43,7 @@ interface JobMatcherModalProps {
   resumeData: ResumeData;
   initialAtsResult: ATSCheckResult;
   onApplyTailoring?: (changes: TailoredChanges) => void;
+  onProfileChanged?: (profileId: string) => void;
 }
 
 export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
@@ -28,7 +52,11 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
   resumeData,
   initialAtsResult,
   onApplyTailoring,
+  onProfileChanged,
 }) => {
+  const [activeTab, setActiveTab] = useState<'jd_matcher' | 'ats_profile' | 'create_profile'>('jd_matcher');
+
+  // JD Matcher states
   const [jobDescription, setJobDescription] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<ATSCheckResult>(initialAtsResult);
@@ -40,16 +68,42 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
   const [acceptedSummary, setAcceptedSummary] = useState(true);
   const [acceptedBullets, setAcceptedBullets] = useState<Record<string, boolean>>({});
 
+  // ATS Profile states
+  const [allProfiles, setAllProfiles] = useState<ATSProfile[]>([]);
+  const [activeProfileId, setActiveId] = useState<string>('default');
+  const [profileAtsResult, setProfileAtsResult] = useState<ATSCheckResult>(initialAtsResult);
+
+  // Profile creation states
+  const [creationMethod, setCreationMethod] = useState<'paste' | 'upload' | 'manual'>('paste');
+  const [rubricText, setRubricText] = useState('');
+  const [isParsingRubric, setIsParsingRubric] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<ATSProfile | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      const profiles = getAllATSProfiles();
+      setAllProfiles(profiles);
+      const currentId = getActiveProfileId();
+      setActiveId(currentId);
+      const res = calculateLiveATSScore(resumeData, currentId);
+      setProfileAtsResult(res);
       return () => {
         document.body.style.overflow = '';
       };
     }
-  }, [isOpen]);
+  }, [isOpen, resumeData]);
 
   if (!isOpen) return null;
+
+  const handleSelectProfile = (id: string) => {
+    setActiveId(id);
+    setActiveProfileId(id);
+    const res = calculateLiveATSScore(resumeData, id);
+    setProfileAtsResult(res);
+    onProfileChanged?.(id);
+  };
 
   const handleScan = async () => {
     if (!jobDescription.trim()) return;
@@ -107,317 +161,852 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
     onClose();
   };
 
+  // Profile parsing & saving
+  const handleParseRubric = async (text: string) => {
+    if (!text.trim()) return;
+    setIsParsingRubric(true);
+    try {
+      const parsed = await parseRubricToATSProfile(text);
+      setEditingProfile(parsed);
+      setActiveTab('create_profile');
+    } catch (err) {
+      console.error('Failed to parse rubric:', err);
+    } finally {
+      setIsParsingRubric(false);
+    }
+  };
+
+  const handleRubricFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsParsingRubric(true);
+    try {
+      const parsed = await parseResumeFile(file);
+      await handleParseRubric(parsed.rawText);
+    } catch (err) {
+      console.error('Failed to parse rubric file:', err);
+    } finally {
+      setIsParsingRubric(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleSaveProfile = () => {
+    if (!editingProfile) return;
+    saveCustomProfile(editingProfile);
+    const updated = getAllATSProfiles();
+    setAllProfiles(updated);
+    handleSelectProfile(editingProfile.id);
+    setEditingProfile(null);
+    setActiveTab('ats_profile');
+  };
+
+  const handleDeleteProfile = (id: string) => {
+    deleteCustomProfile(id);
+    const updated = getAllATSProfiles();
+    setAllProfiles(updated);
+    if (activeProfileId === id) {
+      handleSelectProfile('default');
+    }
+  };
+
+  const handleDuplicateProfile = (profile: ATSProfile) => {
+    const dup: ATSProfile = {
+      ...profile,
+      id: 'custom_' + Date.now(),
+      name: `${profile.name} (Copy)`,
+      isCustom: true,
+    };
+    saveCustomProfile(dup);
+    setAllProfiles(getAllATSProfiles());
+    handleSelectProfile(dup.id);
+  };
+
+  const handleExportProfile = (profile: ATSProfile) => {
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(profile, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `${profile.name.replace(/\s+/g, '_')}_ATS_Profile.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  const handleStartManualProfile = () => {
+    setEditingProfile({
+      id: 'custom_' + Date.now(),
+      name: 'New Custom Rubric',
+      description: 'Custom evaluation criteria',
+      isCustom: true,
+      criteria: [
+        {
+          id: 'c1',
+          label: 'Core Keywords',
+          weight: 40,
+          type: 'keyword',
+          params: { keywords: ['Python', 'Docker'], minCount: 2, fixSuggestion: 'Add core technical keywords' },
+        },
+        {
+          id: 'c2',
+          label: 'Quantified Metrics',
+          weight: 30,
+          type: 'metric',
+          params: { metricType: 'numbers', minCount: 3, fixSuggestion: 'Include percentages, scale, and numbers' },
+        },
+        {
+          id: 'c3',
+          label: 'Required Contact Fields',
+          weight: 30,
+          type: 'section',
+          params: { sectionName: 'personal', fixSuggestion: 'Provide complete phone, email, and LinkedIn links' },
+        },
+      ],
+    });
+    setActiveTab('create_profile');
+  };
+
   const getScoreColor = (score: number) => {
-    if (score >= 85) return 'text-emerald-600 bg-emerald-50 border-emerald-300';
-    if (score >= 70) return 'text-blue-600 bg-blue-50 border-blue-300';
-    if (score >= 50) return 'text-amber-600 bg-amber-50 border-amber-300';
+    if (score >= 80) return 'text-emerald-600 bg-emerald-50 border-emerald-300';
+    if (score >= 60) return 'text-amber-600 bg-amber-50 border-amber-300';
     return 'text-rose-600 bg-rose-50 border-rose-300';
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-xs animate-in fade-in">
+      <div className="card shadow-paper w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 bg-white border-b border-black/[0.06] flex items-center justify-between">
+        <div className="px-6 py-4 bg-card border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-50 rounded-xl text-blue-600">
+            <div className="p-2 bg-brand-50 rounded-xl text-brand-600">
               <Target className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-ink">Target Job Description & ATS Matcher</h2>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                  Precision Scanner
+                <h2 className="text-base font-bold text-ink">Target JD Matcher & ATS Studio</h2>
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-brand-50 text-brand-600 border border-brand-500/20">
+                  {activeTab === 'ats_profile' ? 'Profile Studio' : 'Precision Matcher'}
                 </span>
               </div>
               <p className="text-xs text-ink/50">
-                Paste a job posting to reveal missing keywords, ATS parser score, and tailored alignment tips
+                Score against specific ATS rubrics or tailor bullets directly to any job posting
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-ink/40 hover:text-ink p-1 rounded-lg hover:bg-black/5 transition-colors"
+            className="text-ink/40 hover:text-ink p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
+        {/* Tab Navigation */}
+        <div className="flex border-b border-border bg-canvas/60 px-6 gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('jd_matcher')}
+            className={`py-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 ${
+              activeTab === 'jd_matcher'
+                ? 'border-brand-600 text-brand-600 font-bold'
+                : 'border-transparent text-ink/60 hover:text-ink'
+            }`}
+          >
+            <Wand2 className="w-3.5 h-3.5" />
+            <span>Job Description Matcher & Tailor</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('ats_profile')}
+            className={`py-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 ${
+              activeTab === 'ats_profile'
+                ? 'border-brand-600 text-brand-600 font-bold'
+                : 'border-transparent text-ink/60 hover:text-ink'
+            }`}
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span>ATS Profiles & Criteria ({allProfiles.length})</span>
+          </button>
+          {activeTab === 'create_profile' && (
+            <button
+              type="button"
+              className="py-2.5 px-3 text-xs font-bold border-b-2 border-brand-600 text-brand-600 flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Editing Profile</span>
+            </button>
+          )}
+        </div>
+
         {/* Body */}
         <div className="p-6 overflow-y-auto max-h-[85vh] space-y-6">
-          {tailoredChanges ? (
-            /* Diff-Style Preview View */
-            <div className="space-y-5 animate-in fade-in">
-              <div className="flex items-center justify-between pb-3 border-b border-black/[0.06]">
+          {activeTab === 'jd_matcher' && (
+            <>
+              {tailoredChanges ? (
+                /* Diff-Style Preview View */
+                <div className="space-y-5 animate-in fade-in">
+                  <div className="flex items-center justify-between pb-3 border-b border-border">
+                    <div>
+                      <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+                        <Wand2 className="w-4 h-4 text-brand-600" />
+                        Review Tailored Changes for Target Job
+                      </h3>
+                      <p className="text-xs text-ink/50 mt-0.5">
+                        Select which suggestions you'd like to apply to your resume.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setTailoredChanges(null)}
+                      className="text-xs text-ink/60 hover:text-ink underline"
+                    >
+                      ← Back to Analysis
+                    </button>
+                  </div>
+
+                  {/* Summary Diff */}
+                  <div className="card p-4 space-y-3 bg-canvas/60 border border-border">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-ink">Professional Summary</span>
+                      <button
+                        type="button"
+                        onClick={() => setAcceptedSummary(!acceptedSummary)}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-brand-600"
+                      >
+                        {acceptedSummary ? (
+                          <>
+                            <CheckSquare className="w-4 h-4 text-emerald-600" />
+                            <span>Accepted</span>
+                          </>
+                        ) : (
+                          <>
+                            <Square className="w-4 h-4 text-ink/30" />
+                            <span className="text-ink/40">Keep Original</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                      <div className="p-2.5 bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/50 rounded-lg text-ink/70">
+                        <span className="block text-[10px] font-bold uppercase text-rose-500 mb-1">Current</span>
+                        <p className="leading-relaxed">{resumeData.summary || '(Empty summary)'}</p>
+                      </div>
+                      <div className="p-2.5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50 rounded-lg text-ink">
+                        <span className="block text-[10px] font-bold uppercase text-emerald-600 mb-1">Tailored Suggestion</span>
+                        <p className="leading-relaxed font-medium">{tailoredChanges.summary}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bullets Diff */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold text-ink">Experience Bullet Points</h4>
+                    {tailoredChanges.experienceBullets.map((eb) => {
+                      const role = resumeData.experience[eb.index];
+                      if (!role) return null;
+                      return (
+                        <div key={eb.index} className="card p-4 space-y-3 bg-canvas/60 border border-border">
+                          <div className="font-semibold text-xs text-ink">
+                            {role.position} @ {role.company}
+                          </div>
+                          <div className="space-y-2">
+                            {eb.bullets.map((newBullet, bi) => {
+                              const oldBullet = role.highlights[bi] || '';
+                              const isAccepted = acceptedBullets[`${eb.index}-${bi}`] ?? true;
+                              return (
+                                <div
+                                  key={bi}
+                                  className="p-2.5 bg-card rounded-lg border border-border space-y-2"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-ink/40 uppercase">
+                                      Bullet #{bi + 1}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setAcceptedBullets((prev) => ({
+                                          ...prev,
+                                          [`${eb.index}-${bi}`]: !isAccepted,
+                                        }))
+                                      }
+                                      className="flex items-center gap-1.5 text-xs font-semibold text-brand-600"
+                                    >
+                                      {isAccepted ? (
+                                        <>
+                                          <CheckSquare className="w-4 h-4 text-emerald-600" />
+                                          <span>Accept</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Square className="w-4 h-4 text-ink/30" />
+                                          <span className="text-ink/40">Keep Original</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                                    <div className="text-ink/60 bg-rose-50/40 dark:bg-rose-950/20 p-2 rounded border border-rose-200/40">
+                                      <span className="text-[10px] font-semibold text-rose-500 block mb-0.5">Original:</span>
+                                      {oldBullet || '(empty)'}
+                                    </div>
+                                    <div className="text-ink bg-emerald-50/40 dark:bg-emerald-950/20 p-2 rounded border border-emerald-200/40 font-medium">
+                                      <span className="text-[10px] font-semibold text-emerald-600 block mb-0.5">Tailored:</span>
+                                      {newBullet}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                /* Normal Matcher View */
+                <>
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-ink">
+                      Paste Target Job Description (LinkedIn, Indeed, Greenhouse, etc.):
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={jobDescription}
+                      onChange={(e) => setJobDescription(e.target.value)}
+                      placeholder="e.g. Seeking Senior AI Engineer with expertise in PyTorch, Gemini API, RAG architectures, Kubernetes, and high-throughput systems..."
+                      className="input font-mono text-xs"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={handleScan}
+                        disabled={isScanning || !jobDescription.trim()}
+                        className="btn-primary"
+                      >
+                        {isScanning ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-3.5 h-3.5" />
+                        )}
+                        <span>{isScanning ? 'Scanning ATS Match...' : 'Analyze Match & Keywords'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Results Display */}
+                  <div className="p-5 bg-canvas/60 border border-border rounded-2xl space-y-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+                      <div>
+                        <span className="text-[11px] font-bold text-ink/40 uppercase tracking-wider">
+                          {hasScanned ? 'Job Posting ATS Compatibility' : 'General Resume ATS Health'}
+                        </span>
+                        <div className="flex items-baseline gap-2 mt-0.5">
+                          <span className="text-3xl font-black text-ink tabular-nums">
+                            {analysisResult.score}%
+                          </span>
+                          <span
+                            className={`text-xs font-bold px-2 py-0.5 rounded-full border ${getScoreColor(
+                              analysisResult.score
+                            )}`}
+                          >
+                            {analysisResult.rating} Match
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:items-end gap-2">
+                        <button
+                          type="button"
+                          onClick={handleStartTailoring}
+                          disabled={isTailoring || !jobDescription.trim()}
+                          className="btn-primary"
+                        >
+                          {isTailoring ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Wand2 className="w-3.5 h-3.5" />
+                          )}
+                          <span>{isTailoring ? 'AI Tailoring...' : 'Tailor Resume to Job'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Keywords */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                          <CheckCircle className="w-4 h-4 text-emerald-600" />
+                          Matched Keywords ({analysisResult.matchedKeywords.length})
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {analysisResult.matchedKeywords.map((kw, i) => (
+                            <span
+                              key={i}
+                              className="px-2 py-0.5 text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-md"
+                            >
+                              ✓ {kw}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <span className="text-xs font-bold text-rose-800 dark:text-rose-300 flex items-center gap-1.5">
+                          <AlertCircle className="w-4 h-4 text-rose-600" />
+                          Missing Keywords ({analysisResult.missingKeywords.length})
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {analysisResult.missingKeywords.map((kw, i) => (
+                            <span
+                              key={i}
+                              className="px-2 py-0.5 text-[11px] font-medium bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-md"
+                            >
+                              + {kw}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {activeTab === 'ats_profile' && (
+            <div className="space-y-6 animate-in fade-in">
+              {/* Profile Selection & Actions Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-canvas/60 rounded-2xl border border-border">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-ink">Active Profile:</span>
+                  <select
+                    value={activeProfileId}
+                    onChange={(e) => handleSelectProfile(e.target.value)}
+                    className="input text-xs font-semibold py-1 px-2.5 max-w-[220px]"
+                  >
+                    {allProfiles.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.isCustom ? '★ Custom' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreationMethod('paste');
+                      setActiveTab('create_profile');
+                    }}
+                    className="btn-primary text-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Create Custom Profile</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Active Profile Info */}
+              {allProfiles.find((p) => p.id === activeProfileId) && (
+                <div className="card p-4 space-y-4 border border-border">
+                  {(() => {
+                    const currentProf = allProfiles.find((p) => p.id === activeProfileId)!;
+                    return (
+                      <>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-sm font-bold text-ink">{currentProf.name}</h3>
+                              {currentProf.isCustom && (
+                                <span className="badge">Custom Rubric</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-ink/50 mt-0.5">{currentProf.description}</p>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleDuplicateProfile(currentProf)}
+                              className="btn-ghost p-1.5"
+                              title="Duplicate Profile"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleExportProfile(currentProf)}
+                              className="btn-ghost p-1.5"
+                              title="Export Profile JSON"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                            {currentProf.isCustom && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteProfile(currentProf.id)}
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition"
+                                title="Delete Profile"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Live Score against this profile */}
+                        <div className="flex items-center justify-between p-3 bg-canvas/60 rounded-xl border border-border">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-ink/40">Deterministic Match Score</span>
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-2xl font-black text-ink tabular-nums">
+                                {profileAtsResult.isEmpty ? '--' : `${profileAtsResult.score}/100`}
+                              </span>
+                              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${getScoreColor(profileAtsResult.score)}`}>
+                                {profileAtsResult.rating}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-xs text-ink/50 max-w-xs text-right">
+                            {profileAtsResult.isEmpty
+                              ? 'Fill out resume details to trigger live scoring'
+                              : 'Computed instantly in-browser using local deterministic rules.'}
+                          </span>
+                        </div>
+
+                        {/* Criteria Breakdown */}
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-bold text-ink uppercase tracking-wider text-ink/50">
+                            Criteria Breakdown ({currentProf.criteria.length} Rules)
+                          </h4>
+
+                          <div className="space-y-2">
+                            {profileAtsResult.criterionResults?.map((cr) => (
+                              <div
+                                key={cr.criterion.id}
+                                className="p-3 bg-canvas/40 rounded-xl border border-border flex items-start justify-between gap-3"
+                              >
+                                <div className="flex items-start gap-2.5 min-w-0">
+                                  {cr.status === 'pass' ? (
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                                  ) : cr.status === 'partial' ? (
+                                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                                  ) : (
+                                    <XCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                                  )}
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-bold text-ink">{cr.criterion.label}</span>
+                                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-black/[0.04] dark:bg-white/[0.05] text-ink/50 uppercase font-mono">
+                                        {cr.criterion.type}
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-ink/60 mt-0.5">{cr.message}</p>
+                                    <p className="text-[11px] text-brand-600 font-medium mt-1">
+                                      💡 <span className="font-semibold">Fix:</span> {cr.fix}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="text-right shrink-0">
+                                  <span className="text-xs font-bold tabular-nums text-ink">
+                                    {cr.scoreEarned} / {cr.maxScore} pts
+                                  </span>
+                                  <span className="block text-[10px] text-ink/40">
+                                    Weight {cr.criterion.weight}%
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'create_profile' && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="flex items-center justify-between pb-3 border-b border-border">
                 <div>
-                  <h3 className="text-sm font-bold text-ink flex items-center gap-2">
-                    <Wand2 className="w-4 h-4 text-brand-600" />
-                    Review Tailored Changes for Target Job
-                  </h3>
-                  <p className="text-xs text-ink/50 mt-0.5">
-                    Select which suggestions you'd like to apply to your resume.
+                  <h3 className="text-sm font-bold text-ink">Create Custom ATS Profile</h3>
+                  <p className="text-xs text-ink/50">
+                    Parse an existing company rubric, upload a rubric document, or build criteria manually.
                   </p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setTailoredChanges(null)}
+                  onClick={() => {
+                    setEditingProfile(null);
+                    setActiveTab('ats_profile');
+                  }}
                   className="text-xs text-ink/60 hover:text-ink underline"
                 >
-                  ← Back to Analysis
+                  ← Back to Profiles
                 </button>
               </div>
 
-              {/* Summary Diff */}
-              <div className="card p-4 space-y-3 bg-slate-50/70 border border-slate-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-ink">Professional Summary</span>
-                  <button
-                    type="button"
-                    onClick={() => setAcceptedSummary(!acceptedSummary)}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700"
-                  >
-                    {acceptedSummary ? (
-                      <>
-                        <CheckSquare className="w-4 h-4 text-emerald-600" />
-                        <span>Accepted</span>
-                      </>
-                    ) : (
-                      <>
-                        <Square className="w-4 h-4 text-ink/30" />
-                        <span className="text-ink/40">Rejected</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                  <div className="p-2.5 bg-rose-50/50 border border-rose-100 rounded-lg text-ink/70">
-                    <span className="block text-[10px] font-bold uppercase text-rose-500 mb-1">Current</span>
-                    <p className="leading-relaxed">{resumeData.summary || '(Empty summary)'}</p>
-                  </div>
-                  <div className="p-2.5 bg-emerald-50/50 border border-emerald-100 rounded-lg text-ink">
-                    <span className="block text-[10px] font-bold uppercase text-emerald-600 mb-1">Tailored Suggestion</span>
-                    <p className="leading-relaxed font-medium">{tailoredChanges.summary}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bullets Diff */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold text-ink">Experience Bullet Points</h4>
-                {tailoredChanges.experienceBullets.map((eb) => {
-                  const role = resumeData.experience[eb.index];
-                  if (!role) return null;
-                  return (
-                    <div key={eb.index} className="card p-4 space-y-3 bg-slate-50/70 border border-slate-200">
-                      <div className="font-semibold text-xs text-ink">
-                        {role.position} @ {role.company}
-                      </div>
-                      <div className="space-y-2">
-                        {eb.bullets.map((newBullet, bi) => {
-                          const oldBullet = role.highlights[bi] || '';
-                          const isAccepted = acceptedBullets[`${eb.index}-${bi}`] ?? true;
-                          return (
-                            <div
-                              key={bi}
-                              className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-2"
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-bold text-ink/40 uppercase">
-                                  Bullet #{bi + 1}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setAcceptedBullets((prev) => ({
-                                      ...prev,
-                                      [`${eb.index}-${bi}`]: !isAccepted,
-                                    }))
-                                  }
-                                  className="flex items-center gap-1.5 text-xs font-semibold text-brand-600"
-                                >
-                                  {isAccepted ? (
-                                    <>
-                                      <CheckSquare className="w-4 h-4 text-emerald-600" />
-                                      <span>Accept</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Square className="w-4 h-4 text-ink/30" />
-                                      <span className="text-ink/40">Keep Original</span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                                <div className="text-ink/60 bg-rose-50/40 p-2 rounded border border-rose-100/50">
-                                  <span className="text-[10px] font-semibold text-rose-500 block mb-0.5">Original:</span>
-                                  {oldBullet || '(empty)'}
-                                </div>
-                                <div className="text-ink bg-emerald-50/40 p-2 rounded border border-emerald-100/50 font-medium">
-                                  <span className="text-[10px] font-semibold text-emerald-600 block mb-0.5">Tailored:</span>
-                                  {newBullet}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            /* Normal Matcher View */
-            <>
-              {/* Input Area */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-700">
-                  Paste Target Job Description (from LinkedIn, Indeed, Greenhouse, etc.):
-                </label>
-                <textarea
-                  rows={4}
-                  value={jobDescription}
-                  onChange={(e) => setJobDescription(e.target.value)}
-                  placeholder="e.g. We are seeking a Senior AI Engineer with expertise in PyTorch, Gemini API, RAG systems, Kubernetes, and high-scale production systems..."
-                  className="w-full p-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono"
-                />
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={handleScan}
-                    disabled={isScanning || !jobDescription.trim()}
-                    className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-md shadow-blue-200 disabled:opacity-50"
-                  >
-                    {isScanning ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-3.5 h-3.5" />
-                    )}
-                    <span>{isScanning ? 'Scanning ATS Match...' : 'Analyze Match & Keywords'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Results Display */}
-              <div className="p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-5">
-                {/* Score header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-4">
-                  <div>
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      {hasScanned ? 'Job Posting ATS Compatibility' : 'General Resume ATS Health'}
-                    </span>
-                    <div className="flex items-baseline gap-2 mt-0.5">
-                      <span className="text-3xl font-black text-slate-900">
-                        {analysisResult.score}%
-                      </span>
-                      <span
-                        className={`text-xs font-bold px-2 py-0.5 rounded-full border ${getScoreColor(
-                          analysisResult.score
-                        )}`}
-                      >
-                        {analysisResult.rating} Match
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:items-end gap-2">
-                    <div className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                      {analysisResult.score >= 80
-                        ? 'Strong candidate alignment. Your resume contains the critical keywords to pass automated filters.'
-                        : 'Needs tuning. Adding the missing keywords below will dramatically elevate your ATS ranking.'}
-                    </div>
-
-                    {/* Tailor Resume Button */}
+              {!editingProfile ? (
+                /* 3 Creation Methods */
+                <div className="space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <button
                       type="button"
-                      onClick={handleStartTailoring}
-                      disabled={isTailoring || !jobDescription.trim()}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-xl shadow-soft transition active:scale-95 disabled:opacity-50"
+                      onClick={() => setCreationMethod('paste')}
+                      className={`p-4 rounded-xl border text-left transition ${
+                        creationMethod === 'paste'
+                          ? 'border-brand-500 bg-brand-50 text-brand-600 ring-2 ring-brand-500/20'
+                          : 'border-border bg-card text-ink hover:border-brand-500/40'
+                      }`}
                     >
-                      {isTailoring ? (
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Wand2 className="w-3.5 h-3.5" />
-                      )}
-                      <span>{isTailoring ? 'AI Tailoring...' : 'Tailor Resume to Job'}</span>
+                      <FileText className="w-5 h-5 mb-2 text-brand-600" />
+                      <div className="font-bold text-xs">Method 1: Paste Text</div>
+                      <p className="text-[11px] text-ink/50 mt-1">
+                        Paste hiring guidelines, rubric text, or an ATS summary report.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setCreationMethod('upload')}
+                      className={`p-4 rounded-xl border text-left transition ${
+                        creationMethod === 'upload'
+                          ? 'border-brand-500 bg-brand-50 text-brand-600 ring-2 ring-brand-500/20'
+                          : 'border-border bg-card text-ink hover:border-brand-500/40'
+                      }`}
+                    >
+                      <Upload className="w-5 h-5 mb-2 text-brand-600" />
+                      <div className="font-bold text-xs">Method 2: Upload File</div>
+                      <p className="text-[11px] text-ink/50 mt-1">
+                        Upload TXT, PDF, or DOCX document containing scoring rubrics.
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleStartManualProfile}
+                      className="p-4 rounded-xl border border-border bg-card text-ink hover:border-brand-500/40 text-left transition"
+                    >
+                      <Sliders className="w-5 h-5 mb-2 text-brand-600" />
+                      <div className="font-bold text-xs">Method 3: Manual Form</div>
+                      <p className="text-[11px] text-ink/50 mt-1">
+                        Define required keywords, section weights, and page limits by hand.
+                      </p>
+                    </button>
+                  </div>
+
+                  {creationMethod === 'paste' && (
+                    <div className="space-y-3 p-4 bg-canvas/60 rounded-xl border border-border">
+                      <label className="block text-xs font-bold text-ink">
+                        Paste ATS Rubric / Scoring Guidelines:
+                      </label>
+                      <textarea
+                        rows={6}
+                        value={rubricText}
+                        onChange={(e) => setRubricText(e.target.value)}
+                        placeholder="Paste the grading criteria, job requirements, or screening instructions here..."
+                        className="input font-mono text-xs"
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleParseRubric(rubricText)}
+                          disabled={isParsingRubric || !rubricText.trim()}
+                          className="btn-primary"
+                        >
+                          {isParsingRubric ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                          <span>{isParsingRubric ? 'Parsing Rubric with Gemini...' : 'Parse Criteria with AI'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {creationMethod === 'upload' && (
+                    <div className="p-8 border-2 border-dashed border-border hover:border-brand-500 rounded-2xl text-center space-y-3 bg-canvas/40 transition">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".txt,.pdf,.docx"
+                        onChange={handleRubricFileUpload}
+                        className="hidden"
+                      />
+                      <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center mx-auto">
+                        <Upload className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-ink">Upload ATS Rubric File</div>
+                        <p className="text-[11px] text-ink/50 mt-0.5">Supports PDF, DOCX, TXT (Max 5MB)</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isParsingRubric}
+                        className="btn-primary text-xs"
+                      >
+                        {isParsingRubric ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                        <span>{isParsingRubric ? 'Reading & Parsing File...' : 'Select File'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Editable Preview of Parsed Criteria */
+                <div className="space-y-5 animate-in fade-in">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="label">Profile Name</label>
+                      <input
+                        type="text"
+                        value={editingProfile.name}
+                        onChange={(e) => setEditingProfile({ ...editingProfile, name: e.target.value })}
+                        className="input text-xs font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Description</label>
+                      <input
+                        type="text"
+                        value={editingProfile.description || ''}
+                        onChange={(e) => setEditingProfile({ ...editingProfile, description: e.target.value })}
+                        className="input text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Criteria List */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-ink">Criteria List ({editingProfile.criteria.length})</h4>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCrit: ATSCriterion = {
+                            id: 'c_' + Date.now(),
+                            label: 'New Criterion',
+                            weight: 10,
+                            type: 'keyword',
+                            params: { keywords: ['Key Skill'], fixSuggestion: 'Add required technology' },
+                          };
+                          setEditingProfile({
+                            ...editingProfile,
+                            criteria: [...editingProfile.criteria, newCrit],
+                          });
+                        }}
+                        className="btn-ghost text-[11px] py-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Add Criterion</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {editingProfile.criteria.map((crit, idx) => (
+                        <div key={crit.id} className="p-3 bg-canvas/60 rounded-xl border border-border space-y-2">
+                          <div className="grid grid-cols-12 gap-2 items-center">
+                            <input
+                              type="text"
+                              value={crit.label}
+                              onChange={(e) => {
+                                const next = [...editingProfile.criteria];
+                                next[idx] = { ...crit, label: e.target.value };
+                                setEditingProfile({ ...editingProfile, criteria: next });
+                              }}
+                              className="input text-xs col-span-5 font-semibold py-1"
+                              placeholder="Criterion Label"
+                            />
+
+                            <select
+                              value={crit.type}
+                              onChange={(e) => {
+                                const next = [...editingProfile.criteria];
+                                next[idx] = { ...crit, type: e.target.value as any };
+                                setEditingProfile({ ...editingProfile, criteria: next });
+                              }}
+                              className="input text-xs col-span-3 py-1"
+                            >
+                              <option value="keyword">Keyword</option>
+                              <option value="section">Section</option>
+                              <option value="metric">Metric</option>
+                              <option value="length">Length</option>
+                              <option value="regex">Regex / Filter</option>
+                            </select>
+
+                            <div className="col-span-3 flex items-center gap-1">
+                              <input
+                                type="number"
+                                value={crit.weight}
+                                onChange={(e) => {
+                                  const next = [...editingProfile.criteria];
+                                  next[idx] = { ...crit, weight: Number(e.target.value) || 0 };
+                                  setEditingProfile({ ...editingProfile, criteria: next });
+                                }}
+                                className="input text-xs text-center py-1 tabular-nums"
+                              />
+                              <span className="text-[11px] text-ink/40 font-bold">%</span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = editingProfile.criteria.filter((_, i) => i !== idx);
+                                setEditingProfile({ ...editingProfile, criteria: next });
+                              }}
+                              className="col-span-1 p-1 text-rose-500 hover:bg-rose-50 rounded flex justify-center"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <input
+                            type="text"
+                            value={crit.params.fixSuggestion || ''}
+                            onChange={(e) => {
+                              const next = [...editingProfile.criteria];
+                              next[idx] = {
+                                ...crit,
+                                params: { ...crit.params, fixSuggestion: e.target.value },
+                              };
+                              setEditingProfile({ ...editingProfile, criteria: next });
+                            }}
+                            placeholder="Actionable Fix Suggestion shown to candidate..."
+                            className="input text-[11px] text-ink/70 py-1"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                    <button
+                      type="button"
+                      onClick={() => setEditingProfile(null)}
+                      className="px-3 py-1.5 text-xs font-semibold text-ink/60 hover:text-ink"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveProfile}
+                      className="btn-primary"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Save & Activate ATS Profile</span>
                     </button>
                   </div>
                 </div>
-
-                {/* Keyword Comparison */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Matched Keywords */}
-                  <div className="space-y-2">
-                    <span className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
-                      <CheckCircle className="w-4 h-4 text-emerald-600" />
-                      Matched Keywords ({analysisResult.matchedKeywords.length})
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {analysisResult.matchedKeywords.map((kw, i) => (
-                        <span
-                          key={i}
-                          className="px-2 py-0.5 text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md"
-                        >
-                          ✓ {kw}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Missing Keywords */}
-                  <div className="space-y-2">
-                    <span className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
-                      <AlertCircle className="w-4 h-4 text-rose-600" />
-                      Missing / Recommended Keywords ({analysisResult.missingKeywords.length})
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {analysisResult.missingKeywords.map((kw, i) => (
-                        <span
-                          key={i}
-                          className="px-2 py-0.5 text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200 rounded-md"
-                        >
-                          + {kw}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Strengths & Tailoring Suggestions */}
-                <div className="space-y-3 pt-3 border-t border-slate-200">
-                  {analysisResult.strengths.length > 0 && (
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-800 mb-1">Key Strengths Identified:</h4>
-                      <ul className="space-y-1 text-xs text-slate-600 list-disc list-outside ml-4">
-                        {analysisResult.strengths.map((str, idx) => (
-                          <li key={idx}>{str}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {analysisResult.suggestions.length > 0 && (
-                    <div>
-                      <h4 className="text-xs font-bold text-indigo-900 mb-1">
-                        Direct Tailoring Steps:
-                      </h4>
-                      <ul className="space-y-1 text-xs text-indigo-800 list-disc list-outside ml-4">
-                        {analysisResult.suggestions.map((sug, idx) => (
-                          <li key={idx}>{sug}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
+              )}
+            </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="bg-white border-t border-black/[0.06] px-4 py-3 flex justify-end gap-2 shrink-0">
-          {tailoredChanges ? (
+        <div className="bg-card border-t border-border px-4 py-3 flex justify-end gap-2 shrink-0">
+          {tailoredChanges && activeTab === 'jd_matcher' ? (
             <>
               <button
                 type="button"

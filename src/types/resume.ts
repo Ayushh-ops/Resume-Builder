@@ -92,6 +92,46 @@ export interface ResumeTheme {
   accentColor: string;
 }
 
+export type ATSCriterionType = 'keyword' | 'section' | 'regex' | 'length' | 'metric';
+
+export interface ATSCriterion {
+  id: string;
+  label: string;
+  weight: number; // percentage / points contributing to 100
+  type: ATSCriterionType;
+  params: {
+    keywords?: string[];
+    minCount?: number;
+    sectionName?: string; // 'personal' | 'summary' | 'experience' | 'education' | 'skills' | 'projects' | 'certifications'
+    pattern?: string;
+    flags?: string;
+    minLength?: number;
+    maxLength?: number;
+    metricType?: 'numbers' | 'actionVerbs';
+    description?: string;
+    fixSuggestion?: string;
+  };
+}
+
+export interface ATSProfile {
+  id: string;
+  name: string;
+  description?: string;
+  isCustom?: boolean;
+  minPages?: number;
+  maxPages?: number;
+  criteria: ATSCriterion[];
+}
+
+export interface ATSCriterionResult {
+  criterion: ATSCriterion;
+  status: 'pass' | 'partial' | 'fail';
+  scoreEarned: number;
+  maxScore: number;
+  message: string;
+  fix: string;
+}
+
 export interface ATSCheckResult {
   score: number; // 0 - 100
   rating: 'Poor' | 'Average' | 'Good' | 'Excellent';
@@ -100,6 +140,10 @@ export interface ATSCheckResult {
   strengths: string[];
   weaknesses: string[];
   suggestions: string[];
+  profileId?: string;
+  profileName?: string;
+  criterionResults?: ATSCriterionResult[];
+  isEmpty?: boolean;
 }
 
 export interface JobListingRecommendation {

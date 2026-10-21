@@ -1,12 +1,14 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { ResumeData } from '../../types/resume';
-import { CheckCircle2, Sparkles } from 'lucide-react';
+import { Sparkles, CheckCircle2, ChevronDown } from 'lucide-react';
 
 interface CompletenessBarProps {
   data: ResumeData;
 }
 
 export const CompletenessBar: React.FC<CompletenessBarProps> = ({ data }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   const { percentage, nextHint } = useMemo(() => {
     let score = 0;
     let hint = '';
@@ -15,10 +17,10 @@ export const CompletenessBar: React.FC<CompletenessBarProps> = ({ data }) => {
 
     // Personal info items (8% each = 32%)
     if (personalInfo.fullName?.trim()) score += 8;
-    else if (!hint) hint = 'Add your full name';
+    else if (!hint) hint = 'Add full name';
 
     if (personalInfo.jobTitle?.trim()) score += 8;
-    else if (!hint) hint = 'Add target job title';
+    else if (!hint) hint = 'Add target title';
 
     if (personalInfo.email?.trim()) score += 8;
     else if (!hint) hint = 'Add email address';
@@ -28,17 +30,17 @@ export const CompletenessBar: React.FC<CompletenessBarProps> = ({ data }) => {
 
     // Summary (18%)
     if (summary?.trim() && summary.trim().length >= 20) score += 18;
-    else if (!hint) hint = 'Draft a professional summary';
+    else if (!hint) hint = 'Draft summary';
 
     // Experience (20%)
     const hasExp = experience.some((e) => e.company?.trim() && e.position?.trim());
     if (hasExp) score += 20;
-    else if (!hint) hint = 'Add at least 1 work experience';
+    else if (!hint) hint = 'Add 1 role';
 
     // Education (15%)
     const hasEdu = education.some((e) => e.institution?.trim() || e.degree?.trim());
     if (hasEdu) score += 15;
-    else if (!hint) hint = 'Add your education details';
+    else if (!hint) hint = 'Add education';
 
     // Skills (15%)
     const validSkillCats = skills.filter((c) => c.skills && c.skills.length > 0).length;
@@ -46,42 +48,68 @@ export const CompletenessBar: React.FC<CompletenessBarProps> = ({ data }) => {
       score += 15;
     } else {
       score += Math.round((validSkillCats / 3) * 15);
-      if (!hint) hint = `Add ${3 - validSkillCats} more skill categories`;
+      if (!hint) hint = `Add ${3 - validSkillCats} skill categories`;
     }
 
-    if (!hint) hint = 'Resume profile fully optimized!';
+    if (!hint) hint = 'Fully optimized!';
 
     return { percentage: Math.min(100, score), nextHint: hint };
   }, [data]);
 
   return (
-    <div className="card p-3 bg-white/80 border border-black/[0.06] shadow-2xs space-y-2">
-      <div className="flex items-center justify-between text-xs">
-        <div className="flex items-center gap-1.5 font-semibold text-ink">
+    <div className="card p-2 bg-card border border-border shadow-soft transition-all">
+      <div className="flex items-center justify-between gap-2.5 text-xs">
+        <button
+          type="button"
+          onClick={() => setIsExpanded((v) => !v)}
+          className="flex items-center gap-1.5 shrink-0 font-medium text-ink hover:text-brand-600 transition"
+          title="Toggle completeness details"
+        >
           {percentage === 100 ? (
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
           ) : (
             <Sparkles className="w-3.5 h-3.5 text-brand-600" />
           )}
-          <span>Completeness</span>
+          <span className="font-bold tabular-nums text-[11px] text-brand-600 font-sans">
+            {percentage}%
+          </span>
+          <ChevronDown
+            className={`w-3 h-3 text-ink/40 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          />
+        </button>
+
+        <div className="flex-1 h-1.5 bg-black/[0.06] dark:bg-white/[0.08] rounded-full overflow-hidden">
+          <div
+            className="h-full bg-brand-600 rounded-full transition-all duration-300"
+            style={{ width: `${percentage}%` }}
+          />
         </div>
-        <span className="font-bold text-[11px] text-brand-600 font-mono">
-          {percentage}% Complete
-        </span>
-      </div>
 
-      <div className="w-full h-1.5 bg-black/[0.06] rounded-full overflow-hidden">
-        <div
-          className="h-full bg-brand-600 rounded-full transition-all duration-300"
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-
-      <div className="text-[11px] text-ink/50 truncate flex items-center justify-between">
-        <span className="truncate">
+        <span className="text-[11px] text-ink/50 truncate max-w-[190px] text-right font-sans" title={nextHint}>
           <span className="font-medium text-ink/70">Next:</span> {nextHint}
         </span>
       </div>
+
+      {isExpanded && (
+        <div className="mt-2 pt-2 border-t border-border grid grid-cols-2 gap-1.5 text-[10px] text-ink/60 animate-in fade-in">
+          <div className="flex items-center gap-1">
+            <span className={data.personalInfo.fullName ? 'text-emerald-500 font-bold' : 'text-ink/30'}>•</span>
+            <span>Contact Information</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className={data.summary ? 'text-emerald-500 font-bold' : 'text-ink/30'}>•</span>
+            <span>Executive Summary</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className={data.experience.length > 0 ? 'text-emerald-500 font-bold' : 'text-ink/30'}>•</span>
+            <span>Work Experience</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className={data.skills.length >= 3 ? 'text-emerald-500 font-bold' : 'text-ink/30'}>•</span>
+            <span>Skills Density</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

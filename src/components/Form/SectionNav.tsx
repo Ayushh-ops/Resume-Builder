@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   User,
   FileText,
@@ -24,8 +24,36 @@ const NAV_ITEMS = [
   { id: 'certifications', title: 'Certifications', icon: Award },
 ];
 
-export const SectionNav: React.FC<SectionNavProps> = ({ onOpenSection, activeSection }) => {
+export const SectionNav: React.FC<SectionNavProps> = ({ onOpenSection, activeSection: propActive }) => {
+  const [activeId, setActiveId] = useState<string>(propActive || 'personal');
+
+  // Track active section with IntersectionObserver
+  useEffect(() => {
+    const sectionIds = NAV_ITEMS.map((item) => item.id);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setActiveId(entry.target.id);
+          }
+        });
+      },
+      {
+        rootMargin: '-20% 0px -70% 0px',
+        threshold: 0.1,
+      }
+    );
+
+    sectionIds.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
   const handleClick = (id: string) => {
+    setActiveId(id);
     onOpenSection(id);
     const element = document.getElementById(id);
     if (element) {
@@ -33,26 +61,33 @@ export const SectionNav: React.FC<SectionNavProps> = ({ onOpenSection, activeSec
     }
   };
 
+  const currentActive = propActive || activeId;
+
   return (
-    <div className="sticky top-0 z-20 bg-canvas/90 backdrop-blur-md py-1.5 border-b border-black/[0.04]">
+    <div className="sticky top-0 z-20 bg-canvas/95 backdrop-blur-md py-1 border-b border-border transition-colors">
       <div className="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar px-0.5">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
-          const isActive = activeSection === item.id;
+          const isActive = currentActive === item.id;
           return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => handleClick(item.id)}
-              title={item.title}
-              className={`p-2 rounded-xl transition-all flex items-center justify-center shrink-0 ${
-                isActive
-                  ? 'bg-brand-600 text-white shadow-soft scale-105'
-                  : 'text-ink/50 hover:text-brand-600 hover:bg-brand-50'
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" strokeWidth={1.8} />
-            </button>
+            <div key={item.id} className="relative group">
+              <button
+                type="button"
+                onClick={() => handleClick(item.id)}
+                className={`p-2 rounded-xl transition-all flex items-center justify-center shrink-0 ${
+                  isActive
+                    ? 'bg-brand-600 text-white shadow-soft scale-105'
+                    : 'text-ink/50 hover:text-brand-600 hover:bg-brand-50'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" strokeWidth={1.8} />
+              </button>
+
+              {/* Tooltip & label on hover */}
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-0.5 rounded-md bg-ink text-canvas text-[10px] font-semibold whitespace-nowrap shadow-soft pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-30">
+                {item.title}
+              </div>
+            </div>
           );
         })}
       </div>

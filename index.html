@@ -8,6 +8,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;1,9..144,600&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          var mode = localStorage.getItem('resumecraft_app_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          var accent = localStorage.getItem('resumecraft_app_accent') || 'indigo';
+          document.documentElement.setAttribute('data-theme', mode);
+          document.documentElement.setAttribute('data-accent', accent);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body class="bg-[#f6f5f2] text-[#16161d] antialiased min-h-screen selection:bg-brand-600 selection:text-white">
     <div id="root"></div>

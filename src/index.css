@@ -2,6 +2,98 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --canvas: #f6f5f2;
+  --canvas-rgb: 246 245 242;
+  --ink: #16161d;
+  --ink-rgb: 22 22 29;
+  --card: #ffffff;
+  --card-rgb: 255 255 255;
+  --border: rgba(22, 22, 29, 0.06);
+  --dot-color: rgba(22, 22, 29, 0.08);
+
+  /* Default Indigo */
+  --brand-50: #eeeefd;
+  --brand-500: #6463e0;
+  --brand-600: #4a49d8;
+  --brand-700: #3b3ab8;
+}
+
+[data-theme="dark"] {
+  --canvas: #121216;
+  --canvas-rgb: 18 18 22;
+  --ink: #f3f3f7;
+  --ink-rgb: 243 243 247;
+  --card: #1c1c22;
+  --card-rgb: 28 28 34;
+  --border: rgba(255, 255, 255, 0.08);
+  --dot-color: rgba(240, 240, 248, 0.07);
+
+  --brand-50: rgba(100, 99, 224, 0.16);
+  --brand-500: #7b7af0;
+  --brand-600: #6463e0;
+  --brand-700: #504fd0;
+}
+
+/* Accent Presets */
+[data-accent="indigo"] {
+  --brand-50: #eeeefd;
+  --brand-500: #6463e0;
+  --brand-600: #4a49d8;
+  --brand-700: #3b3ab8;
+}
+[data-theme="dark"][data-accent="indigo"] {
+  --brand-50: rgba(100, 99, 224, 0.16);
+  --brand-500: #7b7af0;
+  --brand-600: #6463e0;
+  --brand-700: #504fd0;
+}
+
+[data-accent="emerald"] {
+  --brand-50: #ecfdf5;
+  --brand-500: #10b981;
+  --brand-600: #059669;
+  --brand-700: #047857;
+}
+[data-theme="dark"][data-accent="emerald"] {
+  --brand-50: rgba(16, 185, 129, 0.16);
+  --brand-500: #34d399;
+  --brand-600: #10b981;
+  --brand-700: #059669;
+}
+
+[data-accent="rose"] {
+  --brand-50: #fff1f2;
+  --brand-500: #f43f5e;
+  --brand-600: #e11d48;
+  --brand-700: #be123c;
+}
+[data-theme="dark"][data-accent="rose"] {
+  --brand-50: rgba(244, 63, 94, 0.16);
+  --brand-500: #fb7185;
+  --brand-600: #f43f5e;
+  --brand-700: #e11d48;
+}
+
+[data-accent="slate"] {
+  --brand-50: #f1f5f9;
+  --brand-500: #64748b;
+  --brand-600: #475569;
+  --brand-700: #334155;
+}
+[data-theme="dark"][data-accent="slate"] {
+  --brand-50: rgba(148, 163, 184, 0.16);
+  --brand-500: #94a3b8;
+  --brand-600: #64748b;
+  --brand-700: #475569;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 @layer base {
   body {
     @apply antialiased bg-canvas text-ink font-sans;
@@ -10,7 +102,7 @@
 
 @layer components {
   .card {
-    @apply bg-white rounded-2xl border border-black/[0.05] shadow-soft overflow-hidden;
+    @apply bg-card text-ink rounded-2xl border border-border shadow-soft overflow-hidden;
   }
   .btn {
     @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition active:scale-95 cursor-pointer select-none;
@@ -19,17 +111,33 @@
     @apply btn bg-brand-600 text-white hover:bg-brand-700 shadow-sm;
   }
   .btn-ghost {
-    @apply btn bg-transparent text-ink/70 hover:bg-black/5 hover:text-ink border border-black/[0.08];
+    @apply btn bg-transparent hover:bg-black/5 dark:hover:bg-white/5 border border-border;
+    color: var(--ink);
+    opacity: 0.8;
+  }
+  .btn-ghost:hover {
+    opacity: 1;
   }
   .input {
-    @apply w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm text-ink placeholder:text-ink/30
-           focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-500/50 transition;
+    @apply w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-ink transition;
+  }
+  .input:focus {
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(100, 99, 224, 0.12);
+    border-color: var(--brand-500);
   }
   .input:focus-visible {
-    @apply ring-4 ring-brand-500/10;
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(100, 99, 224, 0.12);
+  }
+  .input::placeholder {
+    color: var(--ink);
+    opacity: 0.35;
   }
   .label {
-    @apply block text-[10px] font-semibold uppercase tracking-widest text-ink/50 mb-1;
+    @apply block text-[10px] font-semibold uppercase tracking-widest mb-1;
+    color: var(--ink);
+    opacity: 0.55;
   }
   .required-dot::after {
     content: '';
@@ -45,13 +153,21 @@
     background: #22c55e;
   }
   .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-50 text-brand-600 border border-brand-500/20;
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-50 text-brand-600 border;
+    border-color: rgba(100, 99, 224, 0.25);
   }
   .canvas-dots {
-    background-color: #f6f5f2;
-    background-image: radial-gradient(circle, rgba(22,22,29,0.10) 1px, transparent 1px);
+    background-color: var(--canvas);
+    background-image: radial-gradient(circle, var(--dot-color) 1px, transparent 1px);
     background-size: 20px 20px;
   }
+}
+
+/* Ensure A4 paper is ALWAYS pure light paper regardless of app theme */
+#resume-pdf-sheet,
+.print-resume-sheet {
+  background-color: #ffffff !important;
+  color: #16161d !important;
 }
 
 /* Print Styles for A4 Paper Resume */
