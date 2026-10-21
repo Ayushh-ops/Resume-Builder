@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Target,
   Sparkles,
   CheckCircle,
   AlertCircle,
@@ -297,7 +296,7 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
       onClose={onClose}
       title="Job Matcher & ATS Profiles"
       subtitle="Match keywords against a job description or custom rubric"
-      icon={<Target className="w-4 h-4 text-ink/70" strokeWidth={1.5} />}
+      icon={null}
       maxWidth="max-w-3xl"
       bodyClassName="p-0 flex flex-col flex-1 overflow-hidden min-h-0"
       footer={
@@ -337,26 +336,24 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
         <button
           type="button"
           onClick={() => handleTabChange('jd_matcher')}
-          className={`py-2 px-3 text-xs border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+          className={`py-2 px-3 text-xs border-b-2 transition cursor-pointer ${
             activeTab === 'jd_matcher'
               ? 'border-brand-600 text-brand-600 font-semibold'
               : 'border-transparent text-ink/60 hover:text-ink font-normal'
           }`}
         >
-          <Wand2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-          <span>Job Description Matcher</span>
+          Job Description Matcher
         </button>
         <button
           type="button"
           onClick={() => handleTabChange('ats_profile')}
-          className={`py-2 px-3 text-xs border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+          className={`py-2 px-3 text-xs border-b-2 transition cursor-pointer ${
             activeTab === 'ats_profile'
               ? 'border-brand-600 text-brand-600 font-semibold'
               : 'border-transparent text-ink/60 hover:text-ink font-normal'
           }`}
         >
-          <Sliders className="w-3.5 h-3.5" strokeWidth={1.5} />
-          <span>ATS Profiles ({allProfiles.length})</span>
+          ATS Profiles ({allProfiles.length})
         </button>
       </div>
 
@@ -782,19 +779,19 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                   {!editingProfile ? (
                     /* 3 Creation Methods */
                     <div className="space-y-5">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-stretch">
                         <button
                           type="button"
                           onClick={() => setCreationMethod('paste')}
-                          className={`p-4 rounded-xl border text-left transition cursor-pointer ${
+                          className={`p-4 rounded-[6px] border text-left transition cursor-pointer flex flex-col justify-start h-full ${
                             creationMethod === 'paste'
-                              ? 'border-brand-500 bg-brand-50 text-brand-600 ring-2 ring-brand-500/20'
-                              : 'border-line bg-card text-ink hover:border-brand-500/40'
+                              ? 'border-brand-600 bg-muted text-ink'
+                              : 'border-line bg-card text-ink hover:border-ink/40'
                           }`}
                         >
-                          <FileText className="w-5 h-5 mb-2 text-brand-600" />
-                          <div className="font-bold text-xs">Method 1: Paste Text</div>
-                          <p className="text-[11px] text-ink/50 mt-1">
+                          <FileText className="w-4 h-4 mb-2 text-ink/70" strokeWidth={1.5} />
+                          <div className="font-semibold text-xs text-ink">Method 1: Paste Text</div>
+                          <p className="text-xs text-ink/60 mt-1">
                             Paste hiring guidelines, rubric text, or an ATS summary report.
                           </p>
                         </button>
@@ -802,15 +799,15 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setCreationMethod('upload')}
-                          className={`p-4 rounded-xl border text-left transition cursor-pointer ${
+                          className={`p-4 rounded-[6px] border text-left transition cursor-pointer flex flex-col justify-start h-full ${
                             creationMethod === 'upload'
-                              ? 'border-brand-500 bg-brand-50 text-brand-600 ring-2 ring-brand-500/20'
-                              : 'border-line bg-card text-ink hover:border-brand-500/40'
+                              ? 'border-brand-600 bg-muted text-ink'
+                              : 'border-line bg-card text-ink hover:border-ink/40'
                           }`}
                         >
-                          <Upload className="w-5 h-5 mb-2 text-brand-600" />
-                          <div className="font-bold text-xs">Method 2: Upload File</div>
-                          <p className="text-[11px] text-ink/50 mt-1">
+                          <Upload className="w-4 h-4 mb-2 text-ink/70" strokeWidth={1.5} />
+                          <div className="font-semibold text-xs text-ink">Method 2: Upload File</div>
+                          <p className="text-xs text-ink/60 mt-1">
                             Upload TXT, PDF, or DOCX document containing scoring rubrics.
                           </p>
                         </button>
@@ -818,34 +815,33 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                         <button
                           type="button"
                           onClick={handleStartManualProfile}
-                          className="p-4 rounded-xl border border-line bg-card text-ink hover:border-brand-500/40 text-left transition cursor-pointer"
+                          className="p-4 rounded-[6px] border border-line bg-card text-ink hover:border-ink/40 text-left transition cursor-pointer flex flex-col justify-start h-full"
                         >
-                          <Sliders className="w-5 h-5 mb-2 text-brand-600" />
-                          <div className="font-bold text-xs">Method 3: Manual Form</div>
-                          <p className="text-[11px] text-ink/50 mt-1">
+                          <Sliders className="w-4 h-4 mb-2 text-ink/70" strokeWidth={1.5} />
+                          <div className="font-semibold text-xs text-ink">Method 3: Manual Form</div>
+                          <p className="text-xs text-ink/60 mt-1">
                             Define required keywords, section weights, and page limits by hand.
                           </p>
                         </button>
                       </div>
 
                       {creationMethod === 'paste' && (
-                        <div className="space-y-3 p-4 bg-canvas/60 rounded-xl border border-line">
-                          <label className="block text-xs font-bold text-ink">
+                        <div className="space-y-3 pt-1">
+                          <label className="block text-xs font-semibold text-ink">
                             Paste ATS Rubric / Scoring Guidelines:
                           </label>
                           <textarea
-                            rows={6}
                             value={rubricText}
                             onChange={(e) => setRubricText(e.target.value)}
                             placeholder="Paste the grading criteria, job requirements, or screening instructions here..."
-                            className="input font-mono text-xs"
+                            className="input font-sans text-xs min-h-[200px] resize-y w-full"
                           />
                           {/* Sticky bottom action bar for Paste method */}
-                          <div className="sticky bottom-0 -mx-4 -mb-4 px-4 py-3 bg-card/95 backdrop-blur-sm border-t border-line flex items-center justify-end gap-2 shadow-soft z-20 rounded-b-xl">
+                          <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-3 bg-card border-t border-line flex items-center justify-end gap-2 z-20">
                             <button
                               type="button"
                               onClick={() => setProfileSubView('list')}
-                              className="px-3 py-1.5 text-xs font-semibold text-ink/60 hover:text-ink cursor-pointer"
+                              className="px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-muted rounded-[6px] transition cursor-pointer"
                             >
                               Cancel
                             </button>
@@ -855,7 +851,7 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                               disabled={isParsingRubric || !rubricText.trim()}
                               className="btn-primary"
                             >
-                              {isParsingRubric ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                              {isParsingRubric ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
                               <span>{isParsingRubric ? 'Parsing Rubric with Gemini...' : 'Parse Criteria with AI'}</span>
                             </button>
                           </div>
@@ -863,27 +859,29 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                       )}
 
                       {creationMethod === 'upload' && (
-                        <div className="p-8 border-2 border-dashed border-line hover:border-brand-500 rounded-2xl text-center space-y-3 bg-canvas/40 transition">
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".txt,.pdf,.docx"
-                            onChange={handleRubricFileUpload}
-                            className="hidden"
-                          />
-                          <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center mx-auto">
-                            <Upload className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <div className="text-xs font-bold text-ink">Upload ATS Rubric File</div>
-                            <p className="text-[11px] text-ink/50 mt-0.5">Supports PDF, DOCX, TXT (Max 5MB)</p>
+                        <div className="space-y-3 pt-1">
+                          <div className="p-8 border border-dashed border-line hover:border-ink/40 rounded-[10px] text-center space-y-3 bg-card transition">
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              accept=".txt,.pdf,.docx"
+                              onChange={handleRubricFileUpload}
+                              className="hidden"
+                            />
+                            <div className="w-10 h-10 rounded-[6px] bg-muted text-ink/70 flex items-center justify-center mx-auto">
+                              <Upload className="w-5 h-5" strokeWidth={1.5} />
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-ink">Upload ATS Rubric File</div>
+                              <p className="text-xs text-ink/60 mt-0.5">Supports PDF, DOCX, TXT (Max 5MB)</p>
+                            </div>
                           </div>
                           {/* Sticky bottom action bar for Upload method */}
-                          <div className="sticky bottom-0 -mx-8 -mb-8 px-8 py-3 bg-card/95 backdrop-blur-sm border-t border-line flex items-center justify-end gap-2 shadow-soft z-20 rounded-b-2xl">
+                          <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-3 bg-card border-t border-line flex items-center justify-end gap-2 z-20">
                             <button
                               type="button"
                               onClick={() => setProfileSubView('list')}
-                              className="px-3 py-1.5 text-xs font-semibold text-ink/60 hover:text-ink cursor-pointer"
+                              className="px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-muted rounded-[6px] transition cursor-pointer"
                             >
                               Cancel
                             </button>

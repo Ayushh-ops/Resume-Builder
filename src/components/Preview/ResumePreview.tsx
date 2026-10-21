@@ -82,42 +82,52 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
         </div>
 
         {/* Controls: Preset Select, Color, Font, Zoom */}
-        <div className="flex items-center flex-wrap gap-2 text-xs">
+        <div className="flex items-center flex-wrap gap-2.5 text-xs">
           {/* Resume Preset as a clean select */}
-          <select
-            value={
-              RESUME_THEME_PRESETS.find(
-                (p) => p.color === theme.primaryColor && p.font === theme.fontFamily
-              )?.id || 'custom'
-            }
-            onChange={(e) => {
-              const selected = RESUME_THEME_PRESETS.find((p) => p.id === e.target.value);
-              if (selected) {
-                onChangeTheme({
-                  ...theme,
-                  primaryColor: selected.color,
-                  fontFamily: selected.font,
-                });
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-ink/50 font-medium">Preset</span>
+            <select
+              value={
+                RESUME_THEME_PRESETS.find(
+                  (p) => p.color === theme.primaryColor && p.font === theme.fontFamily
+                )?.id || 'custom'
               }
-            }}
-            className="h-7 text-xs bg-card border border-line rounded-[6px] px-2 text-ink focus:outline-none focus:border-brand-600 cursor-pointer"
-            title="Resume style preset"
-          >
-            {RESUME_THEME_PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-            <option value="custom" disabled>Custom</option>
-          </select>
+              onChange={(e) => {
+                const selected = RESUME_THEME_PRESETS.find((p) => p.id === e.target.value);
+                if (selected) {
+                  onChangeTheme({
+                    ...theme,
+                    primaryColor: selected.color,
+                    fontFamily: selected.font,
+                  });
+                }
+              }}
+              className="h-7 text-xs bg-card border border-line rounded-[6px] px-2 text-ink focus:outline-none focus:border-brand-600 cursor-pointer"
+              title="Resume style preset"
+            >
+              {RESUME_THEME_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+              <option value="custom" disabled>Custom</option>
+            </select>
+          </div>
 
-          {/* Color Picker */}
-          <div className="relative flex items-center border border-line bg-card rounded-[6px] h-7 px-1.5" title="Accent color">
-            <label className="cursor-pointer text-ink/60 hover:text-ink flex items-center gap-1">
-              <span className="w-3 h-3 rounded-full border border-black/10 shrink-0" style={{ backgroundColor: theme.primaryColor || '#1e3a8a' }} />
+          {/* Color Picker with "Accent" label and tooltip */}
+          <div className="flex items-center gap-1.5" title="Resume accent color">
+            <span className="text-[11px] text-ink/50 font-medium">Accent</span>
+            <label
+              className="relative flex items-center border border-line bg-card rounded-[6px] h-7 px-1.5 cursor-pointer text-ink/60 hover:text-ink"
+              title="Pick resume accent color"
+            >
+              <span
+                className="w-3.5 h-3.5 rounded-full border border-black/15 shrink-0"
+                style={{ backgroundColor: theme.primaryColor || '#b4451f' }}
+              />
               <input
                 type="color"
-                value={theme.primaryColor || '#1e3a8a'}
+                value={theme.primaryColor || '#b4451f'}
                 onChange={(e) => onChangeTheme({ ...theme, primaryColor: e.target.value })}
                 className="sr-only"
               />

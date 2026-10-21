@@ -28,19 +28,28 @@ export const blankResumeData: ResumeData = {
   customSections: [],
 };
 
+export const isResumeCompletelyEmpty = (data: ResumeData | null | undefined): boolean => {
+  if (!data) return true;
+  const hasName = Boolean(data.personalInfo?.fullName?.trim());
+  const hasTitle = Boolean(data.personalInfo?.jobTitle?.trim());
+  const hasExp = Boolean(data.experience && data.experience.length > 0);
+  return !hasName && !hasTitle && !hasExp;
+};
+
 /**
- * Initializes the resume storage and migrates legacy "resume-data" key if present.
+ * Initializes the resume storage, cleans empty entries, and migrates legacy "resume-data" key if present and non-empty.
  */
 export const initResumeStorage = (): ResumeIndexEntry[] => {
   try {
+    // 1. Migrate legacy resume-data ONLY if it contains actual content
     const legacy = localStorage.getItem('resume-data');
     if (legacy) {
       try {
         const parsed = JSON.parse(legacy);
-        if (parsed && parsed.personalInfo) {
+        if (parsed && !isResumeCompletelyEmpty(parsed)) {
           const id = 'res_' + Date.now();
-          const name = parsed.personalInfo.fullName?.trim() || 'Untitled resume';
-          const title = parsed.personalInfo.jobTitle?.trim() || '';
+          const name = parsed.personalInfo?.fullName?.trim() || 'Untitled resume';
+          const title = parsed.personalInfo?.jobTitle?.trim() || '';
           const updatedAt = new Date().toISOString();
           const index = getResumeIndex();
           if (!index.some((i) => i.id === id)) {
@@ -56,10 +65,33 @@ export const initResumeStorage = (): ResumeIndexEntry[] => {
         localStorage.removeItem('resume-data');
       }
     }
+
+    // 2. On load, delete any entry that is completely empty (no name, no title, no experience)
+    const rawIndex = getResumeIndex();
+    const cleanIndex: ResumeIndexEntry[] = [];
+    let modified = false;
+
+    for (const entry of rawIndex) {
+      const data = getResume(entry.id);
+      if (isResumeCompletelyEmpty(data)) {
+        localStorage.removeItem(`rc-resume:${entry.id}`);
+        modified = true;
+        if (getActiveResumeId() === entry.id) {
+          localStorage.removeItem('rc-active');
+        }
+      } else {
+        cleanIndex.push(entry);
+      }
+    }
+
+    if (modified) {
+      localStorage.setItem('rc-index', JSON.stringify(cleanIndex));
+    }
+    return cleanIndex;
   } catch (err) {
     console.error('initResumeStorage failed', err);
+    return getResumeIndex();
   }
-  return getResumeIndex();
 };
 
 export const getResumeIndex = (): ResumeIndexEntry[] => {

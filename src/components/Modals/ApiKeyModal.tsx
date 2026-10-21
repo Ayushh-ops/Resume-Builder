@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Key, ExternalLink, Check, Palette } from 'lucide-react';
+import { Settings, ExternalLink, Check, Palette } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import {
   getStoredApiKey,
@@ -28,7 +28,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 }) => {
   const [apiKey, setKey] = useState(getStoredApiKey());
   const [model, setModel] = useState(getStoredModel());
-  const [saved, setSaved] = useState(false);
+  const [keySaved, setKeySaved] = useState(false);
 
   if (!isOpen) return null;
 
@@ -37,19 +37,26 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
     onThemeChange?.(themeId);
   };
 
-  const handleSave = () => {
+  const handleSelectModel = (selectedModel: string) => {
+    setModel(selectedModel);
+    setStoredModel(selectedModel);
+  };
+
+  const handleApiKeyBlur = () => {
     setStoredApiKey(apiKey.trim());
-    setStoredModel(model);
-    setSaved(true);
+    setKeySaved(true);
     setTimeout(() => {
-      setSaved(false);
-      onClose();
-    }, 600);
+      setKeySaved(false);
+    }, 1800);
   };
 
   const handleClear = () => {
     setKey('');
     setStoredApiKey('');
+    setKeySaved(true);
+    setTimeout(() => {
+      setKeySaved(false);
+    }, 1800);
   };
 
   return (
@@ -58,31 +65,16 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
       onClose={onClose}
       title="Settings"
       subtitle="Theme appearance and model configuration"
-      icon={<Key className="w-4 h-4 text-ink/70" />}
-      headerRight={
-        <span className="text-[11px] font-mono text-ink/50 bg-muted px-2 py-0.5 rounded-[4px] border border-line">
-          AI: {apiKey ? 'on' : 'off'}
-        </span>
-      }
+      icon={<Settings className="w-4 h-4 text-ink/70" strokeWidth={1.5} />}
       maxWidth="max-w-md"
       footer={
-        <>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-muted rounded-[6px] transition cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="btn-primary h-8 px-3.5"
-          >
-            {saved ? <Check className="w-3.5 h-3.5" /> : null}
-            <span>{saved ? 'Saved' : 'Save settings'}</span>
-          </button>
-        </>
+        <button
+          type="button"
+          onClick={onClose}
+          className="btn-primary h-8 px-4"
+        >
+          Done
+        </button>
       }
     >
       <div className="space-y-4 text-xs bg-card">
@@ -112,7 +104,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                       : 'border-line bg-card hover:border-ink/30 hover:bg-muted'
                   }`}
                 >
-                  {/* Swatch mini preview */}
+                  {/* Swatch mini preview with 1px border so Forest/Dark/Midnight are visible */}
                   <div
                     className="w-full h-6 rounded border border-line flex items-center justify-between px-2 overflow-hidden"
                     style={{ backgroundColor: preset.canvas }}
@@ -122,7 +114,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                       style={{ backgroundColor: preset.card }}
                     />
                     <div
-                      className="w-2.5 h-2.5 rounded-full"
+                      className="w-2.5 h-2.5 rounded-full border border-line"
                       style={{ backgroundColor: preset.accent }}
                     />
                   </div>
@@ -138,34 +130,32 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
           </div>
         </div>
 
-        {/* Gemini Model Selector */}
+        {/* Gemini Model Selector — Applies Instantly */}
         <div className="space-y-1.5">
           <label className="label">Model</label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2">
             {[
               {
                 id: 'gemini-3.8-flash',
                 name: 'Gemini 3.8 Flash',
                 desc: 'Fastest responses, suitable for drafting & bullet edits',
               },
-              {
-                id: 'gemini-2.5-pro',
-                name: 'Gemini 2.5 Pro',
-                desc: 'Deep analysis, suitable for detailed JD gap review',
-              },
             ].map((m) => (
               <button
                 key={m.id}
                 type="button"
-                onClick={() => setModel(m.id)}
-                className={`p-2.5 rounded-[6px] border text-left transition-colors cursor-pointer ${
+                onClick={() => handleSelectModel(m.id)}
+                className={`p-2.5 rounded-[6px] border text-left transition-colors cursor-pointer flex items-center justify-between ${
                   model === m.id
                     ? 'border-brand-600 bg-muted/40 font-medium'
                     : 'border-line bg-card hover:border-ink/30'
                 }`}
               >
-                <div className="font-semibold text-ink text-xs mb-0.5">{m.name}</div>
-                <p className="text-[11px] text-ink/60 leading-tight">{m.desc}</p>
+                <div>
+                  <div className="font-semibold text-ink text-xs mb-0.5">{m.name}</div>
+                  <p className="text-[11px] text-ink/60 leading-tight">{m.desc}</p>
+                </div>
+                {model === m.id && <Check className="w-3.5 h-3.5 text-brand-600 shrink-0 ml-2" />}
               </button>
             ))}
           </div>
@@ -183,9 +173,14 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             type="password"
             value={apiKey}
             onChange={(e) => setKey(e.target.value)}
+            onBlur={handleApiKeyBlur}
             placeholder="AIzaSy..."
             className="input font-mono text-xs"
           />
+          <div className="flex items-center justify-between text-[11px] text-ink/50 pt-0.5">
+            <span>{apiKey.trim() ? 'AI is active' : 'AI is off, add a key to enable'}</span>
+            {keySaved && <span className="text-emerald-600 font-medium">Saved</span>}
+          </div>
         </div>
 
         {/* Help Link & Clear */}

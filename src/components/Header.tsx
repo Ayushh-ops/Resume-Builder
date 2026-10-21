@@ -6,8 +6,8 @@ import {
   Radar,
   TrendingUp,
   Target,
+  Sliders,
   Settings,
-  Upload,
   FolderOpen,
   ChevronDown,
   User,
@@ -64,7 +64,7 @@ const getScoreColors = (score: number, isEmpty?: boolean) => {
   if (isEmpty) {
     return {
       dot: 'bg-ink/30',
-      label: '—',
+      label: 'ATS --',
     };
   }
   if (score >= 80) {
@@ -101,7 +101,6 @@ export const Header: React.FC<HeaderProps> = ({
   canUndo = false,
   canRedo = false,
   savedAt = null,
-  onOpenUpload,
   onOpenCustomAts,
   onOpenHome,
   onNewResume,
@@ -194,8 +193,8 @@ export const Header: React.FC<HeaderProps> = ({
   const scoreInfo = getScoreColors(atsResult.score, atsResult.isEmpty);
 
   return (
-    <header className="no-print sticky top-0 z-40 h-13 flex items-center bg-card border-b border-line px-4 lg:px-6 outline-none transition-colors select-none">
-      <div className="w-full flex items-center justify-between gap-4">
+    <header className="no-print sticky top-0 z-40 h-13 flex items-center bg-card border-b border-line outline-none transition-colors select-none">
+      <div className="w-full max-w-6xl mx-auto px-6 flex items-center justify-between gap-4">
 
         {/* Left: Logo & Resume Selector */}
         <div className="flex items-center gap-3 shrink-0 min-w-0">
@@ -350,11 +349,11 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={() => setAtsPopoverOpen((v) => !v)}
-                className="hidden sm:inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-ink/80 hover:text-ink transition cursor-pointer"
+                className={`hidden sm:inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium transition cursor-pointer ${atsResult.isEmpty ? 'text-ink/40 hover:text-ink/70' : 'text-ink/80 hover:text-ink'}`}
                 title="Toggle ATS evaluation"
               >
                 <span className={`w-2 h-2 rounded-full shrink-0 ${scoreInfo.dot}`} />
-                <span className="tabular-nums">ATS {atsResult.isEmpty ? '—' : atsResult.score}</span>
+                <span className="tabular-nums">ATS {atsResult.isEmpty ? '--' : atsResult.score}</span>
               </button>
 
               {atsPopoverOpen && (
@@ -363,8 +362,8 @@ export const Header: React.FC<HeaderProps> = ({
                   <div className="pb-2 border-b border-line space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-ink">ATS evaluation</span>
-                      <span className="text-xs font-medium tabular-nums text-brand-600">
-                        {atsResult.isEmpty ? '—' : `${atsResult.score}/100`}
+                      <span className={`text-xs font-medium tabular-nums ${atsResult.isEmpty ? 'text-ink/40' : 'text-brand-600'}`}>
+                        {atsResult.isEmpty ? 'ATS --' : `${atsResult.score}/100`}
                       </span>
                     </div>
 
@@ -510,6 +509,16 @@ export const Header: React.FC<HeaderProps> = ({
                     {/* Actions */}
                     <button
                       onClick={() => {
+                        onOpenHome?.();
+                        close();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>All resumes</span>
+                    </button>
+                    <button
+                      onClick={() => {
                         onNewResume?.();
                         close();
                       }}
@@ -532,6 +541,9 @@ export const Header: React.FC<HeaderProps> = ({
                     <button onClick={() => { onOpenJobMatcher(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer">
                       <Target className="w-3.5 h-3.5" strokeWidth={1.5} /> Match to job description
                     </button>
+                    <button onClick={() => { onOpenCustomAts?.(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer">
+                      <Sliders className="w-3.5 h-3.5" strokeWidth={1.5} /> Custom ATS format
+                    </button>
 
                     <div className="my-1 border-t border-line" />
 
@@ -545,9 +557,10 @@ export const Header: React.FC<HeaderProps> = ({
                         <FolderOpen className="w-3.5 h-3.5" strokeWidth={1.5} />
                         <span>Load sample</span>
                       </span>
-                      <span className="text-[10px] text-ink/40 font-mono">
-                        {samplesExpanded ? '▾' : '▸'}
-                      </span>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 text-ink/50 transition-transform ${samplesExpanded ? 'rotate-180' : ''}`}
+                        strokeWidth={1.75}
+                      />
                     </button>
 
                     {samplesExpanded && (
@@ -599,19 +612,6 @@ export const Header: React.FC<HeaderProps> = ({
                   document.body
                 )}
             </div>
-          )}
-
-          {/* Upload Button: on screens < 1280px (xl), collapse "Upload Resume" to icon-only with tooltip (hidden on Home) */}
-          {!isHome && onOpenUpload && (
-            <button
-              type="button"
-              onClick={onOpenUpload}
-              className="btn-outline hidden sm:inline-flex items-center gap-1.5 cursor-pointer"
-              title="Upload Resume (PDF, DOCX, JSON, TXT)"
-            >
-              <Upload className="w-3.5 h-3.5" strokeWidth={1.75} />
-              <span className="hidden xl:inline">Upload Resume</span>
-            </button>
           )}
 
           {/* Download PDF — primary CTA (hidden on Home) */}

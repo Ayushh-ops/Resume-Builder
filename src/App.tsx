@@ -11,11 +11,9 @@ import {
   Eye,
   Edit3,
   Upload,
-  ArrowRight,
   AlertTriangle,
   Download,
   Sliders,
-  Target,
   Plus,
   MoreVertical,
   Copy,
@@ -26,10 +24,12 @@ import type { ResumeData, ResumeTheme, TemplateType, ATSProfile } from './types/
 import { sampleProfiles } from './data/sampleData';
 import {
   calculateLiveATSScore,
+  isResumeEmptyForAts,
   getAllATSProfiles,
   getActiveProfileId,
   setActiveProfileId,
 } from './services/atsScorer';
+import { ModernTemplate } from './components/Preview/templates/ModernTemplate';
 import {
   getInitialTheme,
   applyTheme,
@@ -288,10 +288,10 @@ export const App: React.FC = () => {
   // Template & Theme
   const [activeTemplate, setActiveTemplate] = useState<TemplateType>('modern');
   const [theme, setTheme] = useState<ResumeTheme>({
-    primaryColor: '#4f46e5',
+    primaryColor: '#b4451f',
     fontFamily: 'sans',
     spacing: 'normal',
-    accentColor: '#818cf8',
+    accentColor: '#b4451f',
   });
 
   // Single Unified App Theme State
@@ -935,15 +935,12 @@ export const App: React.FC = () => {
 
       {/* VIEW A: HOME SCREEN ("Your resumes") */}
       {route.type === 'home' && (
-        <div className="flex-1 w-full max-w-6xl mx-auto px-4 py-8 sm:py-10 flex flex-col justify-start min-h-[calc(100vh-3.5rem)] animate-in fade-in duration-150">
+        <div className="flex-1 w-full max-w-6xl mx-auto px-6 py-8 sm:py-10 flex flex-col justify-start min-h-[calc(100vh-3.5rem)] animate-in fade-in duration-150">
           {/* Header row */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-line">
             <div>
-              <h1 className="text-2xl font-serif font-semibold text-ink tracking-tight flex items-center gap-2">
-                <span>Your resumes</span>
-                <span className="text-xs px-2 py-0.5 rounded-[4px] bg-muted text-ink/70 font-sans font-medium">
-                  {resumeIndex.length}
-                </span>
+              <h1 className="text-2xl font-serif font-semibold text-ink tracking-tight">
+                Your resumes
               </h1>
               <p className="text-xs text-ink/60 mt-0.5">
                 Manage and edit your saved resumes.
@@ -970,72 +967,50 @@ export const App: React.FC = () => {
           </div>
 
           {/* Resumes Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pt-6 items-stretch">
-            {/* Card 1: New Resume */}
-            <button
-              type="button"
-              onClick={handleCreateNew}
-              className="card p-4 border border-dashed border-line hover:border-ink/40 bg-card transition cursor-pointer text-left flex flex-col justify-between h-[250px] group"
-            >
-              <div className="flex flex-col items-center justify-center h-full text-center py-4">
-                <div className="w-10 h-10 rounded-[6px] bg-muted text-ink/70 flex items-center justify-center mb-2.5 transition">
-                  <Plus className="w-5 h-5" strokeWidth={1.5} />
-                </div>
-                <h3 className="text-sm font-semibold text-ink transition-colors">
-                  Start from scratch
-                </h3>
-                <p className="text-xs text-ink/50 mt-1 max-w-[180px] leading-relaxed">
-                  Build a new resume with a blank template.
-                </p>
-              </div>
-            </button>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 pt-6 items-stretch">
+            {resumeIndex.map((entry) => {
+              const resumeItemData = getResume(entry.id);
+              const isCardAtsEmpty = isResumeEmptyForAts(resumeItemData);
 
-            {/* Cards 2..N: Existing Resumes */}
-            {resumeIndex.map((entry) => (
-              <div
-                key={entry.id}
-                className="card border border-line bg-card hover:border-ink/40 transition flex flex-col justify-between h-[250px] relative group"
-              >
-                {/* Click area to open */}
+              return (
                 <div
+                  key={entry.id}
                   onClick={() => {
                     window.location.hash = `#/r/${entry.id}`;
                   }}
-                  className="p-4 flex-1 flex flex-col justify-between cursor-pointer"
+                  className="card border border-line bg-card hover:border-ink/40 transition flex flex-col justify-between h-[280px] p-3.5 relative group cursor-pointer"
                 >
-                  {/* Miniature Visual Mockup Thumbnail */}
-                  <div className="w-full h-24 bg-canvas rounded-[6px] p-2 border border-line flex flex-col justify-between overflow-hidden relative">
-                    <div className="h-0.5 w-1/4 rounded-full bg-brand-600 mb-1" />
-                    <div className="space-y-1">
-                      <div className="h-1.5 w-3/4 bg-ink/15 rounded" />
-                      <div className="h-1 w-1/2 bg-ink/10 rounded" />
-                    </div>
-                    <div className="space-y-0.5 my-auto">
-                      <div className="h-1 w-full bg-ink/10 rounded" />
-                      <div className="h-1 w-5/6 bg-ink/10 rounded" />
-                      <div className="h-1 w-4/6 bg-ink/10 rounded" />
-                    </div>
-                    <div className="flex items-center justify-between pt-1 border-t border-line/60">
-                      <div className="h-1 w-12 bg-ink/10 rounded" />
-                      {entry.score !== undefined && (
-                        <span className="text-[10px] font-medium text-ink/70 flex items-center gap-1">
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              entry.score >= 80
-                                ? 'bg-emerald-600'
-                                : entry.score >= 60
-                                ? 'bg-amber-600'
-                                : 'bg-rose-600'
-                            }`}
-                          />
-                          <span>{entry.score}</span>
-                        </span>
-                      )}
+                  {/* Scaled A4 Real Resume Thumbnail on WHITE paper */}
+                  <div className="w-full h-36 bg-muted/30 rounded-[6px] border border-line overflow-hidden relative flex justify-center items-start pt-1.5 select-none pointer-events-none">
+                    <div
+                      data-theme="light"
+                      style={{
+                        width: '794px',
+                        minHeight: '1123px',
+                        transform: 'scale(0.24)',
+                        transformOrigin: 'top center',
+                        backgroundColor: '#ffffff',
+                        color: '#16161d',
+                        padding: '12mm 14mm',
+                      }}
+                      className="shadow-sm border border-black/10 text-left shrink-0 font-sans"
+                    >
+                      {resumeItemData ? (
+                        <ModernTemplate
+                          data={resumeItemData}
+                          theme={{
+                            primaryColor: '#b4451f',
+                            fontFamily: 'sans',
+                            spacing: 'normal',
+                            accentColor: '#b4451f',
+                          }}
+                        />
+                      ) : null}
                     </div>
                   </div>
 
-                  {/* Title & Info */}
-                  <div className="mt-2.5">
+                  {/* Title & Info (hide subtitle if no title) */}
+                  <div className="mt-2.5 min-w-0">
                     {renamingCardId === entry.id ? (
                       <input
                         type="text"
@@ -1052,161 +1027,166 @@ export const App: React.FC = () => {
                       />
                     ) : (
                       <h3
-                        className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors truncate"
+                        className="text-xs font-semibold text-ink group-hover:text-brand-600 transition-colors truncate"
                         title={entry.name}
                       >
                         {entry.name}
                       </h3>
                     )}
-                    <p className="text-xs text-ink/60 truncate mt-0.5">
-                      {entry.title || 'General resume'}
-                    </p>
+                    {entry.title?.trim() ? (
+                      <p className="text-[11px] text-ink/60 truncate mt-0.5">
+                        {entry.title}
+                      </p>
+                    ) : null}
                   </div>
 
-                  {/* Footer info: last edited */}
-                  <div className="mt-2 pt-2 border-t border-line flex items-center justify-between text-xs text-ink/40">
+                  {/* Footer info: last edited & score */}
+                  <div className="mt-2 pt-2 border-t border-line flex items-center justify-between text-[11px] text-ink/40">
                     <span>{formatRelativeTime(entry.updatedAt)}</span>
-                    <span className="text-ink/60 font-medium group-hover:text-brand-600 flex items-center gap-0.5">
-                      <span>Edit</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </span>
+                    {isCardAtsEmpty || entry.score === undefined ? (
+                      <span className="text-ink/40 font-medium">ATS --</span>
+                    ) : (
+                      <span className="text-ink/70 font-medium flex items-center gap-1">
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            entry.score >= 80
+                              ? 'bg-emerald-600'
+                              : entry.score >= 60
+                              ? 'bg-amber-600'
+                              : 'bg-rose-600'
+                          }`}
+                        />
+                        <span>ATS {entry.score}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Top-Right Menu Trigger */}
+                  <div className="absolute top-2.5 right-2.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenCardMenuId((prev) => (prev === entry.id ? null : entry.id));
+                      }}
+                      className="p-1 rounded-[4px] bg-card/90 border border-line text-ink/50 hover:text-ink hover:bg-muted transition cursor-pointer"
+                      title="Actions"
+                    >
+                      <MoreVertical className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Card Dropdown Menu */}
+                    {openCardMenuId === entry.id && (
+                      <div
+                        ref={cardMenuRef}
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute right-0 top-7 w-40 card shadow-menu py-1 z-20 border border-line bg-card animate-in fade-in duration-100"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenCardMenuId(null);
+                            window.location.hash = `#/r/${entry.id}`;
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                        >
+                          <FolderOpen className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
+                          <span>Open</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenCardMenuId(null);
+                            setRenamingCardId(entry.id);
+                            setCardRenameValue(entry.name);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
+                          <span>Rename</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenCardMenuId(null);
+                            handleDuplicateResume(entry.id);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                        >
+                          <Copy className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
+                          <span>Duplicate</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenCardMenuId(null);
+                            handleExportJson(entry.id);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
+                          <span>Export JSON</span>
+                        </button>
+                        <div className="my-1 border-t border-line" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenCardMenuId(null);
+                            handleDeleteResume(entry.id, entry.name);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2 transition cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                {/* Top-Right Menu Trigger */}
-                <div className="absolute top-2.5 right-2.5">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOpenCardMenuId((prev) => (prev === entry.id ? null : entry.id));
-                    }}
-                    className="p-1 rounded-[4px] bg-card/90 border border-line text-ink/50 hover:text-ink hover:bg-muted transition cursor-pointer"
-                    title="Actions"
-                  >
-                    <MoreVertical className="w-3.5 h-3.5" />
-                  </button>
-
-                  {/* Card Dropdown Menu */}
-                  {openCardMenuId === entry.id && (
-                    <div
-                      ref={cardMenuRef}
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute right-0 top-7 w-40 card shadow-menu py-1 z-20 border border-line bg-card animate-in fade-in duration-100"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenCardMenuId(null);
-                          window.location.hash = `#/r/${entry.id}`;
-                        }}
-                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted flex items-center gap-2 transition cursor-pointer"
-                      >
-                        <FolderOpen className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
-                        <span>Open</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenCardMenuId(null);
-                          setRenamingCardId(entry.id);
-                          setCardRenameValue(entry.name);
-                        }}
-                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted flex items-center gap-2 transition cursor-pointer"
-                      >
-                        <Edit3 className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
-                        <span>Rename</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenCardMenuId(null);
-                          handleDuplicateResume(entry.id);
-                        }}
-                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted flex items-center gap-2 transition cursor-pointer"
-                      >
-                        <Copy className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
-                        <span>Duplicate</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenCardMenuId(null);
-                          handleExportJson(entry.id);
-                        }}
-                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted flex items-center gap-2 transition cursor-pointer"
-                      >
-                        <Download className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
-                        <span>Export JSON</span>
-                      </button>
-                      <div className="my-1 border-t border-line" />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenCardMenuId(null);
-                          handleDeleteResume(entry.id, entry.name);
-                        }}
-                        className="w-full text-left px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2 transition cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-                        <span>Delete</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
-          {/* Quick action row below the grid */}
-          <div className="mt-8 pt-6 border-t border-line space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-[10px] bg-card border border-line">
-              <div>
-                <h3 className="text-xs font-semibold text-ink">
-                  Start from a sample profile
-                </h3>
-                <p className="text-xs text-ink/60 mt-0.5">
-                  Choose a pre-filled profile to edit.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
+          {/* Quick action row below the grid: merged samples & custom ATS */}
+          <div className="mt-8 pt-6 border-t border-line">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-3.5 rounded-[10px] bg-card border border-line">
+              {/* Section 1: Samples */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-ink/60 mr-1">Start from a sample:</span>
                 <button
                   type="button"
                   onClick={() => handleLoadSample('aiEngineer')}
-                  className="px-2.5 py-1 text-xs font-medium rounded-[6px] bg-muted hover:bg-line border border-line transition cursor-pointer text-ink"
+                  className="px-2.5 py-1 text-xs font-medium rounded-[6px] bg-muted hover:bg-card border border-line transition cursor-pointer text-ink"
                 >
                   AI Engineer
                 </button>
                 <button
                   type="button"
                   onClick={() => handleLoadSample('fullStack')}
-                  className="px-2.5 py-1 text-xs font-medium rounded-[6px] bg-muted hover:bg-line border border-line transition cursor-pointer text-ink"
+                  className="px-2.5 py-1 text-xs font-medium rounded-[6px] bg-muted hover:bg-card border border-line transition cursor-pointer text-ink"
                 >
                   Full-Stack Developer
                 </button>
                 <button
                   type="button"
                   onClick={() => handleLoadSample('fresherStudent')}
-                  className="px-2.5 py-1 text-xs font-medium rounded-[6px] bg-muted hover:bg-line border border-line transition cursor-pointer text-ink"
+                  className="px-2.5 py-1 text-xs font-medium rounded-[6px] bg-muted hover:bg-card border border-line transition cursor-pointer text-ink"
                 >
                   Graduate
                 </button>
               </div>
-            </div>
 
-            {/* Custom ATS banner */}
-            <div
-              onClick={handleOpenCustomAts}
-              className="w-full p-3 bg-card border border-line rounded-[10px] flex items-center justify-between cursor-pointer hover:border-ink/40 transition group"
-            >
-              <div className="flex items-center gap-2 text-xs text-ink/70 group-hover:text-ink">
-                <Target className="w-4 h-4 text-ink/60 shrink-0" strokeWidth={1.5} />
-                <span>Have an ATS format or rubric?</span>
+              {/* Section 2: Custom ATS text link */}
+              <div className="flex items-center gap-1.5 md:border-l md:border-line md:pl-4 text-xs">
+                <span className="text-ink/60">Have an ATS rubric?</span>
+                <button
+                  type="button"
+                  onClick={handleOpenCustomAts}
+                  className="font-medium text-brand-600 hover:underline cursor-pointer"
+                >
+                  Add custom ATS profile →
+                </button>
               </div>
-              <span className="text-xs font-medium text-brand-600 group-hover:underline flex items-center gap-1">
-                <span>Add custom ATS profile</span>
-                <span>→</span>
-              </span>
             </div>
           </div>
         </div>

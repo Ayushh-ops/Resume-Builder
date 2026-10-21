@@ -345,6 +345,14 @@ export function setActiveProfileId(id: string): void {
   localStorage.setItem('active-ats-profile-id', id);
 }
 
+export function isResumeEmptyForAts(resume: ResumeData | null | undefined): boolean {
+  if (!resume) return true;
+  const hasName = Boolean(resume.personalInfo?.fullName?.trim());
+  const hasSummary = Boolean(resume.summary?.trim());
+  const hasExp = Boolean(resume.experience && resume.experience.length > 0);
+  return !hasName && !hasSummary && !hasExp;
+}
+
 export function isResumeEmpty(resume: ResumeData): boolean {
   const hasName = Boolean(resume.personalInfo?.fullName?.trim());
   const hasTitle = Boolean(resume.personalInfo?.jobTitle?.trim());
@@ -360,7 +368,7 @@ export function calculateLiveATSScore(
   profileIdOrProfile?: string | ATSProfile
 ): ATSCheckResult {
   // 1. Check for truly empty resume state
-  if (isResumeEmpty(resume)) {
+  if (isResumeEmptyForAts(resume) || isResumeEmpty(resume)) {
     return {
       score: 0,
       rating: 'Poor',
