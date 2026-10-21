@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Sparkles, Check, RefreshCw } from 'lucide-react';
 import type { ResumeData } from '../../types/resume';
 import { generateSummary } from '../../services/geminiService';
+import { Skeleton } from '../common/Skeleton';
 
 interface SummaryFormProps {
   summary: string;
@@ -66,7 +67,19 @@ export const SummaryForm: React.FC<SummaryFormProps> = ({ summary, resumeData, o
         </button>
       </div>
 
-      {aiSuggestions && (
+      {isGenerating && (
+        <div className="p-3 bg-brand-50/50 border border-brand-200/60 rounded-xl space-y-2 animate-in fade-in">
+          <div className="flex items-center gap-1.5 text-xs text-brand-600 font-semibold mb-1">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            <span>AI Crafting Professional Summary...</span>
+          </div>
+          <Skeleton className="h-3.5 w-full" />
+          <Skeleton className="h-3.5 w-[90%]" />
+          <Skeleton className="h-3.5 w-[75%]" />
+        </div>
+      )}
+
+      {aiSuggestions && !isGenerating && (
         <div className="p-3 bg-indigo-50/80 border border-indigo-200 rounded-xl space-y-2 animate-in fade-in">
           <div className="flex items-center justify-between text-xs text-indigo-900 font-semibold">
             <span className="flex items-center gap-1.5">

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Radar,
   ExternalLink,
@@ -27,6 +27,15 @@ interface JobRadarModalProps {
 }
 
 export const JobRadarModal: React.FC<JobRadarModalProps> = ({ isOpen, onClose, resumeData }) => {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const earlyLinks = generateEarlyJobSearchLinks(resumeData);
@@ -49,33 +58,33 @@ export const JobRadarModal: React.FC<JobRadarModalProps> = ({ isOpen, onClose, r
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
       <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
-        <div className="px-6 py-4 bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between">
+        <div className="px-6 py-4 bg-white border-b border-black/[0.06] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-500/20 rounded-xl border border-purple-400/30 text-purple-300">
+            <div className="p-2 bg-brand-50 rounded-xl text-brand-600">
               <Radar className="w-5 h-5 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold">Early Job Radar & Applicant Advantage</h2>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                <h2 className="text-base font-bold text-ink">Early Job Radar & Applicant Advantage</h2>
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                   Past 24h Feed
                 </span>
               </div>
-              <p className="text-xs text-purple-200">
-                Targeting: <span className="font-semibold text-white">{resumeData.personalInfo.jobTitle || 'Software Engineer'}</span> • {resumeData.personalInfo.location || 'Remote'}
+              <p className="text-xs text-ink/50">
+                Targeting: <span className="font-semibold text-ink">{resumeData.personalInfo.jobTitle || 'Software Engineer'}</span> • {resumeData.personalInfo.location || 'Remote'}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-purple-300 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+            className="text-ink/40 hover:text-ink p-1 rounded-lg hover:bg-black/5 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto space-y-6">
+        <div className="p-6 overflow-y-auto max-h-[85vh] space-y-6">
           {/* Why Early Applicants Win Banner */}
           <div className="p-3.5 bg-purple-50/80 border border-purple-200/80 rounded-xl flex items-start gap-3 text-xs text-purple-900">
             <Zap className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
@@ -198,11 +207,11 @@ export const JobRadarModal: React.FC<JobRadarModalProps> = ({ isOpen, onClose, r
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500">
+        <div className="bg-white border-t border-black/[0.06] px-4 py-3 flex justify-between items-center text-xs text-ink/50 shrink-0">
           <span>Tips: Apply directly on the company career portal when found for 2x faster review.</span>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 font-semibold text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
+            className="px-4 py-1.5 font-semibold text-ink/70 hover:bg-black/5 rounded-lg transition-colors"
           >
             Done
           </button>

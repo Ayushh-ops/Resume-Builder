@@ -219,16 +219,18 @@ export const ExperienceForm: React.FC<ExperienceFormProps> = ({ experience, onCh
 
             {item.highlights.map((bullet, bulletIndex) => (
               <div key={bulletIndex} className="space-y-2">
-                <div className="flex items-start gap-2">
+                <div className="flex items-start gap-2 group">
                   <span className="text-slate-400 mt-2 text-xs">•</span>
                   <textarea
+                    ref={(el) => { if (el) { el.style.height='auto'; el.style.height=el.scrollHeight+'px'; } }}
+                    onInput={(e) => { const t=e.currentTarget; t.style.height='auto'; t.style.height=t.scrollHeight+'px'; }}
                     value={bullet}
                     onChange={(e) => handleUpdateBullet(expIndex, bulletIndex, e.target.value)}
                     rows={2}
                     placeholder="e.g. Spearheaded microservice migration reducing p95 latency by 45%..."
-                    className="flex-1 p-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 leading-relaxed"
+                    className="flex-1 p-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 leading-relaxed resize-none overflow-hidden"
                   />
-                  <div className="flex flex-col gap-1 mt-1">
+                  <div className="flex flex-col gap-1 mt-1 opacity-0 group-hover:opacity-100 transition">
                     <button
                       onClick={() => handleEnhanceBullet(expIndex, bulletIndex)}
                       disabled={isEnhancing || !bullet || bullet.trim().length < 5}

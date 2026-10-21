@@ -359,3 +359,72 @@ function getCuratedTrendTips(resume: ResumeData): TrendUpgradeTip[] {
 
   return tips;
 }
+
+export interface TailoredChanges {
+  summary: string;
+  experienceBullets: { index: number; bullets: string[] }[];
+}
+
+/**
+ * AI-powered Resume Tailoring to Target Job Description
+ */
+export async function tailorResumeToJob(
+  resume: ResumeData,
+  jobDescription: string
+): Promise<TailoredChanges> {
+  const client = getGenAIClient();
+  const model = getStoredModel();
+
+  if (client) {
+    try {
+      const prompt = `You are an elite executive resume writer.
+Tailor the summary and experience bullet points of the resume to better align with the following Job Description, incorporating relevant keywords and impact metrics.
+
+Job Description:
+${jobDescription}
+
+Current Resume:
+Summary: ${resume.summary}
+Experience: ${JSON.stringify(resume.experience.map((e, idx) => ({ index: idx, position: e.position, company: e.company, highlights: e.highlights })))}
+
+Return a JSON object strictly in this structure (raw JSON, no markdown):
+{
+  "summary": "Tailored 3-4 sentence professional summary aligned to the JD...",
+  "experienceBullets": [
+    {
+      "index": 0,
+      "bullets": ["tailored bullet 1", "tailored bullet 2"]
+    }
+  ]
+}`;
+      const interaction = await client.interactions.create({
+        model: model,
+        input: prompt,
+      });
+
+      const responseText = interaction.output_text || '';
+      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleanJson);
+      if (parsed.summary && parsed.experienceBullets) {
+        return parsed;
+      }
+    } catch (err) {
+      console.warn('Gemini tailoring failed, using heuristic fallback:', err);
+    }
+  }
+
+  // Heuristic fallback
+  const firstKeywords = ['scalable systems', 'high-performance architectures', 'cross-functional collaboration'];
+  const newSummary = `${resume.personalInfo.jobTitle || 'Professional'} with proven expertise in delivering production-grade solutions aligned with target role requirements. Adept at driving business outcomes through modern engineering practices, scalable systems, and automated pipelines.`;
+  const tailoredBullets = resume.experience.map((exp, idx) => ({
+    index: idx,
+    bullets: exp.highlights.map((b, bIdx) =>
+      b ? `${b.replace(/\.$/, '')}, directly supporting core competencies in ${firstKeywords[bIdx % firstKeywords.length]}.` : b
+    ),
+  }));
+
+  return {
+    summary: newSummary,
+    experienceBullets: tailoredBullets,
+  };
+}

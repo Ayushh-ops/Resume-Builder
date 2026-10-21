@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ZoomIn, ZoomOut, RotateCcw, Palette, Layout, Type } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, Palette, Type } from 'lucide-react';
 import type { ResumeData, ResumeTheme, TemplateType } from '../../types/resume';
 import { ModernTemplate } from './templates/ModernTemplate';
 import { HarvardTemplate } from './templates/HarvardTemplate';
 import { MinimalistTemplate } from './templates/MinimalistTemplate';
 import { CreativeTemplate } from './templates/CreativeTemplate';
+import { TemplateThumbnail } from './TemplateThumbnail';
 
 interface ResumePreviewProps {
   data: ResumeData;
@@ -58,21 +59,16 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
         <div className="card shadow-soft px-3 py-2 flex flex-wrap items-center justify-between gap-3">
 
           {/* Template switcher */}
-          <div className="flex items-center gap-2">
-            <Layout className="w-3.5 h-3.5 text-ink/30 shrink-0" strokeWidth={1.75} />
-            <div className="inline-flex rounded-lg bg-black/[0.04] p-0.5 gap-0.5">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {TEMPLATES.map(t => (
-                <button
+                <TemplateThumbnail
                   key={t.id}
+                  id={t.id}
+                  label={t.label}
+                  isActive={activeTemplate === t.id}
                   onClick={() => onChangeTemplate(t.id)}
-                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all ${
-                    activeTemplate === t.id
-                      ? 'bg-white text-brand-600 ring-2 ring-brand-500/20 shadow-sm'
-                      : 'text-ink/50 hover:text-ink'
-                  }`}
-                >
-                  {t.label}
-                </button>
+                />
               ))}
             </div>
           </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Key, ExternalLink, Check, X, Sparkles } from 'lucide-react';
 import {
   getStoredApiKey,
@@ -16,6 +16,15 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
   const [apiKey, setKey] = useState(getStoredApiKey());
   const [model, setModel] = useState(getStoredModel());
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -38,23 +47,23 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
       <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div className="px-5 py-4 bg-white border-b border-black/[0.06] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 bg-indigo-500/20 rounded-lg text-indigo-400">
+            <div className="p-1.5 bg-brand-50 rounded-lg text-brand-600">
               <Key className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold">Google Gemini AI Settings</h3>
-              <p className="text-[11px] text-slate-400">Powered by the Official @google/genai SDK</p>
+              <h3 className="text-sm font-bold text-ink">Google Gemini AI Settings</h3>
+              <p className="text-[11px] text-ink/40">Powered by the Official @google/genai SDK</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1">
+          <button onClick={onClose} className="text-ink/40 hover:text-ink p-1">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-5 space-y-4 text-xs">
+        <div className="p-5 space-y-4 text-xs overflow-y-auto max-h-[85vh]">
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
               Gemini API Key
@@ -119,7 +128,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onClose }) => 
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+        <div className="bg-white border-t border-black/[0.06] px-4 py-3 flex justify-end gap-2 shrink-0">
           <button
             onClick={onClose}
             className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 rounded-lg"

@@ -14,6 +14,8 @@ import {
   Code2,
   GraduationCap,
   MoreHorizontal,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import type { ATSCheckResult } from '../types/resume';
 
@@ -29,6 +31,12 @@ interface HeaderProps {
   onPrint: () => void;
   onDownloadPdf: () => void;
   isDownloadingPdf: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  savedAt?: Date | null;
+  onOpenUpload?: () => void;
 }
 
 const scoreStyle = (score: number) => {
@@ -50,9 +58,17 @@ export const Header: React.FC<HeaderProps> = ({
   onPrint,
   onDownloadPdf,
   isDownloadingPdf,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
+  savedAt = null,
+  onOpenUpload,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [atsPopoverOpen, setAtsPopoverOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const atsRef = useRef<HTMLDivElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -60,10 +76,18 @@ export const Header: React.FC<HeaderProps> = ({
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
+      if (atsRef.current && !atsRef.current.contains(e.target as Node)) {
+        setAtsPopoverOpen(false);
+      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  const formatSavedTime = (date: Date | null) => {
+    if (!date) return '';
+    return 'Saved just now';
+  };
 
   const close = () => setMenuOpen(false);
 
@@ -82,23 +106,84 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-brand-50 text-brand-600 border border-brand-500/20 uppercase tracking-wider">
             AI
           </span>
+          {savedAt && (
+            <span className="text-[11px] text-ink/40 ml-1.5 hidden md:inline transition-opacity duration-300">
+              {formatSavedTime(savedAt)}
+            </span>
+          )}
         </div>
 
         {/* Right cluster */}
         <div className="flex items-center gap-2">
 
-          {/* ATS Score badge */}
-          <button
-            onClick={onOpenJobMatcher}
-            className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold transition hover:shadow-sm ${scoreStyle(atsResult.score)}`}
-            title="Open ATS breakdown"
-          >
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
-            </span>
-            ATS {atsResult.score}/100
-          </button>
+          {/* Undo / Redo */}
+          <div className="flex items-center gap-0.5 mr-1">
+            <button
+              type="button"
+              onClick={onUndo}
+              disabled={!canUndo}
+              className="p-1.5 rounded-lg text-ink/50 hover:text-ink hover:bg-black/5 disabled:opacity-25 disabled:pointer-events-none transition"
+              title="Undo (Ctrl+Z)"
+            >
+              <Undo2 className="w-4 h-4" strokeWidth={1.75} />
+            </button>
+            <button
+              type="button"
+              onClick={onRedo}
+              disabled={!canRedo}
+              className="p-1.5 rounded-lg text-ink/50 hover:text-ink hover:bg-black/5 disabled:opacity-25 disabled:pointer-events-none transition"
+              title="Redo (Ctrl+Shift+Z)"
+            >
+              <Redo2 className="w-4 h-4" strokeWidth={1.75} />
+            </button>
+          </div>
+
+          {/* ATS Score badge with Popover */}
+          <div className="relative" ref={atsRef}>
+            <button
+              type="button"
+              onClick={() => setAtsPopoverOpen((v) => !v)}
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold transition hover:shadow-sm ${scoreStyle(atsResult.score)}`}
+              title="Toggle ATS breakdown"
+            >
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+              </span>
+              ATS {atsResult.score}/100
+            </button>
+
+            {atsPopoverOpen && (
+              <div className="absolute top-8 right-0 w-64 card shadow-paper p-3 z-50 animate-in fade-in">
+                <div className="flex items-center justify-between pb-1.5 border-b border-black/[0.06] mb-2">
+                  <span className="text-xs font-bold text-ink">Top ATS Fixes</span>
+                  <span className="text-[10px] font-mono font-semibold text-brand-600">{atsResult.score}/100</span>
+                </div>
+                <div className="space-y-1.5 text-[11px] text-ink/70">
+                  {atsResult.suggestions && atsResult.suggestions.length > 0 ? (
+                    atsResult.suggestions.slice(0, 3).map((sug, i) => (
+                      <div key={i} className="flex items-start gap-1.5">
+                        <span className="text-amber-500 font-bold shrink-0">•</span>
+                        <span>{sug}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-ink/40">No immediate fixes needed. Great job!</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAtsPopoverOpen(false);
+                    onOpenJobMatcher();
+                  }}
+                  className="w-full mt-2.5 py-1 text-center text-[10px] font-semibold text-brand-600 hover:bg-brand-50 rounded transition"
+                >
+                  View Full Analysis →
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Settings icon */}
           <button
@@ -112,7 +197,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* More dropdown */}
           <div className="relative" ref={menuRef}>
             <button
-              onClick={() => setMenuOpen(v => !v)}
+              onClick={() => setMenuOpen((v) => !v)}
               className="btn-ghost hidden sm:inline-flex"
             >
               <MoreHorizontal className="w-4 h-4" strokeWidth={1.75} />
@@ -167,6 +252,18 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Hidden file input */}
           <input ref={importRef} type="file" accept=".json" onChange={onImportJson} className="hidden" />
+
+          {/* Upload Button */}
+          {onOpenUpload && (
+            <button
+              type="button"
+              onClick={onOpenUpload}
+              className="btn-ghost hidden sm:inline-flex"
+            >
+              <Upload className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <span>Upload Resume</span>
+            </button>
+          )}
 
           {/* Download PDF — primary CTA */}
           <button
