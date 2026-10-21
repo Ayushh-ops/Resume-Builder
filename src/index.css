@@ -96,13 +96,18 @@ html, body {
 
 @layer base {
   body {
-    @apply antialiased bg-canvas text-ink font-sans;
+    background-color: var(--canvas);
+    color: var(--ink);
+    @apply antialiased font-sans;
   }
 }
 
 @layer components {
   .card {
-    @apply bg-card text-ink rounded-2xl border border-border shadow-soft overflow-hidden;
+    background-color: var(--card);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    @apply rounded-2xl shadow-soft overflow-hidden;
   }
   .btn {
     @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition active:scale-95 cursor-pointer select-none;
@@ -111,15 +116,20 @@ html, body {
     @apply btn bg-brand-600 text-white hover:bg-brand-700 shadow-sm;
   }
   .btn-ghost {
-    @apply btn bg-transparent hover:bg-black/5 dark:hover:bg-white/5 border border-border;
+    background-color: transparent;
+    border: 1px solid var(--border);
     color: var(--ink);
     opacity: 0.8;
+    @apply btn hover:bg-black/5 dark:hover:bg-white/5;
   }
   .btn-ghost:hover {
     opacity: 1;
   }
   .input {
-    @apply w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-ink transition;
+    background-color: var(--card);
+    color: var(--ink);
+    border: 1px solid var(--border);
+    @apply w-full rounded-lg px-3 py-2 text-sm transition;
   }
   .input:focus {
     outline: none;
