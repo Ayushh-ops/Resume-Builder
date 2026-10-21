@@ -62,7 +62,7 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
     <div className="flex flex-col h-full canvas-dots relative">
       {/* Floating Toolbar: Vertically centered in one row, wraps cleanly on narrow screens */}
       <div className="no-print sticky top-0 z-20 mx-4 mt-3 mb-0">
-        <div className="card shadow-soft px-3 py-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="card shadow-soft px-3 py-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border border-line bg-card">
 
           {/* Template switcher with 40x52 thumbnails */}
           <div className="flex items-center gap-2 shrink-0">
@@ -78,9 +78,9 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
           </div>
 
           {/* Theme Presets + Custom Color + Font + Zoom */}
-          <div className="flex items-center flex-wrap gap-2.5 shrink-0">
+          <div className="flex items-center flex-wrap gap-2.5 shrink-0 self-center">
             {/* 1-Click Resume Theme Presets */}
-            <div className="flex items-center gap-1 bg-black/[0.03] dark:bg-white/[0.04] p-1 rounded-lg border border-border">
+            <div className="flex items-center gap-1 bg-muted p-1 rounded-lg border border-line">
               {RESUME_THEME_PRESETS.map((preset) => {
                 const isActive = theme.primaryColor === preset.color && theme.fontFamily === preset.font;
                 return (
@@ -98,7 +98,7 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
                     className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold transition ${
                       isActive
                         ? 'bg-card text-brand-600 shadow-soft ring-1 ring-brand-500/30'
-                        : 'text-ink/60 hover:text-ink hover:bg-black/5 dark:hover:bg-white/5'
+                        : 'text-ink/60 hover:text-ink hover:bg-card/50'
                     }`}
                   >
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: preset.color }} />
@@ -109,8 +109,8 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
             </div>
 
             {/* Custom Color Picker */}
-            <div className="relative flex items-center" title="Custom color picker">
-              <label className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer text-ink/40 hover:text-ink transition">
+            <div className="relative flex items-center border border-line bg-card rounded-md" title="Custom color picker">
+              <label className="p-1 rounded-md hover:bg-muted cursor-pointer text-ink/50 hover:text-ink transition flex items-center">
                 <Palette className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <input
                   type="color"
@@ -123,11 +123,11 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
 
             {/* Font Selector */}
             <div className="flex items-center gap-1">
-              <Type className="w-3 h-3 text-ink/30" strokeWidth={1.75} />
+              <Type className="w-3 h-3 text-ink/40" strokeWidth={1.75} />
               <select
                 value={theme.fontFamily}
                 onChange={e => onChangeTheme({ ...theme, fontFamily: e.target.value as any })}
-                className="text-[11px] bg-transparent border border-border rounded-md px-1.5 py-1 text-ink/70 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                className="text-[11px] bg-card border border-line rounded-md px-2 py-1 text-ink focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               >
                 <option value="sans">Sans (Inter)</option>
                 <option value="serif">Serif (Merriweather)</option>
@@ -136,11 +136,11 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
             </div>
 
             {/* Zoom Controls (Inter with tabular-nums) */}
-            <div className="flex items-center gap-0.5 border-l border-border pl-2.5 text-ink/50">
+            <div className="flex items-center gap-0.5 border border-line bg-card rounded-md px-1.5 py-0.5 text-ink/60">
               <button onClick={handleZoomOut} className="p-1 hover:text-ink rounded transition active:scale-95" title="Zoom out">
                 <ZoomOut className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
-              <span className="text-[11px] font-sans tabular-nums w-8 text-center text-ink/70">{zoom}%</span>
+              <span className="text-[11px] font-sans tabular-nums w-8 text-center text-ink/80">{zoom}%</span>
               <button onClick={handleZoomIn} className="p-1 hover:text-ink rounded transition active:scale-95" title="Zoom in">
                 <ZoomIn className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
@@ -156,6 +156,7 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
       <div className="flex-1 overflow-auto p-6 flex justify-center items-start relative">
         <div
           id="resume-pdf-sheet"
+          data-theme="light"
           className="print-resume-sheet bg-white shadow-paper transition-transform origin-top duration-150 rounded-sm relative text-[#16161d]"
           style={{
             width: '794px',

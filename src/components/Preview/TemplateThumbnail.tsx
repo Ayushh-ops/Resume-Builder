@@ -124,7 +124,7 @@ export const TemplateThumbnail: React.FC<TemplateThumbnailProps> = ({
         className={`w-[40px] h-[52px] rounded-sm border overflow-hidden shadow-2xs transition-all ${
           isActive
             ? 'ring-2 ring-brand-500 scale-105 border-brand-500/40 shadow-soft'
-            : 'border-black/10 dark:border-white/10 opacity-70 group-hover:opacity-100 group-hover:scale-100'
+            : 'border-line opacity-70 group-hover:opacity-100 group-hover:scale-100'
         }`}
       >
         {renderLayoutPreview()}

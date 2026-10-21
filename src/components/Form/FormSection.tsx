@@ -51,10 +51,10 @@ export const FormSection: React.FC<FormSectionProps> = ({
       onDragOver={onDragOver}
       onDrop={onDrop}
       className={`card transition-all ${
-        isHidden ? 'opacity-60 bg-slate-50' : 'hover:shadow-paper/50'
+        isHidden ? 'opacity-60 bg-muted' : 'hover:shadow-paper/50'
       }`}
     >
-      <div className="w-full px-3.5 py-3 flex items-center justify-between bg-white hover:bg-black/[0.015] transition-colors select-none">
+      <div className="w-full px-3.5 py-3 flex items-center justify-between bg-card hover:bg-muted/40 transition-colors select-none">
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
           {draggable && (
             <div
@@ -69,7 +69,7 @@ export const FormSection: React.FC<FormSectionProps> = ({
             onClick={() => !isHidden && setIsOpen(!isOpen)}
             className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer"
           >
-            <div className={`p-1.5 rounded-lg ${isHidden ? 'bg-black/5 text-ink/40' : 'bg-brand-50 text-brand-600'}`}>
+            <div className={`p-1.5 rounded-lg ${isHidden ? 'bg-muted text-ink/40' : 'bg-brand-50 text-brand-600'}`}>
               {icon}
             </div>
             <h3
@@ -80,7 +80,7 @@ export const FormSection: React.FC<FormSectionProps> = ({
               {title}
             </h3>
             {badge && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-black/[0.04] text-ink/50 shrink-0">
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-ink/60 border border-line shrink-0">
                 {badge}
               </span>
             )}
@@ -95,7 +95,7 @@ export const FormSection: React.FC<FormSectionProps> = ({
                 e.stopPropagation();
                 onToggleHidden();
               }}
-              className="p-1 rounded text-ink/30 hover:text-ink/70 hover:bg-black/5 transition"
+              className="p-1 rounded text-ink/30 hover:text-ink/70 hover:bg-muted transition"
               title={isHidden ? 'Show section' : 'Hide section from resume'}
             >
               {isHidden ? (
@@ -110,7 +110,7 @@ export const FormSection: React.FC<FormSectionProps> = ({
             type="button"
             onClick={() => !isHidden && setIsOpen(!isOpen)}
             disabled={isHidden}
-            className="p-1 rounded text-ink/30 hover:text-ink/70 hover:bg-black/5 transition"
+            className="p-1 rounded text-ink/30 hover:text-ink/70 hover:bg-muted transition"
           >
             <ChevronDown
               className={`w-4 h-4 transition-transform duration-200 ${
@@ -123,7 +123,7 @@ export const FormSection: React.FC<FormSectionProps> = ({
       </div>
 
       {isOpen && !isHidden && (
-        <div className="px-4 pb-4 pt-1 border-t border-black/[0.04] animate-in fade-in duration-150">
+        <div className="px-4 pb-4 pt-1 border-t border-line bg-card animate-in fade-in duration-150">
           {children}
         </div>
       )}

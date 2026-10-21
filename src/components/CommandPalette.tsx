@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Search,
   Layout,
@@ -234,17 +235,17 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-start justify-center pt-24 p-4 bg-ink/40 backdrop-blur-sm animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-24 p-4 bg-black/40 backdrop-blur-sm animate-in fade-in"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-[480px] card shadow-paper border border-black/[0.08] flex flex-col max-h-[400px] overflow-hidden animate-in zoom-in-95 duration-150"
+        className="w-full max-w-[480px] card shadow-paper border border-line bg-card flex flex-col max-h-[400px] overflow-hidden animate-in zoom-in-95 duration-150"
       >
         {/* Search Input Bar */}
-        <div className="flex items-center gap-2.5 px-3.5 py-2.5 border-b border-black/[0.06] bg-white">
+        <div className="flex items-center gap-2.5 px-3.5 py-2.5 border-b border-line bg-card">
           <Search className="w-4 h-4 text-ink/40 shrink-0" strokeWidth={2} />
           <input
             ref={inputRef}
@@ -253,9 +254,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Type a command or jump to section..."
-            className="w-full text-xs text-ink placeholder:text-ink/30 bg-transparent focus:outline-none"
+            className="w-full text-xs text-ink placeholder:text-ink/40 bg-transparent focus:outline-none"
           />
-          <kbd className="text-[10px] font-mono text-ink/40 bg-black/[0.04] px-1.5 py-0.5 rounded border border-black/[0.06] shrink-0">
+          <kbd className="text-[10px] font-mono text-ink/40 bg-muted px-1.5 py-0.5 rounded border border-line shrink-0">
             ESC
           </kbd>
         </div>
@@ -281,7 +282,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs cursor-pointer transition-colors ${
                     isSelected
                       ? 'bg-brand-50 text-brand-600 font-semibold'
-                      : 'text-ink/75 hover:bg-black/[0.02]'
+                      : 'text-ink/75 hover:bg-muted'
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -298,7 +299,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         </div>
 
         {/* Footer shortcuts helper */}
-        <div className="px-3 py-1.5 bg-black/[0.02] border-t border-black/[0.06] flex items-center justify-between text-[10px] text-ink/40">
+        <div className="px-3 py-1.5 bg-muted/60 border-t border-line flex items-center justify-between text-[10px] text-ink/40">
           <div className="flex items-center gap-2">
             <span>Use ↑↓ to navigate</span>
             <span>↵ to select</span>
@@ -306,6 +307,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           <span>Ctrl + K</span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

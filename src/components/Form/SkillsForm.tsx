@@ -61,9 +61,9 @@ export const SkillsForm: React.FC<SkillsFormProps> = ({ skills, onChange }) => {
   return (
     <div className="space-y-5">
       {/* 2026 In-Demand Quick Add Chips */}
-      <div className="p-3 bg-gradient-to-r from-indigo-50/70 to-purple-50/70 border border-indigo-100 rounded-xl space-y-1.5">
-        <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900">
-          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+      <div className="p-3 bg-brand-50 border border-brand-500/20 rounded-xl space-y-1.5">
+        <div className="flex items-center gap-1.5 text-xs font-bold text-brand-700 dark:text-brand-300">
+          <Sparkles className="w-3.5 h-3.5 text-brand-600" />
           <span>Top Trending 2026 Tech (Click to Add):</span>
         </div>
         <div className="flex flex-wrap gap-1.5 pt-1">
@@ -75,7 +75,7 @@ export const SkillsForm: React.FC<SkillsFormProps> = ({ skills, onChange }) => {
                   handleAddSkill(0, tech);
                 }
               }}
-              className="text-[11px] px-2 py-0.5 bg-white hover:bg-indigo-600 hover:text-white text-indigo-700 font-medium rounded-md border border-indigo-200 transition-colors shadow-2xs flex items-center gap-1"
+              className="text-[11px] px-2 py-0.5 bg-card hover:bg-brand-600 hover:text-white text-brand-600 font-medium rounded-md border border-line transition-colors shadow-2xs flex items-center gap-1"
             >
               <Plus className="w-2.5 h-2.5" />
               {tech}
@@ -87,7 +87,7 @@ export const SkillsForm: React.FC<SkillsFormProps> = ({ skills, onChange }) => {
       {/* Skill Categories */}
       <div className="space-y-3.5">
         {skills.map((category, catIndex) => (
-          <div key={category.id || catIndex} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+          <div key={category.id || catIndex} className="p-3.5 bg-card border border-line rounded-xl space-y-2.5">
             <div className="flex items-center justify-between">
               <input
                 type="text"
@@ -97,12 +97,12 @@ export const SkillsForm: React.FC<SkillsFormProps> = ({ skills, onChange }) => {
                   updated[catIndex].name = e.target.value;
                   onChange(updated);
                 }}
-                className="text-xs font-bold text-slate-800 bg-transparent border-b border-dashed border-slate-300 focus:outline-none focus:border-indigo-500 pb-0.5"
+                className="text-xs font-bold text-ink bg-transparent border-b border-dashed border-line focus:outline-none focus:border-brand-500 pb-0.5"
                 placeholder="Category Name (e.g. Languages)"
               />
               <button
                 onClick={() => handleRemoveCategory(catIndex)}
-                className="text-[11px] text-slate-400 hover:text-rose-600 transition-colors"
+                className="text-[11px] text-ink/40 hover:text-rose-600 transition-colors"
               >
                 Delete Group
               </button>
@@ -113,13 +113,13 @@ export const SkillsForm: React.FC<SkillsFormProps> = ({ skills, onChange }) => {
               {category.skills.map((skill, skillIndex) => (
                 <span
                   key={skillIndex}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-white text-slate-700 border border-slate-200 rounded-lg shadow-2xs group"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-muted text-ink border border-line rounded-lg shadow-2xs group"
                 >
-                  <Tag className="w-2.5 h-2.5 text-slate-400" />
+                  <Tag className="w-2.5 h-2.5 text-ink/40" />
                   {skill}
                   <button
                     onClick={() => handleRemoveSkill(catIndex, skillIndex)}
-                    className="text-slate-400 hover:text-rose-500 ml-0.5"
+                    className="text-ink/40 hover:text-rose-500 ml-0.5"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -140,11 +140,11 @@ export const SkillsForm: React.FC<SkillsFormProps> = ({ skills, onChange }) => {
                   }
                 }}
                 placeholder="Type a skill and press Enter (or comma)..."
-                className="flex-1 px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="flex-1 input text-xs py-1.5"
               />
               <button
                 onClick={() => handleAddSkill(catIndex, newSkillInput[catIndex])}
-                className="px-3 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                className="btn-primary py-1.5 px-3 text-xs"
               >
                 Add
               </button>
@@ -160,7 +160,7 @@ export const SkillsForm: React.FC<SkillsFormProps> = ({ skills, onChange }) => {
           value={newCategoryName}
           onChange={(e) => setNewCategoryName(e.target.value)}
           placeholder="New Category (e.g. 'Cloud & DevOps' or 'AI & MLOps')"
-          className="flex-1 px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="flex-1 input text-xs py-1.5"
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
@@ -170,7 +170,7 @@ export const SkillsForm: React.FC<SkillsFormProps> = ({ skills, onChange }) => {
         />
         <button
           onClick={handleAddCategory}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors shadow-sm"
+          className="btn-outline text-brand-600 flex items-center gap-1.5"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Add Group</span>

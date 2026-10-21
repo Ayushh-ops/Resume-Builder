@@ -64,7 +64,7 @@ export const SectionNav: React.FC<SectionNavProps> = ({ onOpenSection, activeSec
   const currentActive = propActive || activeId;
 
   return (
-    <div className="sticky top-0 z-20 bg-canvas/95 backdrop-blur-md py-1 border-b border-border transition-colors">
+    <div className="sticky top-0 z-20 bg-canvas/95 backdrop-blur-md py-1 border-b border-line transition-colors">
       <div className="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar px-0.5">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
@@ -77,14 +77,14 @@ export const SectionNav: React.FC<SectionNavProps> = ({ onOpenSection, activeSec
                 className={`p-2 rounded-xl transition-all flex items-center justify-center shrink-0 ${
                   isActive
                     ? 'bg-brand-600 text-white shadow-soft scale-105'
-                    : 'text-ink/50 hover:text-brand-600 hover:bg-brand-50'
+                    : 'text-ink/60 hover:text-brand-600 hover:bg-muted'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" strokeWidth={1.8} />
               </button>
 
               {/* Tooltip & label on hover */}
-              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-0.5 rounded-md bg-ink text-canvas text-[10px] font-semibold whitespace-nowrap shadow-soft pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-30">
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-2 py-0.5 rounded-md bg-card text-ink border border-line text-[10px] font-semibold whitespace-nowrap shadow-soft pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-30">
                 {item.title}
               </div>
             </div>

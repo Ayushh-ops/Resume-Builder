@@ -5,11 +5,14 @@
 :root {
   --canvas: #f6f5f2;
   --canvas-rgb: 246 245 242;
-  --ink: #16161d;
-  --ink-rgb: 22 22 29;
   --card: #ffffff;
   --card-rgb: 255 255 255;
-  --border: rgba(22, 22, 29, 0.06);
+  --muted: #eae9e5;
+  --muted-rgb: 234 233 229;
+  --ink: #16161d;
+  --ink-rgb: 22 22 29;
+  --line: rgba(22, 22, 29, 0.08);
+  --border: var(--line);
   --dot-color: rgba(22, 22, 29, 0.08);
 
   /* Default Indigo */
@@ -20,16 +23,19 @@
 }
 
 [data-theme="dark"] {
-  --canvas: #121216;
-  --canvas-rgb: 18 18 22;
-  --ink: #f3f3f7;
-  --ink-rgb: 243 243 247;
-  --card: #1c1c22;
-  --card-rgb: 28 28 34;
-  --border: rgba(255, 255, 255, 0.08);
-  --dot-color: rgba(240, 240, 248, 0.07);
+  --canvas: #0f0f14;
+  --canvas-rgb: 15 15 20;
+  --card: #17171f;
+  --card-rgb: 23 23 31;
+  --muted: #1f1f29;
+  --muted-rgb: 31 31 41;
+  --ink: #ececf1;
+  --ink-rgb: 236 236 241;
+  --line: rgba(255, 255, 255, 0.08);
+  --border: var(--line);
+  --dot-color: rgba(240, 240, 248, 0.05);
 
-  --brand-50: rgba(100, 99, 224, 0.16);
+  --brand-50: rgba(91, 91, 240, 0.15);
   --brand-500: #7b7af0;
   --brand-600: #6463e0;
   --brand-700: #504fd0;
@@ -106,7 +112,7 @@ html, body {
   .card {
     background-color: var(--card);
     color: var(--ink);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     @apply rounded-2xl shadow-soft overflow-hidden;
   }
   .btn {
@@ -115,20 +121,30 @@ html, body {
   .btn-primary {
     @apply btn bg-brand-600 text-white hover:bg-brand-700 shadow-sm;
   }
+  .btn-outline {
+    background-color: var(--card);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    @apply btn;
+  }
+  .btn-outline:hover {
+    background-color: var(--muted);
+  }
   .btn-ghost {
     background-color: transparent;
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     color: var(--ink);
-    opacity: 0.8;
-    @apply btn hover:bg-black/5 dark:hover:bg-white/5;
+    opacity: 0.85;
+    @apply btn;
   }
   .btn-ghost:hover {
+    background-color: var(--muted);
     opacity: 1;
   }
   .input {
     background-color: var(--card);
     color: var(--ink);
-    border: 1px solid var(--border);
+    border: 1px solid var(--line);
     @apply w-full rounded-lg px-3 py-2 text-sm transition;
   }
   .input:focus {
@@ -141,13 +157,10 @@ html, body {
     box-shadow: 0 0 0 4px rgba(100, 99, 224, 0.12);
   }
   .input::placeholder {
-    color: var(--ink);
-    opacity: 0.35;
+    color: rgb(var(--ink-rgb) / 0.4);
   }
   .label {
-    @apply block text-[10px] font-semibold uppercase tracking-widest mb-1;
-    color: var(--ink);
-    opacity: 0.55;
+    @apply block text-[10px] font-semibold uppercase tracking-widest mb-1 text-ink/60;
   }
   .required-dot::after {
     content: '';
@@ -163,8 +176,8 @@ html, body {
     background: #22c55e;
   }
   .badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-50 text-brand-600 border;
-    border-color: rgba(100, 99, 224, 0.25);
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-50 text-brand-600;
+    border: 1px solid var(--line);
   }
   .canvas-dots {
     background-color: var(--canvas);

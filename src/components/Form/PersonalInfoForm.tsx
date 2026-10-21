@@ -24,7 +24,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             Full Name <span className="text-rose-500">*</span>
           </label>
           <div className="relative">
-            <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <User className="w-4 h-4 text-ink/40 absolute left-3 top-2.5" />
             <input
               type="text"
               value={data.fullName || ''}
@@ -41,7 +41,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             Target Job Title <span className="text-rose-500">*</span>
           </label>
           <div className="relative">
-            <Briefcase className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <Briefcase className="w-4 h-4 text-ink/40 absolute left-3 top-2.5" />
             <input
               type="text"
               value={data.jobTitle || ''}
@@ -58,7 +58,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             Email Address <span className="text-rose-500">*</span>
           </label>
           <div className="relative">
-            <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <Mail className="w-4 h-4 text-ink/40 absolute left-3 top-2.5" />
             <input
               type="email"
               value={data.email || ''}
@@ -75,7 +75,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             Phone Number
           </label>
           <div className="relative">
-            <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <Phone className="w-4 h-4 text-ink/40 absolute left-3 top-2.5" />
             <input
               type="tel"
               value={data.phone || ''}
@@ -92,7 +92,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             Location (City, State / Remote)
           </label>
           <div className="relative">
-            <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <MapPin className="w-4 h-4 text-ink/40 absolute left-3 top-2.5" />
             <input
               type="text"
               value={data.location || ''}
@@ -109,7 +109,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             Portfolio / Personal Website
           </label>
           <div className="relative">
-            <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <Globe className="w-4 h-4 text-ink/40 absolute left-3 top-2.5" />
             <input
               type="url"
               value={data.website || ''}
@@ -126,7 +126,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             LinkedIn Profile
           </label>
           <div className="relative">
-            <LinkedinIcon className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <LinkedinIcon className="w-4 h-4 text-ink/40 absolute left-3 top-2.5" />
             <input
               type="text"
               value={data.linkedin || ''}
@@ -143,7 +143,7 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
             GitHub / Code Repository
           </label>
           <div className="relative">
-            <GithubIcon className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <GithubIcon className="w-4 h-4 text-ink/40 absolute left-3 top-2.5" />
             <input
               type="text"
               value={data.github || ''}

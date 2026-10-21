@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import {
   User,
@@ -50,6 +50,7 @@ import { TrendAdvisorModal } from './components/Modals/TrendAdvisorModal';
 import { JobMatcherModal } from './components/Modals/JobMatcherModal';
 import { ApiKeyModal } from './components/Modals/ApiKeyModal';
 import { ResumeUploadModal } from './components/Modals/ResumeUploadModal';
+import { Modal } from './components/common/Modal';
 import { CommandPalette } from './components/CommandPalette';
 import { useToast } from './components/common/Toast';
 import { printResume, exportResumeToPdf } from './utils/pdfExport';
@@ -248,39 +249,187 @@ export const App: React.FC = () => {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
-  // Command Palette Ctrl+K Listener
-  useEffect(() => {
-    const handleCommandPaletteKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setIsCommandPaletteOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleCommandPaletteKey);
-    return () => window.removeEventListener('keydown', handleCommandPaletteKey);
-  }, []);
-
-  // Live ATS Scoring with activeProfileId
-  const atsResult = useMemo(() => {
-    return calculateLiveATSScore(resumeData, activeProfileId);
-  }, [resumeData, activeProfileId]);
-
   // Confirmation state before overwriting resume
   const [pendingOverwrite, setPendingOverwrite] = useState<{
     type: 'sample' | 'blank';
     key?: string;
   } | null>(null);
 
-  // Esc key closes onboarding/home if user already has data
+  // Track open layers with a ref so popstate event listener always reads current state
+  const openLayersRef = useRef({
+    pendingOverwrite: false,
+    isUploadModalOpen: false,
+    isJobMatcherOpen: false,
+    isJobRadarOpen: false,
+    isTrendAdvisorOpen: false,
+    isApiKeyModalOpen: false,
+    isCommandPaletteOpen: false,
+    showOnboarding: false,
+    hasResumeData: false,
+  });
+
+  useEffect(() => {
+    openLayersRef.current = {
+      pendingOverwrite: !!pendingOverwrite,
+      isUploadModalOpen,
+      isJobMatcherOpen,
+      isJobRadarOpen,
+      isTrendAdvisorOpen,
+      isApiKeyModalOpen,
+      isCommandPaletteOpen,
+      showOnboarding,
+      hasResumeData: !isResumeEmpty(resumeData),
+    };
+  }, [
+    pendingOverwrite,
+    isUploadModalOpen,
+    isJobMatcherOpen,
+    isJobRadarOpen,
+    isTrendAdvisorOpen,
+    isApiKeyModalOpen,
+    isCommandPaletteOpen,
+    showOnboarding,
+    resumeData,
+  ]);
+
+  // History API helper to close the topmost open layer
+  const closeTopmostDirectly = useCallback(() => {
+    const cur = openLayersRef.current;
+    if (cur.pendingOverwrite) setPendingOverwrite(null);
+    else if (cur.isUploadModalOpen) setIsUploadModalOpen(false);
+    else if (cur.isJobMatcherOpen) setIsJobMatcherOpen(false);
+    else if (cur.isJobRadarOpen) setIsJobRadarOpen(false);
+    else if (cur.isTrendAdvisorOpen) setIsTrendAdvisorOpen(false);
+    else if (cur.isApiKeyModalOpen) setIsApiKeyModalOpen(false);
+    else if (cur.isCommandPaletteOpen) setIsCommandPaletteOpen(false);
+    else if (cur.showOnboarding && cur.hasResumeData) setShowOnboarding(false);
+  }, []);
+
+  const closeLayer = useCallback(() => {
+    if (window.history.state?.layer === 'modal' || window.history.state?.layer === 'home') {
+      window.history.back();
+    } else {
+      closeTopmostDirectly();
+    }
+  }, [closeTopmostDirectly]);
+
+  // Open layer helpers that push history state
+  const openModal = useCallback((setter: React.Dispatch<React.SetStateAction<boolean>>) => {
+    window.history.pushState({ layer: 'modal' }, '');
+    setter(true);
+  }, []);
+
+  const openHome = useCallback(() => {
+    window.history.pushState({ layer: 'home' }, '');
+    setShowOnboarding(true);
+  }, []);
+
+  // History API: push base state on first load, handle browser Back button via popstate
+  useEffect(() => {
+    if (!window.history.state || window.history.state.layer !== 'base') {
+      window.history.replaceState({ layer: 'base' }, '');
+    }
+    if (showOnboarding) {
+      window.history.pushState({ layer: 'home' }, '');
+    }
+
+    const handlePopState = () => {
+      const cur = openLayersRef.current;
+
+      // 1. Close any open modal first
+      if (cur.pendingOverwrite) {
+        setPendingOverwrite(null);
+        return;
+      }
+      if (cur.isUploadModalOpen) {
+        setIsUploadModalOpen(false);
+        return;
+      }
+      if (cur.isJobMatcherOpen) {
+        setIsJobMatcherOpen(false);
+        return;
+      }
+      if (cur.isJobRadarOpen) {
+        setIsJobRadarOpen(false);
+        return;
+      }
+      if (cur.isTrendAdvisorOpen) {
+        setIsTrendAdvisorOpen(false);
+        return;
+      }
+      if (cur.isApiKeyModalOpen) {
+        setIsApiKeyModalOpen(false);
+        return;
+      }
+      if (cur.isCommandPaletteOpen) {
+        setIsCommandPaletteOpen(false);
+        return;
+      }
+
+      // 2. If no modal, close Home (if open and user already has data)
+      if (cur.showOnboarding && cur.hasResumeData) {
+        setShowOnboarding(false);
+        return;
+      }
+
+      // 3. Never exit the app — re-push base state so user stays in app
+      window.history.pushState({ layer: 'base' }, '');
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Command Palette Ctrl+K Listener
+  useEffect(() => {
+    const handleCommandPaletteKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => {
+          if (!prev) {
+            window.history.pushState({ layer: 'modal' }, '');
+            return true;
+          } else {
+            closeLayer();
+            return false;
+          }
+        });
+      }
+    };
+    window.addEventListener('keydown', handleCommandPaletteKey);
+    return () => window.removeEventListener('keydown', handleCommandPaletteKey);
+  }, [closeLayer]);
+
+  // Live ATS Scoring with activeProfileId
+  const atsResult = useMemo(() => {
+    return calculateLiveATSScore(resumeData, activeProfileId);
+  }, [resumeData, activeProfileId]);
+
+  // Esc key closes Home layer if user already has data and no modal is open
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showOnboarding && !isResumeEmpty(resumeData)) {
-        setShowOnboarding(false);
+      if (e.key === 'Escape') {
+        const cur = openLayersRef.current;
+        // Modals manage their own Escape key via Modal component
+        if (
+          cur.pendingOverwrite ||
+          cur.isUploadModalOpen ||
+          cur.isJobMatcherOpen ||
+          cur.isJobRadarOpen ||
+          cur.isTrendAdvisorOpen ||
+          cur.isApiKeyModalOpen ||
+          cur.isCommandPaletteOpen
+        ) {
+          return;
+        }
+        if (cur.showOnboarding && cur.hasResumeData) {
+          closeLayer();
+        }
       }
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [showOnboarding, resumeData]);
+  }, [closeLayer]);
 
   // Execute confirmed overwrite
   const handleExecuteOverwrite = (saveFirst = false) => {
@@ -305,11 +454,13 @@ export const App: React.FC = () => {
       }
     }
     setPendingOverwrite(null);
+    window.history.replaceState({ layer: 'base' }, '');
   };
 
   // Safe handler for clicking sample
   const handleRequestSample = (key: string) => {
     if (!isResumeEmpty(resumeData)) {
+      window.history.pushState({ layer: 'modal' }, '');
       setPendingOverwrite({ type: 'sample', key });
     } else {
       handleLoadSample(key);
@@ -321,6 +472,7 @@ export const App: React.FC = () => {
   // Safe handler for clicking blank
   const handleRequestBlank = () => {
     if (!isResumeEmpty(resumeData)) {
+      window.history.pushState({ layer: 'modal' }, '');
       setPendingOverwrite({ type: 'blank' });
     } else {
       pushHistory(blankResumeData);
@@ -372,7 +524,9 @@ export const App: React.FC = () => {
     };
     pushHistory(merged);
     setShowOnboarding(false);
+    setIsUploadModalOpen(false);
     localStorage.setItem('resume-data', JSON.stringify(merged));
+    window.history.replaceState({ layer: 'base' }, '');
     showToast('Resume imported and structured successfully!', 'success');
     confetti({ particleCount: 70, spread: 80 });
   };
@@ -592,14 +746,14 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-canvas font-sans selection:bg-brand-600 selection:text-white">
+    <div className="min-h-screen flex flex-col bg-canvas font-sans">
       {/* Top Navbar */}
       <Header
         atsResult={atsResult}
-        onOpenJobMatcher={() => setIsJobMatcherOpen(true)}
-        onOpenJobRadar={() => setIsJobRadarOpen(true)}
-        onOpenTrendAdvisor={() => setIsTrendAdvisorOpen(true)}
-        onOpenApiKeyModal={() => setIsApiKeyModalOpen(true)}
+        onOpenJobMatcher={() => openModal(setIsJobMatcherOpen)}
+        onOpenJobRadar={() => openModal(setIsJobRadarOpen)}
+        onOpenTrendAdvisor={() => openModal(setIsTrendAdvisorOpen)}
+        onOpenApiKeyModal={() => openModal(setIsApiKeyModalOpen)}
         onLoadSample={handleLoadSample}
         onExportJson={handleExportJson}
         onPrint={printResume}
@@ -610,12 +764,12 @@ export const App: React.FC = () => {
         canUndo={historyIndex > 0}
         canRedo={historyIndex < history.length - 1}
         savedAt={savedAt}
-        onOpenUpload={() => setIsUploadModalOpen(true)}
-        onOpenHome={() => setShowOnboarding(true)}
+        onOpenUpload={() => openModal(setIsUploadModalOpen)}
+        onOpenHome={openHome}
         onNewResume={() => {
           if (!isResumeEmpty(resumeData)) {
+            window.history.pushState({ layer: 'modal' }, '');
             setPendingOverwrite({ type: 'blank' });
-            setShowOnboarding(true);
           } else {
             pushHistory(blankResumeData);
             showToast('Started blank resume', 'info');
@@ -626,18 +780,19 @@ export const App: React.FC = () => {
         onSelectProfileId={handleSelectProfileId}
         themeMode={themeMode}
         onToggleThemeMode={handleToggleThemeMode}
+        isHomeOpen={showOnboarding}
       />
 
-      {showOnboarding ? (
-        /* Full-Screen Centered Onboarding / Home Flow */
-        <div className="flex-1 flex items-center justify-center p-6 bg-canvas canvas-dots relative">
-          <div className="w-full max-w-3xl card shadow-paper p-8 text-center space-y-7 animate-in zoom-in-95 relative border border-border">
+      {/* Full-Screen Centered Onboarding / Home Layer (fixed inset-0 top-14) */}
+      {showOnboarding && (
+        <div className="fixed inset-0 top-14 z-30 bg-canvas canvas-dots overflow-y-auto flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-150">
+          <div className="w-full max-w-4xl card shadow-paper p-6 sm:p-8 text-center space-y-6 sm:space-y-7 relative border border-line my-auto">
             {/* Close button if user already has data */}
             {!isResumeEmpty(resumeData) && (
               <button
                 type="button"
-                onClick={() => setShowOnboarding(false)}
-                className="absolute top-4 right-4 p-2 rounded-xl text-ink/40 hover:text-ink hover:bg-black/5 dark:hover:bg-white/5 transition"
+                onClick={closeLayer}
+                className="absolute top-4 right-4 p-2 rounded-xl text-ink/40 hover:text-ink hover:bg-muted transition"
                 title="Continue editing (Esc)"
               >
                 <X className="w-5 h-5" />
@@ -651,68 +806,31 @@ export const App: React.FC = () => {
               <h1 className="text-2xl font-bold font-display text-ink tracking-tight">
                 ResumeCraft AI Studio
               </h1>
-              <p className="text-xs text-ink/50 mt-1 max-w-md mx-auto">
+              <p className="text-xs text-ink/60 mt-1 max-w-md mx-auto">
                 Build, optimize, and tailor your executive ATS-ready resume with Gemini 3.8 AI
               </p>
             </div>
 
-            {/* Overwrite Confirmation Dialog */}
-            {pendingOverwrite && (
-              <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-2xl text-left space-y-3 animate-in fade-in">
-                <div className="flex items-center gap-2 font-bold text-xs text-amber-800 dark:text-amber-300">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>Existing Resume Detected</span>
-                </div>
-                <p className="text-xs text-amber-900/80 dark:text-amber-200/80 leading-relaxed">
-                  You already have resume content in memory. Creating a new resume will replace your current workspace. Would you like to backup your resume first?
-                </p>
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => handleExecuteOverwrite(true)}
-                    className="btn bg-amber-600 text-white hover:bg-amber-700 text-xs font-bold flex items-center gap-1.5 shadow-sm"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Save Current as JSON First</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleExecuteOverwrite(false)}
-                    className="btn-ghost text-xs text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-800"
-                  >
-                    Overwrite Without Saving
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPendingOverwrite(null)}
-                    className="text-xs font-semibold text-ink/60 hover:text-ink ml-2"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
             {/* Main Options Grid */}
-            <div className={`grid grid-cols-1 ${!isResumeEmpty(resumeData) ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4 text-left`}>
+            <div className={`grid grid-cols-1 ${!isResumeEmpty(resumeData) ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'} gap-4 text-left`}>
               {/* Card 0: Continue Editing (when resume has content) */}
               {!isResumeEmpty(resumeData) && (
                 <div
-                  onClick={() => setShowOnboarding(false)}
-                  className="card p-4 border border-brand-500/30 bg-brand-50/30 hover:border-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
+                  onClick={closeLayer}
+                  className="card p-5 border border-brand-500/30 bg-card hover:ring-2 hover:ring-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
                 >
                   <div>
-                    <div className="p-2 rounded-xl bg-brand-50 text-brand-600 w-fit mb-2.5 group-hover:scale-105 transition-transform">
-                      <ArrowRight className="w-4 h-4" />
+                    <div className="p-2.5 rounded-xl bg-brand-50 text-brand-600 w-fit mb-3 group-hover:scale-105 transition-transform">
+                      <ArrowRight className="w-5 h-5" />
                     </div>
-                    <h3 className="text-xs font-bold text-ink group-hover:text-brand-600 transition-colors">
+                    <h3 className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors">
                       Continue Editing
                     </h3>
-                    <p className="text-[11px] text-ink/50 mt-1 leading-relaxed">
+                    <p className="text-xs text-ink/60 mt-1 leading-relaxed">
                       Resume editing "{resumeData.personalInfo.fullName || 'Untitled'}" with current live changes.
                     </p>
                   </div>
-                  <div className="mt-3 pt-2 border-t border-border text-[11px] font-bold text-brand-600 flex items-center gap-1">
+                  <div className="mt-4 pt-3 border-t border-line text-xs font-bold text-brand-600 flex items-center gap-1">
                     <span>Back to Workspace →</span>
                   </div>
                 </div>
@@ -720,54 +838,60 @@ export const App: React.FC = () => {
 
               {/* Card 1: Upload Resume */}
               <div
-                onClick={() => setIsUploadModalOpen(true)}
-                className="card p-4 border border-border hover:border-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
+                onClick={() => openModal(setIsUploadModalOpen)}
+                className="card p-5 border border-line bg-card hover:ring-2 hover:ring-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
               >
                 <div>
-                  <div className="p-2 rounded-xl bg-brand-50 text-brand-600 w-fit mb-2.5 group-hover:scale-105 transition-transform">
-                    <Upload className="w-4 h-4" />
+                  <div className="p-2.5 rounded-xl bg-brand-50 text-brand-600 w-fit mb-3 group-hover:scale-105 transition-transform">
+                    <Upload className="w-5 h-5" />
                   </div>
-                  <h3 className="text-xs font-bold text-ink group-hover:text-brand-600 transition-colors">
+                  <h3 className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors">
                     Upload Resume
                   </h3>
-                  <p className="text-[11px] text-ink/50 mt-1 leading-relaxed">
+                  <p className="text-xs text-ink/60 mt-1 leading-relaxed">
                     Import existing PDF, Word, JSON, or TXT file. Gemini extracts and structures your data automatically.
                   </p>
                 </div>
-                <div className="mt-3 pt-2 border-t border-border text-[11px] font-bold text-brand-600 flex items-center gap-1">
+                <div className="mt-4 pt-3 border-t border-line text-xs font-bold text-brand-600 flex items-center gap-1">
                   <span>Import Document →</span>
                 </div>
               </div>
 
               {/* Card 2: Start from Sample */}
-              <div className="card p-4 border border-border hover:border-brand-500 hover:shadow-paper/70 transition-all flex flex-col justify-between">
+              <div
+                className="card p-5 border border-line bg-card hover:ring-2 hover:ring-brand-500 hover:shadow-paper/70 transition-all flex flex-col justify-between cursor-pointer group"
+                onClick={() => handleRequestSample('aiEngineer')}
+              >
                 <div>
-                  <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 w-fit mb-2.5">
-                    <User className="w-4 h-4" />
+                  <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 w-fit mb-3 group-hover:scale-105 transition-transform">
+                    <User className="w-5 h-5" />
                   </div>
-                  <h3 className="text-xs font-bold text-ink">
+                  <h3 className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors">
                     Start from Sample
                   </h3>
-                  <p className="text-[11px] text-ink/50 mt-1 leading-relaxed">
+                  <p className="text-xs text-ink/60 mt-1 leading-relaxed">
                     Pick a production-grade curated sample profile to customize.
                   </p>
                 </div>
-                <div className="mt-3 pt-2 border-t border-border space-y-1">
+                <div className="mt-4 pt-3 border-t border-line space-y-1.5" onClick={(e) => e.stopPropagation()}>
                   <button
+                    type="button"
                     onClick={() => handleRequestSample('aiEngineer')}
-                    className="w-full text-left px-2 py-1 text-[11px] font-semibold text-ink/70 hover:text-brand-600 hover:bg-brand-50 rounded transition"
+                    className="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-ink/70 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
                   >
                     • AI Engineer
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleRequestSample('fullStack')}
-                    className="w-full text-left px-2 py-1 text-[11px] font-semibold text-ink/70 hover:text-brand-600 hover:bg-brand-50 rounded transition"
+                    className="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-ink/70 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
                   >
                     • Full-Stack Dev
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleRequestSample('fresherStudent')}
-                    className="w-full text-left px-2 py-1 text-[11px] font-semibold text-ink/70 hover:text-brand-600 hover:bg-brand-50 rounded transition"
+                    className="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-ink/70 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
                   >
                     • Graduate / Fresher
                   </button>
@@ -777,121 +901,163 @@ export const App: React.FC = () => {
               {/* Card 3: Start Blank */}
               <div
                 onClick={handleRequestBlank}
-                className="card p-4 border border-border hover:border-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
+                className="card p-5 border border-line bg-card hover:ring-2 hover:ring-brand-500 hover:shadow-paper/70 transition-all cursor-pointer group flex flex-col justify-between"
               >
                 <div>
-                  <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 w-fit mb-2.5 group-hover:scale-105 transition-transform">
-                    <FileText className="w-4 h-4" />
+                  <div className="p-2.5 rounded-xl bg-muted text-ink/70 w-fit mb-3 group-hover:scale-105 transition-transform">
+                    <FileText className="w-5 h-5" />
                   </div>
-                  <h3 className="text-xs font-bold text-ink group-hover:text-brand-600 transition-colors">
+                  <h3 className="text-sm font-bold text-ink group-hover:text-brand-600 transition-colors">
                     Start Blank
                   </h3>
-                  <p className="text-[11px] text-ink/50 mt-1 leading-relaxed">
+                  <p className="text-xs text-ink/60 mt-1 leading-relaxed">
                     Build from scratch with a clean slate, filling each section guided by AI suggestions.
                   </p>
                 </div>
-                <div className="mt-3 pt-2 border-t border-border text-[11px] font-bold text-ink/60 flex items-center gap-1">
+                <div className="mt-4 pt-3 border-t border-line text-xs font-bold text-ink/60 flex items-center gap-1">
                   <span>Create Clean Slate →</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      ) : (
-        <>
-          {/* Mobile Tab Toggle */}
-          <div className="no-print lg:hidden flex border-b border-black/[0.06] bg-white sticky top-14 z-30">
-            <button
-              onClick={() => setMobileTab('edit')}
-              className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition-colors ${
-                mobileTab === 'edit'
-                  ? 'border-brand-600 text-brand-600'
-                  : 'border-transparent text-ink/50 hover:text-ink'
-              }`}
-            >
-              <Edit3 className="w-3.5 h-3.5" strokeWidth={1.75} />
-              <span>Editor</span>
-            </button>
-            <button
-              onClick={() => setMobileTab('preview')}
-              className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition-colors ${
-                mobileTab === 'preview'
-                  ? 'border-brand-600 text-brand-600'
-                  : 'border-transparent text-ink/50 hover:text-ink'
-              }`}
-            >
-              <Eye className="w-3.5 h-3.5" strokeWidth={1.75} />
-              <span>Preview (ATS: {atsResult.score})</span>
-            </button>
+      )}
+
+      {/* Mobile Tab Toggle */}
+      <div className="no-print lg:hidden flex border-b border-line bg-card sticky top-14 z-20">
+        <button
+          onClick={() => setMobileTab('edit')}
+          className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition-colors ${
+            mobileTab === 'edit'
+              ? 'border-brand-600 text-brand-600'
+              : 'border-transparent text-ink/50 hover:text-ink'
+          }`}
+        >
+          <Edit3 className="w-3.5 h-3.5" strokeWidth={1.75} />
+          <span>Editor</span>
+        </button>
+        <button
+          onClick={() => setMobileTab('preview')}
+          className={`flex-1 py-2.5 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition-colors ${
+            mobileTab === 'preview'
+              ? 'border-brand-600 text-brand-600'
+              : 'border-transparent text-ink/50 hover:text-ink'
+          }`}
+        >
+          <Eye className="w-3.5 h-3.5" strokeWidth={1.75} />
+          <span>Preview (ATS: {atsResult.score})</span>
+        </button>
+      </div>
+
+      {/* Main Split-Screen Workspace */}
+      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden h-[calc(100vh-56px)]">
+        {/* Left: Editor Panel */}
+        <div
+          className={`no-print w-full lg:w-[420px] xl:w-[480px] lg:shrink-0 h-full overflow-y-auto p-4 space-y-3 border-r border-line bg-canvas ${
+            mobileTab === 'edit' ? 'block' : 'hidden lg:block'
+          }`}
+        >
+          <div className="flex items-center justify-between py-1">
+            <div>
+              <h2 className="text-sm font-semibold text-ink tracking-tight">Resume Content</h2>
+              <p className="text-[11px] text-ink/40 mt-0.5">Live preview updates in real-time.</p>
+            </div>
+            <div className="badge">
+              <Sparkles className="w-3 h-3 mr-1" strokeWidth={1.75} />
+              AI Active
+            </div>
           </div>
 
-          {/* Main Split-Screen Workspace */}
-          <main className="flex-1 flex flex-col lg:flex-row overflow-hidden h-[calc(100vh-56px)]">
-            {/* Left: Editor Panel */}
-            <div
-              className={`no-print w-full lg:w-[420px] xl:w-[480px] lg:shrink-0 h-full overflow-y-auto p-4 space-y-3 border-r border-black/[0.06] bg-canvas ${
-                mobileTab === 'edit' ? 'block' : 'hidden lg:block'
-              }`}
+          {/* Completeness Bar */}
+          <CompletenessBar data={resumeData} />
+
+          {/* Section Nav */}
+          <SectionNav onOpenSection={handleOpenSection} />
+
+          {/* Form Sections (Orderable & Hideable) */}
+          <div className="space-y-3">
+            {sectionOrder.map((secId) => renderSectionItem(secId))}
+          </div>
+        </div>
+
+        {/* Right: Live Preview */}
+        <div
+          className={`w-full lg:flex-1 h-full overflow-hidden ${
+            mobileTab === 'preview' ? 'block' : 'hidden lg:block'
+          }`}
+        >
+          <ResumePreview
+            data={resumeData}
+            activeTemplate={activeTemplate}
+            onChangeTemplate={setActiveTemplate}
+            theme={theme}
+            onChangeTheme={setTheme}
+            onOpenUpload={() => openModal(setIsUploadModalOpen)}
+            onLoadSample={handleLoadSample}
+          />
+        </div>
+      </main>
+
+      {/* Overwrite Confirmation Modal */}
+      <Modal
+        isOpen={!!pendingOverwrite}
+        onClose={closeLayer}
+        title="Existing Resume Detected"
+        icon={<AlertTriangle className="w-5 h-5 text-amber-600" />}
+        maxWidth="max-w-md"
+        footer={
+          <div className="flex flex-wrap items-center justify-end gap-2 w-full">
+            <button
+              type="button"
+              onClick={closeLayer}
+              className="btn-ghost text-xs"
             >
-              <div className="flex items-center justify-between py-1">
-                <div>
-                  <h2 className="text-sm font-semibold text-ink tracking-tight">Resume Content</h2>
-                  <p className="text-[11px] text-ink/40 mt-0.5">Live preview updates in real-time.</p>
-                </div>
-                <div className="badge">
-                  <Sparkles className="w-3 h-3 mr-1" strokeWidth={1.75} />
-                  AI Active
-                </div>
-              </div>
-
-              {/* Completeness Bar */}
-              <CompletenessBar data={resumeData} />
-
-              {/* Section Nav */}
-              <SectionNav onOpenSection={handleOpenSection} />
-
-              {/* Form Sections (Orderable & Hideable) */}
-              <div className="space-y-3">
-                {sectionOrder.map((secId) => renderSectionItem(secId))}
-              </div>
-            </div>
-
-            {/* Right: Live Preview */}
-            <div
-              className={`w-full lg:flex-1 h-full overflow-hidden ${
-                mobileTab === 'preview' ? 'block' : 'hidden lg:block'
-              }`}
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExecuteOverwrite(false)}
+              className="btn-outline text-xs text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/40"
             >
-              <ResumePreview
-                data={resumeData}
-                activeTemplate={activeTemplate}
-                onChangeTemplate={setActiveTemplate}
-                theme={theme}
-                onChangeTheme={setTheme}
-                onOpenUpload={() => setIsUploadModalOpen(true)}
-                onLoadSample={handleLoadSample}
-              />
-            </div>
-          </main>
-        </>
-      )}
+              Overwrite Without Saving
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExecuteOverwrite(true)}
+              className="btn bg-amber-600 text-white hover:bg-amber-700 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Save Backup & Continue</span>
+            </button>
+          </div>
+        }
+      >
+        <div className="p-5 space-y-3">
+          <p className="text-xs text-ink/70 leading-relaxed">
+            You already have resume content in memory ({resumeData.personalInfo.fullName || 'Active Resume'}). Loading a new profile or starting blank will replace your current workspace.
+          </p>
+          <p className="text-[11px] text-ink/50">
+            Would you like to export your current resume as a JSON backup first?
+          </p>
+        </div>
+      </Modal>
 
       {/* Feature Modals */}
       <JobRadarModal
         isOpen={isJobRadarOpen}
-        onClose={() => setIsJobRadarOpen(false)}
+        onClose={closeLayer}
         resumeData={resumeData}
       />
 
       <TrendAdvisorModal
         isOpen={isTrendAdvisorOpen}
-        onClose={() => setIsTrendAdvisorOpen(false)}
+        onClose={closeLayer}
         resumeData={resumeData}
       />
 
       <JobMatcherModal
         isOpen={isJobMatcherOpen}
-        onClose={() => setIsJobMatcherOpen(false)}
+        onClose={closeLayer}
         resumeData={resumeData}
         initialAtsResult={atsResult}
         onApplyTailoring={handleApplyTailoring}
@@ -903,25 +1069,25 @@ export const App: React.FC = () => {
 
       <ApiKeyModal
         isOpen={isApiKeyModalOpen}
-        onClose={() => setIsApiKeyModalOpen(false)}
+        onClose={closeLayer}
         onThemeChange={handleThemeChange}
       />
 
       <ResumeUploadModal
         isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
+        onClose={closeLayer}
         onConfirm={handleConfirmUpload}
       />
 
       <CommandPalette
         isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
+        onClose={closeLayer}
         onSelectTemplate={setActiveTemplate}
         onJumpSection={(id) => {
           handleOpenSection(id);
           document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }}
-        onOpenUpload={() => setIsUploadModalOpen(true)}
+        onOpenUpload={() => openModal(setIsUploadModalOpen)}
         onExportJson={handleExportJson}
         onLoadSample={handleLoadSample}
         onDownloadPdf={handleDownloadPdf}

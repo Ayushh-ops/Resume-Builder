@@ -17,7 +17,9 @@ export default {
         ink: 'rgb(var(--ink-rgb) / <alpha-value>)',
         canvas: 'rgb(var(--canvas-rgb) / <alpha-value>)',
         card: 'rgb(var(--card-rgb) / <alpha-value>)',
-        border: 'var(--border)',
+        muted: 'rgb(var(--muted-rgb) / <alpha-value>)',
+        line: 'var(--line)',
+        border: 'var(--line)',
         brand: {
           50:  'var(--brand-50)',
           500: 'var(--brand-500)',

@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
   TrendingUp,
-  X,
   Sparkles,
   ArrowRight,
   RefreshCw,
   Lightbulb,
 } from 'lucide-react';
+import { Modal } from '../common/Modal';
 import type { ResumeData, TrendUpgradeTip } from '../../types/resume';
 import { getModernUpgradeTips } from '../../services/geminiService';
 
@@ -27,10 +27,6 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       loadTips();
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = '';
-      };
     }
   }, [isOpen]);
 
@@ -52,19 +48,19 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
     switch (severity) {
       case 'high':
         return (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
             High Priority
           </span>
         );
       case 'medium':
         return (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
             Recommended
           </span>
         );
       default:
         return (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-50 text-brand-600 border border-brand-500/20">
             Polish
           </span>
         );
@@ -72,117 +68,101 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="px-6 py-4 bg-white border-b border-black/[0.06] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600">
-              <TrendingUp className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-ink">2026 Tech Hiring Trend Advisor</h2>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  AI Evaluated
-                </span>
-              </div>
-              <p className="text-xs text-ink/50">
-                Actionable recommendations to beat modern ATS systems and stand out to hiring managers
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-ink/40 hover:text-ink p-1 rounded-lg hover:bg-black/5 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[85vh] space-y-5">
-          {/* Quick 2026 Hiring Landscape Overview */}
-          <div className="p-4 bg-gradient-to-r from-emerald-50/70 to-teal-50/70 border border-emerald-200 rounded-xl flex items-start gap-3 text-xs text-emerald-950">
-            <Lightbulb className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold text-emerald-900">What 2026 Recruiters Care About Most:</p>
-              <p className="text-emerald-800 text-[11px] mt-1 leading-relaxed">
-                Recruiters are filtering for <strong>quantifiable business outcomes</strong> (not passive responsibilities), <strong>demonstrated AI & LLM tooling adoption</strong>, and <strong>crisp 1-page ATS formatting</strong>. Here is your customized upgrade checklist:
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Personalized Recommendations ({tips.length})
-            </h3>
-            <button
-              onClick={loadTips}
-              disabled={isLoading}
-              className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {isLoading ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="w-3.5 h-3.5" />
-              )}
-              <span>{isLoading ? 'Analyzing...' : 'Re-Run AI Trend Audit'}</span>
-            </button>
-          </div>
-
-          {/* Tips List */}
-          {isLoading ? (
-            <div className="py-12 flex flex-col items-center justify-center text-slate-500 space-y-2">
-              <RefreshCw className="w-6 h-6 animate-spin text-emerald-600" />
-              <p className="text-xs">Analyzing resume against 2026 tech market benchmarks...</p>
-            </div>
-          ) : (
-            <div className="space-y-3.5">
-              {tips.map((tip, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 bg-slate-50/80 hover:bg-white border border-slate-200 rounded-xl transition-all shadow-2xs hover:shadow-xs space-y-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-900">{tip.title}</span>
-                        {getSeverityBadge(tip.severity)}
-                      </div>
-                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                        {tip.category}
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-slate-600 leading-relaxed">{tip.description}</p>
-
-                  {/* Actionable Step Box */}
-                  <div className="p-2.5 bg-emerald-50/60 border border-emerald-200/70 rounded-lg flex items-start gap-2 text-xs text-emerald-900">
-                    <ArrowRight className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold">Next Action: </span>
-                      <span className="text-emerald-800">{tip.actionableStep}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="bg-white border-t border-black/[0.06] px-4 py-3 flex justify-between items-center text-xs text-ink/50 shrink-0">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="2026 Tech Hiring Trend Advisor"
+      subtitle="Actionable recommendations to beat modern ATS systems and stand out to hiring managers"
+      icon={<TrendingUp className="w-5 h-5 text-emerald-600" />}
+      headerRight={
+        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800">
+          AI Evaluated
+        </span>
+      }
+      maxWidth="max-w-3xl"
+      footer={
+        <div className="w-full flex justify-between items-center text-xs text-ink/50">
           <span>Apply these suggestions directly in the Experience & Skills editors.</span>
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-1.5 font-semibold text-ink/70 hover:bg-black/5 rounded-lg transition-colors"
+            className="btn-outline px-4 py-1.5"
           >
             Got It
           </button>
         </div>
+      }
+    >
+      <div className="space-y-5">
+        {/* Quick 2026 Hiring Landscape Overview */}
+        <div className="p-4 bg-muted/60 border border-line rounded-xl flex items-start gap-3 text-xs text-ink">
+          <Lightbulb className="w-5 h-5 text-brand-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-ink">What 2026 Recruiters Care About Most:</p>
+            <p className="text-[11px] text-ink/70 mt-1 leading-relaxed">
+              Recruiters are filtering for <strong>quantifiable business outcomes</strong> (not passive responsibilities), <strong>demonstrated AI & LLM tooling adoption</strong>, and <strong>crisp 1-page ATS formatting</strong>. Here is your customized upgrade checklist:
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-ink/60">
+            Personalized Recommendations ({tips.length})
+          </h3>
+          <button
+            onClick={loadTips}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-brand-600 bg-brand-50 hover:bg-brand-50/80 border border-brand-500/20 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {isLoading ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5" />
+            )}
+            <span>{isLoading ? 'Analyzing...' : 'Re-Run AI Trend Audit'}</span>
+          </button>
+        </div>
+
+        {/* Tips List */}
+        {isLoading ? (
+          <div className="py-12 flex flex-col items-center justify-center text-ink/50 space-y-2">
+            <RefreshCw className="w-6 h-6 animate-spin text-brand-600" />
+            <p className="text-xs">Analyzing resume against 2026 tech market benchmarks...</p>
+          </div>
+        ) : (
+          <div className="space-y-3.5">
+            {tips.map((tip, idx) => (
+              <div
+                key={idx}
+                className="p-4 bg-card hover:bg-muted border border-line rounded-xl transition-all shadow-soft space-y-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-ink">{tip.title}</span>
+                      {getSeverityBadge(tip.severity)}
+                    </div>
+                    <span className="text-[10px] font-semibold text-ink/40 uppercase tracking-wider">
+                      {tip.category}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-ink/70 leading-relaxed">{tip.description}</p>
+
+                {/* Actionable Step Box */}
+                <div className="p-2.5 bg-brand-50/50 border border-brand-500/20 rounded-lg flex items-start gap-2 text-xs text-ink">
+                  <ArrowRight className="w-3.5 h-3.5 text-brand-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-brand-600">Next Action: </span>
+                    <span className="text-ink/80">{tip.actionableStep}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 };

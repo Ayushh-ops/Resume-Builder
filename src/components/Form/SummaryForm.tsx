@@ -40,11 +40,11 @@ export const SummaryForm: React.FC<SummaryFormProps> = ({ summary, resumeData, o
     <div className="space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate-700">Tone:</span>
+          <span className="text-xs font-semibold text-ink">Tone:</span>
           <select
             value={tone}
             onChange={(e) => setTone(e.target.value as any)}
-            className="text-xs bg-slate-50 border border-slate-200 rounded-md px-2 py-1 focus:ring-1 focus:ring-indigo-500"
+            className="text-xs bg-card border border-line rounded-md px-2 py-1 text-ink focus:ring-1 focus:ring-brand-500"
           >
             <option value="impactful">Impactful (Metrics)</option>
             <option value="technical">Technical Depth</option>
@@ -56,19 +56,19 @@ export const SummaryForm: React.FC<SummaryFormProps> = ({ summary, resumeData, o
         <button
           onClick={handleGenerate}
           disabled={isGenerating}
-          className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-brand-600 bg-brand-50 hover:bg-brand-50/80 border border-brand-500/20 rounded-lg transition-colors shadow-sm disabled:opacity-50"
         >
           {isGenerating ? (
             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
           ) : (
-            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+            <Sparkles className="w-3.5 h-3.5 text-brand-600" />
           )}
           <span>{isGenerating ? 'AI Crafting...' : 'AI Generate / Polish'}</span>
         </button>
       </div>
 
       {isGenerating && (
-        <div className="p-3 bg-brand-50/50 border border-brand-200/60 rounded-xl space-y-2 animate-in fade-in">
+        <div className="p-3 bg-brand-50/50 border border-brand-500/20 rounded-xl space-y-2 animate-in fade-in">
           <div className="flex items-center gap-1.5 text-xs text-brand-600 font-semibold mb-1">
             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
             <span>AI Crafting Professional Summary...</span>
@@ -80,29 +80,29 @@ export const SummaryForm: React.FC<SummaryFormProps> = ({ summary, resumeData, o
       )}
 
       {aiSuggestions && !isGenerating && (
-        <div className="p-3 bg-indigo-50/80 border border-indigo-200 rounded-xl space-y-2 animate-in fade-in">
-          <div className="flex items-center justify-between text-xs text-indigo-900 font-semibold">
+        <div className="p-3 bg-brand-50 border border-brand-500/20 rounded-xl space-y-2 animate-in fade-in">
+          <div className="flex items-center justify-between text-xs text-brand-700 dark:text-brand-300 font-semibold">
             <span className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+              <Sparkles className="w-3.5 h-3.5 text-brand-600" />
               AI Suggested Summary ({tone}):
             </span>
             <div className="flex items-center gap-1">
               <button
                 onClick={applyAiSuggestion}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-sm"
+                className="btn-primary py-1 px-2.5 text-xs"
               >
                 <Check className="w-3 h-3" />
                 Apply
               </button>
               <button
                 onClick={() => setAiSuggestions(null)}
-                className="px-2 py-1 text-xs text-slate-500 hover:text-slate-700"
+                className="px-2 py-1 text-xs text-ink/50 hover:text-ink"
               >
                 Dismiss
               </button>
             </div>
           </div>
-          <p className="text-xs text-slate-700 leading-relaxed italic bg-white p-2.5 rounded-lg border border-indigo-100">
+          <p className="text-xs text-ink leading-relaxed italic bg-card p-2.5 rounded-lg border border-line">
             "{aiSuggestions}"
           </p>
         </div>
@@ -114,9 +114,9 @@ export const SummaryForm: React.FC<SummaryFormProps> = ({ summary, resumeData, o
           onChange={(e) => onChange(e.target.value)}
           rows={4}
           placeholder="Dynamic professional with 5+ years of experience in..."
-          className="w-full p-3 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all leading-relaxed"
+          className="input leading-relaxed"
         />
-        <div className="flex items-center justify-between mt-1 text-[11px] text-slate-500">
+        <div className="flex items-center justify-between mt-1 text-[11px] text-ink/50">
           <span>
             {words} words{' '}
             {words >= 40 && words <= 80 ? (
@@ -124,10 +124,10 @@ export const SummaryForm: React.FC<SummaryFormProps> = ({ summary, resumeData, o
             ) : words > 80 ? (
               <span className="text-amber-600">⚠ Consider trimming to &lt;80 words</span>
             ) : (
-              <span className="text-slate-400">(Recommended: 40-80 words)</span>
+              <span className="text-ink/40">(Recommended: 40-80 words)</span>
             )}
           </span>
-          <span className="text-slate-400">Avoid 1st person ("I", "my")</span>
+          <span className="text-ink/40">Avoid 1st person ("I", "my")</span>
         </div>
       </div>
     </div>

@@ -57,7 +57,7 @@ export const CompletenessBar: React.FC<CompletenessBarProps> = ({ data }) => {
   }, [data]);
 
   return (
-    <div className="card p-2 bg-card border border-border shadow-soft transition-all">
+    <div className="card p-2 bg-card border border-line shadow-soft transition-all">
       <div className="flex items-center justify-between gap-2.5 text-xs">
         <button
           type="button"
@@ -78,20 +78,26 @@ export const CompletenessBar: React.FC<CompletenessBarProps> = ({ data }) => {
           />
         </button>
 
-        <div className="flex-1 h-1.5 bg-black/[0.06] dark:bg-white/[0.08] rounded-full overflow-hidden">
+        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
           <div
             className="h-full bg-brand-600 rounded-full transition-all duration-300"
             style={{ width: `${percentage}%` }}
           />
         </div>
 
-        <span className="text-[11px] text-ink/50 truncate max-w-[190px] text-right font-sans" title={nextHint}>
-          <span className="font-medium text-ink/70">Next:</span> {nextHint}
+        <span className="text-[11px] text-ink/60 truncate max-w-[190px] text-right font-sans" title={percentage === 100 ? '100% complete' : nextHint}>
+          {percentage === 100 ? (
+            <span className="font-medium text-ink/60">100% complete</span>
+          ) : (
+            <>
+              <span className="font-medium text-ink/70">Next:</span> {nextHint}
+            </>
+          )}
         </span>
       </div>
 
       {isExpanded && (
-        <div className="mt-2 pt-2 border-t border-border grid grid-cols-2 gap-1.5 text-[10px] text-ink/60 animate-in fade-in">
+        <div className="mt-2 pt-2 border-t border-line grid grid-cols-2 gap-1.5 text-[10px] text-ink/60 animate-in fade-in">
           <div className="flex items-center gap-1">
             <span className={data.personalInfo.fullName ? 'text-emerald-500 font-bold' : 'text-ink/30'}>•</span>
             <span>Contact Information</span>

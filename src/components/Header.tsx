@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   FileText,
   Download,
@@ -51,6 +52,7 @@ interface HeaderProps {
   onSelectProfileId?: (id: string) => void;
   themeMode?: 'light' | 'dark';
   onToggleThemeMode?: () => void;
+  isHomeOpen?: boolean;
 }
 
 const getScoreColors = (score: number, isEmpty?: boolean) => {
@@ -110,15 +112,23 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectProfileId,
   themeMode = 'light',
   onToggleThemeMode,
+  isHomeOpen = false,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [atsPopoverOpen, setAtsPopoverOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
   const atsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(e.target as Node) &&
+        menuBtnRef.current &&
+        !menuBtnRef.current.contains(e.target as Node)
+      ) {
         setMenuOpen(false);
       }
       if (atsRef.current && !atsRef.current.contains(e.target as Node)) {
@@ -128,6 +138,14 @@ export const Header: React.FC<HeaderProps> = ({
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  const handleToggleMenu = () => {
+    if (!menuOpen && menuBtnRef.current) {
+      const rect = menuBtnRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    }
+    setMenuOpen((v) => !v);
+  };
 
   const formatSavedTime = (date: Date | null) => {
     if (!date) return '';
@@ -167,144 +185,148 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Right cluster */}
         <div className="flex items-center gap-2">
 
-          {/* Undo / Redo */}
-          <div className="flex items-center gap-0.5 mr-1">
-            <button
-              type="button"
-              onClick={onUndo}
-              disabled={!canUndo}
-              className="p-1.5 rounded-lg text-ink/50 hover:text-ink hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-25 disabled:pointer-events-none transition"
-              title="Undo (Ctrl+Z)"
-            >
-              <Undo2 className="w-4 h-4" strokeWidth={1.75} />
-            </button>
-            <button
-              type="button"
-              onClick={onRedo}
-              disabled={!canRedo}
-              className="p-1.5 rounded-lg text-ink/50 hover:text-ink hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-25 disabled:pointer-events-none transition"
-              title="Redo (Ctrl+Shift+Z)"
-            >
-              <Redo2 className="w-4 h-4" strokeWidth={1.75} />
-            </button>
-          </div>
+          {/* Undo / Redo (hidden when Home is open) */}
+          {!isHomeOpen && (
+            <div className="flex items-center gap-0.5 mr-1">
+              <button
+                type="button"
+                onClick={onUndo}
+                disabled={!canUndo}
+                className="p-1.5 rounded-lg text-ink/50 hover:text-ink hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo2 className="w-4 h-4" strokeWidth={1.75} />
+              </button>
+              <button
+                type="button"
+                onClick={onRedo}
+                disabled={!canRedo}
+                className="p-1.5 rounded-lg text-ink/50 hover:text-ink hover:bg-muted disabled:opacity-25 disabled:pointer-events-none transition"
+                title="Redo (Ctrl+Shift+Z)"
+              >
+                <Redo2 className="w-4 h-4" strokeWidth={1.75} />
+              </button>
+            </div>
+          )}
 
-          {/* ATS Score badge with Popover */}
-          <div className="relative" ref={atsRef}>
-            <button
-              type="button"
-              onClick={() => setAtsPopoverOpen((v) => !v)}
-              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold transition hover:shadow-sm ${scoreInfo.badge}`}
-              title="Toggle ATS Profile & Breakdown"
-            >
-              <span className="relative flex h-2 w-2">
-                {!atsResult.isEmpty && (
-                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${scoreInfo.ping} opacity-75`} />
-                )}
-                <span className={`relative inline-flex rounded-full h-2 w-2 ${scoreInfo.dot}`} />
-              </span>
-              <span className="tabular-nums">{scoreInfo.label}</span>
-              {atsResult.profileName && !atsResult.isEmpty && (
-                <span className="text-[10px] font-normal opacity-80 max-w-[80px] truncate hidden md:inline">
-                  ({atsResult.profileName.split(' ')[0]})
+          {/* ATS Score badge with Popover (hidden when Home is open) */}
+          {!isHomeOpen && (
+            <div className="relative" ref={atsRef}>
+              <button
+                type="button"
+                onClick={() => setAtsPopoverOpen((v) => !v)}
+                className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold transition hover:shadow-sm ${scoreInfo.badge}`}
+                title="Toggle ATS Profile & Breakdown"
+              >
+                <span className="relative flex h-2 w-2">
+                  {!atsResult.isEmpty && (
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${scoreInfo.ping} opacity-75`} />
+                  )}
+                  <span className={`relative inline-flex rounded-full h-2 w-2 ${scoreInfo.dot}`} />
                 </span>
-              )}
-            </button>
+                <span className="tabular-nums">{scoreInfo.label}</span>
+                {atsResult.profileName && !atsResult.isEmpty && (
+                  <span className="text-[10px] font-normal opacity-80 max-w-[80px] truncate hidden md:inline">
+                    ({atsResult.profileName.split(' ')[0]})
+                  </span>
+                )}
+              </button>
 
-            {atsPopoverOpen && (
-              <div className="absolute top-10 right-0 w-72 card shadow-paper p-3.5 z-50 animate-in fade-in space-y-3">
-                {/* Header with Profile Selector */}
-                <div className="pb-2 border-b border-border space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-ink">ATS Evaluation</span>
-                    <span className="text-[11px] font-semibold tabular-nums text-brand-600">
-                      {atsResult.isEmpty ? 'Empty' : `${atsResult.score}/100`}
-                    </span>
+              {atsPopoverOpen && (
+                <div className="absolute top-10 right-0 w-72 card shadow-paper p-3.5 z-50 animate-in fade-in space-y-3 bg-card border border-line">
+                  {/* Header with Profile Selector */}
+                  <div className="pb-2 border-b border-line space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-ink">ATS Evaluation</span>
+                      <span className="text-[11px] font-semibold tabular-nums text-brand-600">
+                        {atsResult.isEmpty ? 'Empty' : `${atsResult.score}/100`}
+                      </span>
+                    </div>
+
+                    {/* Profile selector dropdown */}
+                    {allProfiles.length > 0 && onSelectProfileId && (
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        <span className="text-[10px] uppercase font-bold text-ink/40 shrink-0">Profile:</span>
+                        <select
+                          value={activeProfileId}
+                          onChange={(e) => onSelectProfileId(e.target.value)}
+                          className="text-[11px] bg-muted border border-line rounded px-1.5 py-0.5 text-ink flex-1 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                        >
+                          {allProfiles.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} {p.isCustom ? '(Custom)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Profile selector dropdown */}
-                  {allProfiles.length > 0 && onSelectProfileId && (
-                    <div className="flex items-center gap-1.5 pt-0.5">
-                      <span className="text-[10px] uppercase font-bold text-ink/40 shrink-0">Profile:</span>
-                      <select
-                        value={activeProfileId}
-                        onChange={(e) => onSelectProfileId(e.target.value)}
-                        className="text-[11px] bg-canvas border border-border rounded px-1.5 py-0.5 text-ink flex-1 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                      >
-                        {allProfiles.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} {p.isCustom ? '(Custom)' : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-
-                {/* Criterion breakdown / Top fixes */}
-                <div className="space-y-2 text-[11px]">
-                  {atsResult.isEmpty ? (
-                    <p className="text-ink/50 py-1 leading-relaxed">
-                      Your resume is currently empty. Add contact information, work experience, or skills to compute live ATS scores.
-                    </p>
-                  ) : atsResult.criterionResults && atsResult.criterionResults.length > 0 ? (
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-ink/40">Evaluation Breakdown</p>
-                      {atsResult.criterionResults.slice(0, 4).map((cr) => (
-                        <div key={cr.criterion.id} className="p-1.5 bg-canvas/60 rounded-lg border border-border flex items-start gap-1.5">
-                          {cr.status === 'pass' ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                          ) : cr.status === 'partial' ? (
-                            <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-                          ) : (
-                            <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between">
-                              <span className="font-semibold text-ink truncate">{cr.criterion.label}</span>
-                              <span className="text-[10px] tabular-nums text-ink/50">
-                                {cr.scoreEarned}/{cr.maxScore}
-                              </span>
+                  {/* Criterion breakdown / Top fixes */}
+                  <div className="space-y-2 text-[11px]">
+                    {atsResult.isEmpty ? (
+                      <p className="text-ink/50 py-1 leading-relaxed">
+                        Your resume is currently empty. Add contact information, work experience, or skills to compute live ATS scores.
+                      </p>
+                    ) : atsResult.criterionResults && atsResult.criterionResults.length > 0 ? (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-ink/40">Evaluation Breakdown</p>
+                        {atsResult.criterionResults.slice(0, 4).map((cr) => (
+                          <div key={cr.criterion.id} className="p-1.5 bg-muted/50 rounded-lg border border-line flex items-start gap-1.5">
+                            {cr.status === 'pass' ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                            ) : cr.status === 'partial' ? (
+                              <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                            ) : (
+                              <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between">
+                                <span className="font-semibold text-ink truncate">{cr.criterion.label}</span>
+                                <span className="text-[10px] tabular-nums text-ink/50">
+                                  {cr.scoreEarned}/{cr.maxScore}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-ink/60 leading-tight mt-0.5">{cr.fix}</p>
                             </div>
-                            <p className="text-[10px] text-ink/60 leading-tight mt-0.5">{cr.fix}</p>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {atsResult.suggestions.slice(0, 3).map((sug, i) => (
-                        <div key={i} className="flex items-start gap-1.5 text-ink/70">
-                          <span className="text-amber-500 font-bold shrink-0">•</span>
-                          <span>{sug}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {atsResult.suggestions.slice(0, 3).map((sug, i) => (
+                          <div key={i} className="flex items-start gap-1.5 text-ink/70">
+                            <span className="text-amber-500 font-bold shrink-0">•</span>
+                            <span>{sug}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
-                <div className="pt-1 border-t border-border flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAtsPopoverOpen(false);
-                      onOpenJobMatcher();
-                    }}
-                    className="w-full py-1 text-center text-[11px] font-bold text-brand-600 hover:bg-brand-50 rounded transition"
-                  >
-                    Open Full ATS & Profile Studio →
-                  </button>
+                  <div className="pt-1 border-t border-line flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAtsPopoverOpen(false);
+                        onOpenJobMatcher();
+                      }}
+                      className="w-full py-1 text-center text-[11px] font-bold text-brand-600 hover:bg-muted rounded transition"
+                    >
+                      Open Full ATS & Profile Studio →
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* Quick Light / Dark Mode Toggle */}
           {onToggleThemeMode && (
             <button
               type="button"
               onClick={onToggleThemeMode}
-              className="p-2 rounded-lg text-ink/50 hover:text-ink hover:bg-black/5 dark:hover:bg-white/5 transition active:scale-95"
+              className="p-2 rounded-lg text-ink/50 hover:text-ink hover:bg-muted transition active:scale-95"
               title={themeMode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
               {themeMode === 'dark' ? (
@@ -318,89 +340,97 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Settings icon */}
           <button
             onClick={onOpenApiKeyModal}
-            className="p-2 rounded-lg text-ink/50 hover:text-ink hover:bg-black/5 dark:hover:bg-white/5 transition active:scale-95"
+            className="p-2 rounded-lg text-ink/50 hover:text-ink hover:bg-muted transition active:scale-95"
             title="Appearance & Gemini AI settings"
           >
             <Settings className="w-4 h-4" strokeWidth={1.75} />
           </button>
 
           {/* More dropdown */}
-          <div className="relative" ref={menuRef}>
+          <div className="relative">
             <button
-              onClick={() => setMenuOpen((v) => !v)}
-              className="btn-ghost hidden sm:inline-flex"
+              ref={menuBtnRef}
+              onClick={handleToggleMenu}
+              className="btn-outline hidden sm:inline-flex"
             >
               <MoreHorizontal className="w-4 h-4" strokeWidth={1.75} />
               <span>More</span>
               <ChevronDown className={`w-3 h-3 transition-transform ${menuOpen ? 'rotate-180' : ''}`} strokeWidth={2} />
             </button>
 
-            {menuOpen && (
-              <div className="absolute right-0 mt-2 w-52 card shadow-paper py-1.5 z-50">
-                {/* Navigation actions */}
-                <p className="label px-3 pt-1 pb-1">Navigation</p>
-                <button
-                  onClick={() => {
-                    onOpenHome?.();
-                    close();
+            {menuOpen &&
+              createPortal(
+                <div
+                  ref={menuRef}
+                  style={{
+                    position: 'fixed',
+                    top: menuPos.top,
+                    right: menuPos.right,
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-brand-50 hover:text-brand-600 transition"
+                  className="w-52 card shadow-paper py-1.5 z-50 border border-line bg-card animate-in fade-in zoom-in-95 duration-100"
                 >
-                  <Home className="w-3.5 h-3.5" strokeWidth={1.75} /> Home & Welcome
-                </button>
-                <button
-                  onClick={() => {
-                    onNewResume?.();
-                    close();
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-brand-50 hover:text-brand-600 transition"
-                >
-                  <FilePlus2 className="w-3.5 h-3.5" strokeWidth={1.75} /> New Resume
-                </button>
+                  {/* Navigation actions */}
+                  <p className="label px-3 pt-1 pb-1">Navigation</p>
+                  <button
+                    onClick={() => {
+                      onOpenHome?.();
+                      close();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition"
+                  >
+                    <Home className="w-3.5 h-3.5" strokeWidth={1.75} /> Home
+                  </button>
+                  <button
+                    onClick={() => {
+                      onNewResume?.();
+                      close();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition"
+                  >
+                    <FilePlus2 className="w-3.5 h-3.5" strokeWidth={1.75} /> New Resume
+                  </button>
 
-                <div className="my-1 border-t border-border" />
+                  <div className="my-1 border-t border-line" />
 
-                {/* Tools */}
-                <p className="label px-3 pt-1 pb-1">AI Tools</p>
-                <button onClick={() => { onOpenJobRadar(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-brand-50 hover:text-brand-600 transition">
-                  <Radar className="w-3.5 h-3.5" strokeWidth={1.75} /> Job Radar
-                </button>
-                <button onClick={() => { onOpenTrendAdvisor(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-brand-50 hover:text-brand-600 transition">
-                  <TrendingUp className="w-3.5 h-3.5" strokeWidth={1.75} /> 2026 Upgrade Tips
-                </button>
-                <button onClick={() => { onOpenJobMatcher(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-brand-50 hover:text-brand-600 transition">
-                  <Target className="w-3.5 h-3.5" strokeWidth={1.75} /> JD & ATS Studio
-                </button>
+                  {/* Tools */}
+                  <p className="label px-3 pt-1 pb-1">AI Tools</p>
+                  <button onClick={() => { onOpenJobRadar(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition">
+                    <Radar className="w-3.5 h-3.5" strokeWidth={1.75} /> Job Radar
+                  </button>
+                  <button onClick={() => { onOpenTrendAdvisor(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition">
+                    <TrendingUp className="w-3.5 h-3.5" strokeWidth={1.75} /> 2026 Upgrade Tips
+                  </button>
+                  <button onClick={() => { onOpenJobMatcher(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition">
+                    <Target className="w-3.5 h-3.5" strokeWidth={1.75} /> JD & ATS Studio
+                  </button>
 
-                <div className="my-1 border-t border-border" />
+                  <div className="my-1 border-t border-line" />
 
-                {/* Samples */}
-                <p className="label px-3 pt-1 pb-1">Sample Profiles</p>
-                <button onClick={() => { onLoadSample('aiEngineer'); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-brand-50 hover:text-brand-600 transition">
-                  <User className="w-3.5 h-3.5" strokeWidth={1.75} /> AI Engineer
-                </button>
-                <button onClick={() => { onLoadSample('fullStack'); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-brand-50 hover:text-brand-600 transition">
-                  <Code2 className="w-3.5 h-3.5" strokeWidth={1.75} /> Full-Stack Dev
-                </button>
-                <button onClick={() => { onLoadSample('fresherStudent'); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-brand-50 hover:text-brand-600 transition">
-                  <GraduationCap className="w-3.5 h-3.5" strokeWidth={1.75} /> Graduate / Fresher
-                </button>
+                  {/* Samples */}
+                  <p className="label px-3 pt-1 pb-1">Sample Profiles</p>
+                  <button onClick={() => { onLoadSample('aiEngineer'); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition">
+                    <User className="w-3.5 h-3.5" strokeWidth={1.75} /> AI Engineer
+                  </button>
+                  <button onClick={() => { onLoadSample('fullStack'); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition">
+                    <Code2 className="w-3.5 h-3.5" strokeWidth={1.75} /> Full-Stack Dev
+                  </button>
+                  <button onClick={() => { onLoadSample('fresherStudent'); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition">
+                    <GraduationCap className="w-3.5 h-3.5" strokeWidth={1.75} /> Graduate / Fresher
+                  </button>
 
-                <div className="my-1 border-t border-border" />
+                  <div className="my-1 border-t border-line" />
 
-                {/* Data */}
-                <p className="label px-3 pt-1 pb-1">Data & Export</p>
-                <button onClick={() => { onOpenUpload?.(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-brand-50 hover:text-brand-600 transition">
-                  <Upload className="w-3.5 h-3.5" strokeWidth={1.75} /> Upload / Import
-                </button>
-                <button onClick={() => { onExportJson(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-brand-50 hover:text-brand-600 transition">
-                  <FolderOpen className="w-3.5 h-3.5" strokeWidth={1.75} /> Export JSON
-                </button>
-                <button onClick={() => { onPrint(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-brand-50 hover:text-brand-600 transition">
-                  <Printer className="w-3.5 h-3.5" strokeWidth={1.75} /> Print
-                </button>
-              </div>
-            )}
+                  {/* Data */}
+                  <p className="label px-3 pt-1 pb-1">Data & Export</p>
+                  <button onClick={() => { onExportJson(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition">
+                    <FolderOpen className="w-3.5 h-3.5" strokeWidth={1.75} /> Export JSON
+                  </button>
+                  <button onClick={() => { onPrint(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition">
+                    <Printer className="w-3.5 h-3.5" strokeWidth={1.75} /> Print
+                  </button>
+                </div>,
+                document.body
+              )}
           </div>
 
           {/* Upload Button: on screens < 1280px (xl), collapse "Upload Resume" to icon-only with tooltip */}
@@ -408,7 +438,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onOpenUpload}
-              className="btn-ghost hidden sm:inline-flex items-center gap-1.5"
+              className="btn-outline hidden sm:inline-flex items-center gap-1.5"
               title="Upload Resume (PDF, DOCX, JSON, TXT)"
             >
               <Upload className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -416,15 +446,17 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Download PDF — primary CTA */}
-          <button
-            onClick={onDownloadPdf}
-            disabled={isDownloadingPdf}
-            className="btn-primary"
-          >
-            <Download className="w-3.5 h-3.5" strokeWidth={2} />
-            {isDownloadingPdf ? 'Generating…' : 'Download PDF'}
-          </button>
+          {/* Download PDF — primary CTA (hidden when Home is open) */}
+          {!isHomeOpen && (
+            <button
+              onClick={onDownloadPdf}
+              disabled={isDownloadingPdf}
+              className="btn-primary"
+            >
+              <Download className="w-3.5 h-3.5" strokeWidth={2} />
+              {isDownloadingPdf ? 'Generating…' : 'Download PDF'}
+            </button>
+          )}
         </div>
       </div>
     </header>

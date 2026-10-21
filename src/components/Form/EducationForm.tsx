@@ -39,10 +39,10 @@ export const EducationForm: React.FC<EducationFormProps> = ({ education, onChang
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500">Add your degrees, colleges, coursework, and academic honors.</p>
+        <p className="text-xs text-ink/60">Add your degrees, colleges, coursework, and academic honors.</p>
         <button
           onClick={handleAdd}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors shadow-sm"
+          className="btn-outline text-brand-600"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Add Education</span>
@@ -50,14 +50,14 @@ export const EducationForm: React.FC<EducationFormProps> = ({ education, onChang
       </div>
 
       {education.map((item, index) => (
-        <div key={item.id || index} className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3 relative group">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-            <span className="text-xs font-bold text-slate-800">
+        <div key={item.id || index} className="p-3.5 bg-card border border-line rounded-xl space-y-3 relative group">
+          <div className="flex items-center justify-between border-b border-line pb-2">
+            <span className="text-xs font-bold text-ink">
               {item.institution || 'University / Institution'}
             </span>
             <button
               onClick={() => handleRemove(index)}
-              className="text-slate-400 hover:text-rose-600 transition-colors p-1"
+              className="text-ink/40 hover:text-rose-600 transition-colors p-1"
               title="Delete Education"
             >
               <Trash2 className="w-4 h-4" />
@@ -66,63 +66,63 @@ export const EducationForm: React.FC<EducationFormProps> = ({ education, onChang
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Institution / University *</label>
+              <label className="label">Institution / University *</label>
               <div className="relative">
-                <GraduationCap className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                <GraduationCap className="w-3.5 h-3.5 text-ink/40 absolute left-2.5 top-2.5" />
                 <input
                   type="text"
                   value={item.institution}
                   onChange={(e) => handleUpdate(index, 'institution', e.target.value)}
                   placeholder="e.g. Stanford University"
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:ring-1 focus:ring-indigo-500"
+                  className="input pl-8"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Degree & Major *</label>
+              <label className="label">Degree & Major *</label>
               <input
                 type="text"
                 value={item.degree}
                 onChange={(e) => handleUpdate(index, 'degree', e.target.value)}
                 placeholder="e.g. Bachelor of Science in Computer Science"
-                className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:ring-1 focus:ring-indigo-500"
+                className="input"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Location</label>
+              <label className="label">Location</label>
               <div className="relative">
-                <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                <MapPin className="w-3.5 h-3.5 text-ink/40 absolute left-2.5 top-2.5" />
                 <input
                   type="text"
                   value={item.location}
                   onChange={(e) => handleUpdate(index, 'location', e.target.value)}
                   placeholder="e.g. Stanford, CA"
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:ring-1 focus:ring-indigo-500"
+                  className="input pl-8"
                 />
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               <div className="flex-1">
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Graduation Year / Dates</label>
+                <label className="label">Graduation Year / Dates</label>
                 <input
                   type="text"
                   value={item.endDate}
                   onChange={(e) => handleUpdate(index, 'endDate', e.target.value)}
                   placeholder="e.g. May 2024"
-                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:ring-1 focus:ring-indigo-500"
+                  className="input"
                 />
               </div>
               <div className="w-24">
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">GPA / Honors</label>
+                <label className="label">GPA / Honors</label>
                 <input
                   type="text"
                   value={item.grade || ''}
                   onChange={(e) => handleUpdate(index, 'grade', e.target.value)}
                   placeholder="3.85 / 4.0"
-                  className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:ring-1 focus:ring-indigo-500"
+                  className="input"
                 />
               </div>
             </div>

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Target,
-  X,
   Sparkles,
   CheckCircle,
   AlertCircle,
@@ -20,6 +19,7 @@ import {
   CheckCircle2,
   XCircle,
 } from 'lucide-react';
+import { Modal } from '../common/Modal';
 import type { ResumeData, ATSCheckResult, ATSProfile, ATSCriterion } from '../../types/resume';
 import {
   analyzeJobMatch,
@@ -82,16 +82,12 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
       const profiles = getAllATSProfiles();
       setAllProfiles(profiles);
       const currentId = getActiveProfileId();
       setActiveId(currentId);
       const res = calculateLiveATSScore(resumeData, currentId);
       setProfileAtsResult(res);
-      return () => {
-        document.body.style.overflow = '';
-      };
     }
   }, [isOpen, resumeData]);
 
@@ -272,73 +268,88 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-xs animate-in fade-in">
-      <div className="card shadow-paper w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="px-6 py-4 bg-card border-b border-border flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-brand-50 rounded-xl text-brand-600">
-              <Target className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-ink">Target JD Matcher & ATS Studio</h2>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-brand-50 text-brand-600 border border-brand-500/20">
-                  {activeTab === 'ats_profile' ? 'Profile Studio' : 'Precision Matcher'}
-                </span>
-              </div>
-              <p className="text-xs text-ink/50">
-                Score against specific ATS rubrics or tailor bullets directly to any job posting
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-ink/40 hover:text-ink p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex border-b border-border bg-canvas/60 px-6 gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('jd_matcher')}
-            className={`py-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 ${
-              activeTab === 'jd_matcher'
-                ? 'border-brand-600 text-brand-600 font-bold'
-                : 'border-transparent text-ink/60 hover:text-ink'
-            }`}
-          >
-            <Wand2 className="w-3.5 h-3.5" />
-            <span>Job Description Matcher & Tailor</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('ats_profile')}
-            className={`py-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 ${
-              activeTab === 'ats_profile'
-                ? 'border-brand-600 text-brand-600 font-bold'
-                : 'border-transparent text-ink/60 hover:text-ink'
-            }`}
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span>ATS Profiles & Criteria ({allProfiles.length})</span>
-          </button>
-          {activeTab === 'create_profile' && (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Target JD Matcher & ATS Studio"
+      subtitle="Score against specific ATS rubrics or tailor bullets directly to any job posting"
+      icon={<Target className="w-5 h-5 text-brand-600" />}
+      headerRight={
+        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-brand-50 text-brand-600 border border-brand-500/20">
+          {activeTab === 'ats_profile' ? 'Profile Studio' : 'Precision Matcher'}
+        </span>
+      }
+      maxWidth="max-w-3xl"
+      bodyClassName="p-0 flex flex-col"
+      footer={
+        tailoredChanges && activeTab === 'jd_matcher' ? (
+          <>
             <button
               type="button"
-              className="py-2.5 px-3 text-xs font-bold border-b-2 border-brand-600 text-brand-600 flex items-center gap-1.5"
+              onClick={() => setTailoredChanges(null)}
+              className="px-4 py-1.5 font-semibold text-xs text-ink/70 hover:bg-muted rounded-lg transition-colors"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Editing Profile</span>
+              Cancel
             </button>
-          )}
-        </div>
+            <button
+              type="button"
+              onClick={handleApplyTailoring}
+              className="btn-primary"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Apply Changes</span>
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-outline px-4 py-1.5"
+          >
+            Close
+          </button>
+        )
+      }
+    >
+      {/* Tab Navigation */}
+      <div className="flex border-b border-line bg-card px-6 gap-2 shrink-0">
+        <button
+          type="button"
+          onClick={() => setActiveTab('jd_matcher')}
+          className={`py-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 ${
+            activeTab === 'jd_matcher'
+              ? 'border-brand-600 text-brand-600 font-bold'
+              : 'border-transparent text-ink/60 hover:text-ink'
+          }`}
+        >
+          <Wand2 className="w-3.5 h-3.5" />
+          <span>Job Description Matcher & Tailor</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('ats_profile')}
+          className={`py-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 ${
+            activeTab === 'ats_profile'
+              ? 'border-brand-600 text-brand-600 font-bold'
+              : 'border-transparent text-ink/60 hover:text-ink'
+          }`}
+        >
+          <Sliders className="w-3.5 h-3.5" />
+          <span>ATS Profiles & Criteria ({allProfiles.length})</span>
+        </button>
+        {activeTab === 'create_profile' && (
+          <button
+            type="button"
+            className="py-2.5 px-3 text-xs font-bold border-b-2 border-brand-600 text-brand-600 flex items-center gap-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Editing Profile</span>
+          </button>
+        )}
+      </div>
 
-        {/* Body */}
-        <div className="p-6 overflow-y-auto max-h-[85vh] space-y-6">
+      {/* Body */}
+      <div className="p-6 overflow-y-auto max-h-[75vh] space-y-6">
           {activeTab === 'jd_matcher' && (
             <>
               {tailoredChanges ? (
@@ -1003,37 +1014,6 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
             </div>
           )}
         </div>
-
-        {/* Footer */}
-        <div className="bg-card border-t border-border px-4 py-3 flex justify-end gap-2 shrink-0">
-          {tailoredChanges && activeTab === 'jd_matcher' ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setTailoredChanges(null)}
-                className="px-4 py-1.5 font-semibold text-xs text-ink/70 hover:bg-black/5 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleApplyTailoring}
-                className="btn-primary"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>Apply Changes</span>
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={onClose}
-              className="px-4 py-1.5 font-semibold text-xs text-ink/70 hover:bg-black/5 rounded-lg transition-colors"
-            >
-              Close
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
