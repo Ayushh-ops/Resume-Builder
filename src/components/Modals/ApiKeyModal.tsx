@@ -162,6 +162,16 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                 name: 'Gemini 2.0 Flash',
                 desc: 'Fast fallback model for parsing and drafting',
               },
+              {
+                id: 'gemini-flash-latest',
+                name: 'Gemini Flash Latest',
+                desc: 'Always points to the latest Flash version',
+              },
+              {
+                id: 'gemini-1.5-flash',
+                name: 'Gemini 1.5 Flash',
+                desc: 'Proven stable fallback for high-throughput tasks',
+              },
             ].map((m) => (
               <button
                 key={m.id}

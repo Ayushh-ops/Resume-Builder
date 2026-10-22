@@ -33,7 +33,8 @@ import {
   getActiveProfileId,
   setActiveProfileId,
 } from './services/atsScorer';
-import { BulletCheck } from './components/BulletCheck';
+import { BulletBuilder } from './components/BulletBuilder';
+import { getChecklistItems } from './components/Modals/ResumeUploadModal';
 import { ModernTemplate } from './components/Preview/templates/ModernTemplate';
 import {
   getInitialTheme,
@@ -730,16 +731,66 @@ export const App: React.FC = () => {
 
   // 3. Upload handlers
   const handleUploadSaveAsNew = (importedData: Partial<ResumeData>, fileName?: string) => {
-    closeModal(setIsUploadModalOpen);
+    // 1. ALWAYS save the new resume to storage first
     const resolvedName = fileName
       ? fileName.replace(/\.[^/.]+$/, '')
       : importedData.personalInfo?.fullName || 'Imported Resume';
     const newId = createResume(importedData, resolvedName);
     justCreatedIdsRef.current.add(newId);
     setResumeIndex(getResumeIndex());
+
+    // 2. Close modal
+    closeModal(setIsUploadModalOpen);
+
+    // 3. Navigate to editor
     navigate(`/editor/${newId}`);
     showToast('Imported and saved as new resume!', 'success');
     confetti({ particleCount: 70, spread: 80 });
+
+    // 4. If Check list has items, keep accessible: open section and focus problem field
+    const checkItems = getChecklistItems(importedData);
+    if (checkItems.length > 0) {
+      const firstProblem = checkItems[0];
+      handleOpenSection(firstProblem.section);
+      setTimeout(() => {
+        if (firstProblem.fieldId) {
+          const el = document.getElementById(firstProblem.fieldId);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.focus();
+            return;
+          }
+        }
+        const secEl = document.getElementById(firstProblem.section);
+        if (secEl) {
+          secEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 300);
+    }
+  };
+
+  const handleStartResumeWithBullet = (bullet: string) => {
+    const initialData: Partial<ResumeData> = {
+      ...blankResumeData,
+      experience: [
+        {
+          id: 'exp_' + Date.now(),
+          company: '',
+          position: '',
+          location: '',
+          startDate: '',
+          endDate: '',
+          current: false,
+          highlights: [bullet],
+        },
+      ],
+    };
+    const newId = createResume(initialData, 'New Resume');
+    justCreatedIdsRef.current.add(newId);
+    setResumeIndex(getResumeIndex());
+    navigate(`/editor/${newId}`);
+    showToast('Started new resume with your bullet point!', 'success');
+    handleOpenSection('experience');
   };
 
   const handleUploadReplaceCurrent = (importedData: Partial<ResumeData>) => {
@@ -1310,12 +1361,9 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Right Column (span 5): Bullet check card */}
+                {/* Right Column (span 5): Bullet builder card */}
                 <div className="lg:col-span-5 hidden lg:flex flex-col items-center justify-center">
-                  <BulletCheck
-                    onCheckWholeResume={() => openModal(setIsUploadModalOpen)}
-                    onStartFromScratch={handleCreateNew}
-                  />
+                  <BulletBuilder onStartResumeWithBullet={handleStartResumeWithBullet} />
                 </div>
               </div>
 

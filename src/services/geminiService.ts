@@ -1,244 +1,73 @@
-import { GoogleGenAI } from '@google/genai';
 import type { ResumeData, TrendUpgradeTip, ATSCheckResult, ATSProfile } from '../types/resume';
+import {
+  getKey,
+  setKey,
+  getSelectedModel,
+  setSelectedModel,
+  listModels,
+  pickModel,
+  generate,
+  formatGeminiError,
+  CANDIDATE_MODELS,
+} from '../lib/gemini';
 
-const LOCAL_STORAGE_KEY = 'resumecraft_gemini_api_key';
-const LOCAL_STORAGE_MODEL_KEY = 'resumecraft_gemini_model';
-
-export const CANDIDATE_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'] as const;
+export { CANDIDATE_MODELS, pickModel };
 export const FALLBACK_MODELS = CANDIDATE_MODELS;
 
-export async function resolveGeminiModels(apiKey: string): Promise<string[]> {
-  const cleanKey = (apiKey || '').trim().replace(/^["']|["']$/g, '').trim();
-  if (!cleanKey) return [...CANDIDATE_MODELS];
-
-  const cacheKey = `rc_gemini_models_${cleanKey.slice(-6)}`;
-  try {
-    const cached = sessionStorage.getItem(cacheKey);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch {}
-
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`);
-    if (res.ok) {
-      const data = await res.json();
-      const modelsList: Array<{ name: string; supportedGenerationMethods?: string[] }> = data?.models || [];
-      const supported = modelsList.filter((m) =>
-        Array.isArray(m.supportedGenerationMethods) &&
-        m.supportedGenerationMethods.includes('generateContent')
-      );
-
-      const availableCleanNames = supported.map((m) => m.name.replace(/^models\//, ''));
-      const pickedCandidates = CANDIDATE_MODELS.filter((candidate) =>
-        availableCleanNames.some((avail) => avail === candidate || avail.endsWith(candidate))
-      );
-
-      if (pickedCandidates.length > 0) {
-        try {
-          sessionStorage.setItem(cacheKey, JSON.stringify(pickedCandidates));
-        } catch {}
-        return pickedCandidates;
-      }
-    }
-  } catch (err) {
-    console.warn('Failed to fetch available Gemini models list, using fallbacks:', err);
-  }
-
-  return [...CANDIDATE_MODELS];
-}
-
-export const getGeminiKey = (): string => {
-  let key = '';
-  try {
-    key = localStorage.getItem(LOCAL_STORAGE_KEY) || '';
-  } catch {}
-  if (!key && typeof import.meta !== 'undefined' && import.meta.env) {
-    key = import.meta.env.VITE_GEMINI_API_KEY || '';
-  }
-  return (key || '').trim().replace(/^["']|["']$/g, '').trim();
-};
-
-export const getStoredApiKey = getGeminiKey;
-
-export const setStoredApiKey = (key: string): void => {
-  const cleaned = (key || '').trim().replace(/^["']|["']$/g, '').trim();
-  if (cleaned) {
-    localStorage.setItem(LOCAL_STORAGE_KEY, cleaned);
-  } else {
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
-  }
-};
-
-export const getStoredModel = (): string => {
-  const saved = localStorage.getItem(LOCAL_STORAGE_MODEL_KEY);
-  if (saved && !saved.startsWith('gemini-3.')) {
-    return saved;
-  }
-  return 'gemini-2.5-flash';
-};
-
-export const setStoredModel = (model: string): void => {
-  const cleanModel = model.startsWith('gemini-3.') ? 'gemini-2.5-flash' : model;
-  localStorage.setItem(LOCAL_STORAGE_MODEL_KEY, cleanModel);
-};
+export const getGeminiKey = getKey;
+export const getStoredApiKey = getKey;
+export const setStoredApiKey = setKey;
+export const getStoredModel = getSelectedModel;
+export const setStoredModel = setSelectedModel;
 
 export function formatGeminiErrorNotice(err: any): string {
   if (!err) return 'AI unavailable';
-  if (typeof err === 'string') {
-    if (err === 'No API key set') return 'No API key set';
-    if (err === 'Timed out (20s)') return 'Timed out (20s)';
-    if (err === 'Invalid response') return 'Invalid response';
-  }
-  const status = Number(err?.status || err?.statusCode || err?.cause?.statusCode || 0);
-  const msg = (err?.message || String(err) || '').toLowerCase();
-
-  if (
-    status === 403 ||
-    status === 401 ||
-    (status === 400 && (msg.includes('api_key_invalid') || msg.includes('api key not valid') || msg.includes('key not valid'))) ||
-    msg.includes('403') ||
-    msg.includes('permission_denied') ||
-    msg.includes('api_key_invalid') ||
-    msg.includes('api key not valid')
-  ) {
-    return 'Key rejected (403)';
-  }
-
-  if (status === 404 || msg.includes('404') || msg.includes('not found')) {
-    return 'Model not found (404)';
-  }
-
-  if (
-    status === 429 ||
-    msg.includes('429') ||
-    msg.includes('resource_exhausted') ||
-    msg.includes('quota') ||
-    msg.includes('rate limit')
-  ) {
-    return 'Rate limited (429)';
-  }
-
-  if (msg.includes('timed out') || msg.includes('timeout') || msg.includes('20s')) {
-    return 'Timed out (20s)';
-  }
-
-  if (
-    msg.includes('invalid response') ||
-    msg.includes('invalid json') ||
-    msg.includes('unexpected token')
-  ) {
-    return 'Invalid response';
-  }
-
-  if (msg.includes('no api key set') || msg.includes('no key')) {
-    return 'No API key set';
-  }
-
-  return 'AI unavailable';
+  if (typeof err === 'string') return err;
+  const status = Number(err?.status || err?.statusCode || 0);
+  const msg = err?.message || String(err);
+  return formatGeminiError(status, msg);
 }
 
 export async function testGeminiKey(
   testKey?: string,
   modelToTest?: string
 ): Promise<{ success: boolean; message: string; modelUsed?: string }> {
-  const rawKey = testKey !== undefined ? testKey : getGeminiKey();
+  const rawKey = testKey !== undefined ? testKey : getKey();
   const key = (rawKey || '').trim().replace(/^["']|["']$/g, '').trim();
   if (!key) {
     return { success: false, message: 'No API key set' };
   }
 
-  const resolvedModels = await resolveGeminiModels(key);
-  const configured = (modelToTest || getStoredModel() || resolvedModels[0] || 'gemini-2.5-flash').replace(/^models\//, '');
-  const models = Array.from(new Set([configured, ...resolvedModels]))
-    .filter((m) => !m.startsWith('gemini-3.'))
-    .map((m) => m.replace(/^models\//, ''));
-
-  let lastError: any = null;
-  const client = new GoogleGenAI({ apiKey: key });
-
-  for (const m of models) {
-    try {
-      await client.models.generateContent({
-        model: m,
-        contents: 'hi',
-        config: {
-          maxOutputTokens: 1,
-        },
-      });
-      return { success: true, message: `Key works (model ${m})`, modelUsed: m };
-    } catch (err: any) {
-      lastError = err;
-      const status = Number(err?.status || err?.statusCode || 0);
-      const msg = (err?.message || String(err)).toLowerCase();
-      const errorRecord = {
-        status,
-        message: err?.message || String(err),
-      };
-      console.error(`Gemini test error with model "${m}":`, errorRecord);
-
-      // On 404 try next model
-      if (status === 404 || msg.includes('404') || msg.includes('not found')) {
-        continue;
-      }
-      break;
+  try {
+    await listModels(key);
+    const res = await generate('ok', {
+      apiKey: key,
+      preferredModel: modelToTest,
+      responseMimeType: '',
+    });
+    if (res.ok) {
+      return { success: true, message: `Works with ${res.modelUsed}`, modelUsed: res.modelUsed };
     }
+    return { success: false, message: res.message || 'Key test failed', modelUsed: res.modelUsed };
+  } catch (err: any) {
+    const status = Number(err?.status || 0);
+    const msg = err?.message || String(err);
+    return { success: false, message: formatGeminiError(status, msg) };
   }
-
-  return { success: false, message: formatGeminiErrorNotice(lastError) };
 }
 
 export async function generateGeminiText(
   prompt: string,
-  options?: { maxOutputTokens?: number; signal?: AbortSignal }
+  options?: { maxOutputTokens?: number; signal?: AbortSignal; responseMimeType?: string }
 ): Promise<string> {
-  const apiKey = getGeminiKey();
-  if (!apiKey) {
-    throw new Error('No API key set');
+  const res = await generate(prompt, {
+    signal: options?.signal,
+    responseMimeType: options?.responseMimeType || '',
+  });
+  if (!res.ok) {
+    throw new Error(res.message || 'AI request failed');
   }
-
-  const resolvedModels = await resolveGeminiModels(apiKey);
-  const configured = (getStoredModel() || resolvedModels[0] || 'gemini-2.5-flash').replace(/^models\//, '');
-  const models = Array.from(new Set([configured, ...resolvedModels]))
-    .filter((m) => !m.startsWith('gemini-3.'))
-    .map((m) => m.replace(/^models\//, ''));
-
-  let lastError: any = null;
-  const client = new GoogleGenAI({ apiKey });
-
-  for (const model of models) {
-    if (options?.signal?.aborted) {
-      throw new Error('Timed out (20s)');
-    }
-
-    try {
-      const response = await client.models.generateContent({
-        model,
-        contents: prompt,
-        config: options?.maxOutputTokens ? { maxOutputTokens: options.maxOutputTokens } : undefined,
-      });
-      return response.text || '';
-    } catch (err: any) {
-      lastError = err;
-      const status = Number(err?.status || err?.statusCode || 0);
-      const msg = (err?.message || String(err)).toLowerCase();
-      const errorRecord = {
-        status,
-        message: err?.message || String(err),
-      };
-      console.error(`Gemini call error with model "${model}":`, errorRecord);
-
-      if (status === 404 || msg.includes('404') || msg.includes('not found')) {
-        continue;
-      }
-      throw err;
-    }
-  }
-
-  throw lastError || new Error('Model not found (404)');
+  return res.text || '';
 }
 
 /**

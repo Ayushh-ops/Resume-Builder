@@ -12,34 +12,34 @@ import {
 } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import type { ResumeData } from '../../types/resume';
-import { parseAndStructureResume, type ParsedResumeResult } from '../../services/resumeParser';
+import {
+  parseAndStructureResume,
+  calculateConfidence,
+  type ParsedResumeResult,
+} from '../../services/resumeParser';
 
-interface ResumeUploadModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSaveAsNew: (data: Partial<ResumeData>, fileName?: string) => void;
-  onReplaceCurrent?: (data: Partial<ResumeData>) => void;
-  canReplace?: boolean;
-  initialFile?: File | null;
-  onGoToSection?: (sectionId: string, bulletRef?: string) => void;
-  onOpenSettings?: () => void;
+export interface ChecklistItem {
+  label: string;
+  hint: string;
+  section: string;
+  fieldId?: string;
 }
 
-type UploadStep = 'upload' | 'parsing' | 'review' | 'error';
-
-const getChecklistItems = (data: Partial<ResumeData>) => {
-  const items: { label: string; hint: string; section: string }[] = [];
+export const getChecklistItems = (data: Partial<ResumeData>): ChecklistItem[] => {
+  const items: ChecklistItem[] = [];
   if (!data.personalInfo?.fullName?.trim()) {
     items.push({
       label: 'Name missing',
       hint: 'Candidate name was not detected in the file',
       section: 'personal',
+      fieldId: 'personalInfo.fullName',
     });
   } else if ((data.personalInfo as any)?.nameSource === 'from file name') {
     items.push({
       label: 'Confirm name from file name',
       hint: 'Name was derived from file name, please verify',
       section: 'personal',
+      fieldId: 'personalInfo.fullName',
     });
   }
   if (!data.personalInfo?.jobTitle?.trim()) {
@@ -47,6 +47,7 @@ const getChecklistItems = (data: Partial<ResumeData>) => {
       label: 'Target role missing',
       hint: 'Target title is required for ATS matching and keyword suggestions',
       section: 'personal',
+      fieldId: 'personalInfo.jobTitle',
     });
   }
   if (!data.personalInfo?.email?.trim()) {
@@ -54,6 +55,7 @@ const getChecklistItems = (data: Partial<ResumeData>) => {
       label: 'Email address missing',
       hint: 'ATS parsers require at least one valid contact email',
       section: 'personal',
+      fieldId: 'personalInfo.email',
     });
   }
   if (!data.summary?.trim()) {
@@ -61,6 +63,7 @@ const getChecklistItems = (data: Partial<ResumeData>) => {
       label: 'Empty summary',
       hint: 'A 2-4 sentence executive overview improves profile visibility',
       section: 'summary',
+      fieldId: 'summary',
     });
   }
   if (!data.experience || data.experience.length === 0) {
@@ -68,14 +71,25 @@ const getChecklistItems = (data: Partial<ResumeData>) => {
       label: 'No experience entries',
       hint: 'Add your work history and achievements',
       section: 'experience',
+      fieldId: 'experience',
     });
   } else {
+    const missingTitleOrCompany = data.experience.some((e) => !e.position?.trim() || !e.company?.trim());
+    if (missingTitleOrCompany) {
+      items.push({
+        label: 'Missing title or company in experience',
+        hint: 'One or more roles are missing a job title or company',
+        section: 'experience',
+        fieldId: 'experience',
+      });
+    }
     const missingDates = data.experience.some((e) => !e.startDate && !e.endDate);
     if (missingDates) {
       items.push({
         label: 'No dates in experience',
         hint: 'One or more roles are missing start or end dates',
         section: 'experience',
+        fieldId: 'experience',
       });
     }
   }
@@ -84,6 +98,7 @@ const getChecklistItems = (data: Partial<ResumeData>) => {
       label: '0 projects detected',
       hint: 'Add technical projects to showcase hands-on work',
       section: 'projects',
+      fieldId: 'projects',
     });
   }
   if (
@@ -95,10 +110,24 @@ const getChecklistItems = (data: Partial<ResumeData>) => {
       label: 'No skills found',
       hint: 'List your core technical and professional skills',
       section: 'skills',
+      fieldId: 'skills',
     });
   }
   return items;
 };
+
+type UploadStep = 'upload' | 'parsing' | 'review' | 'error';
+
+interface ResumeUploadModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSaveAsNew: (data: Partial<ResumeData>, fileName?: string, firstProblemField?: string) => void;
+  onReplaceCurrent?: (data: Partial<ResumeData>) => void;
+  canReplace?: boolean;
+  initialFile?: File | null;
+  onGoToSection?: (sectionId: string, bulletRef?: string) => void;
+  onOpenSettings?: () => void;
+}
 
 export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
   isOpen,
@@ -260,7 +289,9 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
             <button
               type="button"
               onClick={() => {
-                onSaveAsNew(parsedResult.data, fileName);
+                const checkItems = getChecklistItems(parsedResult.data);
+                const firstField = checkItems[0]?.fieldId || checkItems[0]?.section;
+                onSaveAsNew(parsedResult.data, fileName, firstField);
                 onClose();
               }}
               className="btn-primary h-8 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
@@ -430,13 +461,13 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
         {step === 'review' && parsedResult && (() => {
           const checkItems = getChecklistItems(parsedResult.data);
           const hasMissing = checkItems.length > 0;
+          const displayConfidence = calculateConfidence(parsedResult.data, hasMissing);
 
-          const handleFixInEditor = (sec: string) => {
-            onSaveAsNew(parsedResult.data, fileName);
+          const handleFixInEditor = (sec: string, fieldId?: string) => {
+            onSaveAsNew(parsedResult.data, fileName, fieldId || sec);
+            onClose();
             if (onGoToSection) {
-              setTimeout(() => {
-                onGoToSection(sec);
-              }, 150);
+              onGoToSection(sec, fieldId);
             }
           };
 
@@ -510,7 +541,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
                         </div>
                         <button
                           type="button"
-                          onClick={() => handleFixInEditor(item.section)}
+                          onClick={() => handleFixInEditor(item.section, item.fieldId)}
                           className="btn-outline h-6 px-2 text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0"
                         >
                           <span>Fix in editor</span>
@@ -586,11 +617,23 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
 
               {/* Right Column: Confidence Breakdown */}
               <div className="card p-4 space-y-3 bg-card border border-line">
-                <h4 className="text-[12.5px] font-medium text-ink/60">
-                  Parser confidence
-                </h4>
-                <div className="space-y-2">
-                  {Object.entries(parsedResult.confidence).map(([section, score]) => (
+                <div className="flex items-center justify-between">
+                  <h4 className="text-[12.5px] font-medium text-ink/60">
+                    Parser confidence
+                  </h4>
+                  <div className="flex items-center gap-1.5 text-xs font-semibold">
+                    <span
+                      className={`w-2 h-2 rounded-full shrink-0 ${
+                        (displayConfidence.overall || 0) >= 80 ? 'bg-emerald-500' : (displayConfidence.overall || 0) >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+                      }`}
+                    />
+                    <span className="tabular-nums font-bold text-ink">Overall {displayConfidence.overall || 0}%</span>
+                  </div>
+                </div>
+                <div className="space-y-2 pt-2 border-t border-line">
+                  {Object.entries(displayConfidence)
+                    .filter(([section]) => section !== 'overall')
+                    .map(([section, score]) => (
                     <div key={section} className="flex items-center justify-between text-xs">
                       <span className="capitalize text-ink/70">{section}</span>
                       <div className="flex items-center gap-1.5 text-xs">
