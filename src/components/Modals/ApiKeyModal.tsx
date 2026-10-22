@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { Settings, ExternalLink, Check, Palette } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import {
-  getStoredApiKey,
+  getGeminiKey,
   setStoredApiKey,
   getStoredModel,
   setStoredModel,
+  testGeminiKey,
 } from '../../services/geminiService';
 import {
   THEME_PRESETS,
@@ -26,9 +27,11 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   currentTheme,
   onThemeChange,
 }) => {
-  const [apiKey, setKey] = useState(getStoredApiKey());
+  const [apiKey, setKey] = useState(getGeminiKey());
   const [model, setModel] = useState(getStoredModel());
   const [keySaved, setKeySaved] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   if (!isOpen) return null;
 
@@ -50,9 +53,23 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
     }, 1800);
   };
 
+  const handleTestKey = async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    try {
+      const res = await testGeminiKey(apiKey, model);
+      setTestResult(res);
+    } catch (err: any) {
+      setTestResult({ success: false, message: err?.message || 'Error testing key' });
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
   const handleClear = () => {
     setKey('');
     setStoredApiKey('');
+    setTestResult(null);
     setKeySaved(true);
     setTimeout(() => {
       setKeySaved(false);
@@ -136,9 +153,14 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
           <div className="grid grid-cols-1 gap-2">
             {[
               {
-                id: 'gemini-3.8-flash',
-                name: 'Gemini 3.8 Flash',
-                desc: 'Fastest responses, suitable for drafting & bullet edits',
+                id: 'gemini-2.5-flash',
+                name: 'Gemini 2.5 Flash',
+                desc: 'Default fast multimodal model for parsing and content drafting',
+              },
+              {
+                id: 'gemini-2.0-flash',
+                name: 'Gemini 2.0 Flash',
+                desc: 'Fast fallback model for parsing and drafting',
               },
             ].map((m) => (
               <button
@@ -165,20 +187,39 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="label mb-0">Google Gemini API key</label>
-            <span className="text-[11px] text-ink/40">
-              Stored locally
-            </span>
+            <span className="text-[11px] text-ink/40">Stored locally</span>
           </div>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setKey(e.target.value)}
-            onBlur={handleApiKeyBlur}
-            placeholder="AIzaSy..."
-            className="input font-mono text-xs"
-          />
-          <div className="flex items-center justify-between text-[11px] text-ink/50 pt-0.5">
-            <span>{apiKey.trim() ? 'AI is active' : 'AI is off, add a key to enable'}</span>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => {
+                setKey(e.target.value);
+                setTestResult(null);
+              }}
+              onBlur={handleApiKeyBlur}
+              placeholder="AIzaSy..."
+              className="input font-mono text-xs flex-1"
+            />
+            <button
+              type="button"
+              onClick={handleTestKey}
+              disabled={isTesting || !apiKey.trim()}
+              className="btn-outline h-9 px-3 text-xs shrink-0 cursor-pointer disabled:opacity-50"
+            >
+              {isTesting ? 'Testing...' : 'Test key'}
+            </button>
+          </div>
+          <div className="flex items-center justify-between text-[11px] pt-0.5">
+            {testResult ? (
+              <span className={testResult.success ? 'text-emerald-600 font-medium' : 'text-rose-600 font-medium'}>
+                {testResult.message}
+              </span>
+            ) : (
+              <span className="text-ink/50">
+                {apiKey.trim() ? 'AI is active' : 'AI is off, add a key to enable'}
+              </span>
+            )}
             {keySaved && <span className="text-emerald-600 font-medium">Saved</span>}
           </div>
         </div>

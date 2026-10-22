@@ -22,6 +22,7 @@ interface ResumeUploadModalProps {
   canReplace?: boolean;
   initialFile?: File | null;
   onGoToSection?: (sectionId: string, bulletRef?: string) => void;
+  onOpenSettings?: () => void;
 }
 
 type UploadStep = 'upload' | 'parsing' | 'review' | 'error';
@@ -101,6 +102,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
   canReplace = false,
   initialFile = null,
   onGoToSection,
+  onOpenSettings,
 }) => {
   const [step, setStep] = useState<UploadStep>('upload');
   const [dragActive, setDragActive] = useState(false);
@@ -440,7 +442,24 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
                   <div className="flex-1">
                     <span className="font-semibold text-ink">{parsedResult.fallbackNotice}</span>
                     <p className="text-[11px] text-ink/60 mt-0.5">
-                      Review detected fields below and refine them in the editor.
+                      {parsedResult.fallbackNotice === 'No API key set' ? (
+                        <>
+                          Add a Gemini key in{' '}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClose();
+                              onOpenSettings?.();
+                            }}
+                            className="text-brand-600 underline font-medium hover:text-brand-700 cursor-pointer"
+                          >
+                            Settings
+                          </button>{' '}
+                          for AI parsing.
+                        </>
+                      ) : (
+                        'Review detected fields below and refine them in the editor.'
+                      )}
                     </p>
                   </div>
                 </div>

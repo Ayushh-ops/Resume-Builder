@@ -4,36 +4,195 @@ import type { ResumeData, TrendUpgradeTip, ATSCheckResult, ATSProfile } from '..
 const LOCAL_STORAGE_KEY = 'resumecraft_gemini_api_key';
 const LOCAL_STORAGE_MODEL_KEY = 'resumecraft_gemini_model';
 
-export const getStoredApiKey = (): string => {
-  return localStorage.getItem(LOCAL_STORAGE_KEY) || import.meta.env.VITE_GEMINI_API_KEY || '';
+export const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'] as const;
+
+export const getGeminiKey = (): string => {
+  let key = '';
+  try {
+    key = localStorage.getItem(LOCAL_STORAGE_KEY) || '';
+  } catch {}
+  if (!key && typeof import.meta !== 'undefined' && import.meta.env) {
+    key = import.meta.env.VITE_GEMINI_API_KEY || '';
+  }
+  return (key || '').trim().replace(/^["']|["']$/g, '').trim();
 };
 
+export const getStoredApiKey = getGeminiKey;
+
 export const setStoredApiKey = (key: string): void => {
-  if (key) {
-    localStorage.setItem(LOCAL_STORAGE_KEY, key);
+  const cleaned = (key || '').trim().replace(/^["']|["']$/g, '').trim();
+  if (cleaned) {
+    localStorage.setItem(LOCAL_STORAGE_KEY, cleaned);
   } else {
     localStorage.removeItem(LOCAL_STORAGE_KEY);
   }
 };
 
 export const getStoredModel = (): string => {
-  return localStorage.getItem(LOCAL_STORAGE_MODEL_KEY) || 'gemini-3.8-flash';
+  const saved = localStorage.getItem(LOCAL_STORAGE_MODEL_KEY);
+  if (saved && !saved.startsWith('gemini-3.')) {
+    return saved;
+  }
+  return 'gemini-2.5-flash';
 };
 
 export const setStoredModel = (model: string): void => {
-  localStorage.setItem(LOCAL_STORAGE_MODEL_KEY, model);
+  const cleanModel = model.startsWith('gemini-3.') ? 'gemini-2.5-flash' : model;
+  localStorage.setItem(LOCAL_STORAGE_MODEL_KEY, cleanModel);
 };
 
-const getGenAIClient = (): GoogleGenAI | null => {
-  const apiKey = getStoredApiKey();
-  if (!apiKey) return null;
-  try {
-    return new GoogleGenAI({ apiKey });
-  } catch (err) {
-    console.error('Failed to initialize GoogleGenAI client:', err);
-    return null;
+export function formatGeminiErrorNotice(err: any): string {
+  if (!err) return 'AI unavailable';
+  if (typeof err === 'string') {
+    if (err === 'No API key set') return 'No API key set';
+    if (err === 'Timed out (20s)') return 'Timed out (20s)';
+    if (err === 'Invalid response') return 'Invalid response';
   }
-};
+  const status = Number(err?.status || err?.statusCode || err?.cause?.statusCode || 0);
+  const msg = (err?.message || String(err) || '').toLowerCase();
+
+  if (
+    status === 403 ||
+    status === 401 ||
+    (status === 400 && (msg.includes('api_key_invalid') || msg.includes('api key not valid') || msg.includes('key not valid'))) ||
+    msg.includes('403') ||
+    msg.includes('permission_denied') ||
+    msg.includes('api_key_invalid') ||
+    msg.includes('api key not valid')
+  ) {
+    return 'Key rejected (403)';
+  }
+
+  if (status === 404 || msg.includes('404') || msg.includes('not found')) {
+    return 'Model not found (404)';
+  }
+
+  if (
+    status === 429 ||
+    msg.includes('429') ||
+    msg.includes('resource_exhausted') ||
+    msg.includes('quota') ||
+    msg.includes('rate limit')
+  ) {
+    return 'Rate limited (429)';
+  }
+
+  if (msg.includes('timed out') || msg.includes('timeout') || msg.includes('20s')) {
+    return 'Timed out (20s)';
+  }
+
+  if (
+    msg.includes('invalid response') ||
+    msg.includes('invalid json') ||
+    msg.includes('unexpected token')
+  ) {
+    return 'Invalid response';
+  }
+
+  if (msg.includes('no api key set') || msg.includes('no key')) {
+    return 'No API key set';
+  }
+
+  return 'AI unavailable';
+}
+
+export async function testGeminiKey(
+  testKey?: string,
+  modelToTest?: string
+): Promise<{ success: boolean; message: string; modelUsed?: string }> {
+  const rawKey = testKey !== undefined ? testKey : getGeminiKey();
+  const key = (rawKey || '').trim().replace(/^["']|["']$/g, '').trim();
+  if (!key) {
+    return { success: false, message: 'No API key set' };
+  }
+
+  const configured = modelToTest || getStoredModel() || 'gemini-2.5-flash';
+  const models = Array.from(new Set([configured, ...FALLBACK_MODELS])).filter(
+    (m) => !m.startsWith('gemini-3.')
+  );
+
+  let lastError: any = null;
+  const client = new GoogleGenAI({ apiKey: key });
+
+  for (const m of models) {
+    try {
+      await client.models.generateContent({
+        model: m,
+        contents: 'hi',
+        config: {
+          maxOutputTokens: 1,
+        },
+      });
+      return { success: true, message: `Key works (model ${m})`, modelUsed: m };
+    } catch (err: any) {
+      lastError = err;
+      const status = Number(err?.status || err?.statusCode || 0);
+      const msg = (err?.message || String(err)).toLowerCase();
+      const errorRecord = {
+        status,
+        message: err?.message || String(err),
+      };
+      console.error(`Gemini test error with model "${m}":`, errorRecord);
+
+      // On 404 try next model
+      if (status === 404 || msg.includes('404') || msg.includes('not found')) {
+        continue;
+      }
+      break;
+    }
+  }
+
+  return { success: false, message: formatGeminiErrorNotice(lastError) };
+}
+
+export async function generateGeminiText(
+  prompt: string,
+  options?: { maxOutputTokens?: number; signal?: AbortSignal }
+): Promise<string> {
+  const apiKey = getGeminiKey();
+  if (!apiKey) {
+    throw new Error('No API key set');
+  }
+
+  const configured = getStoredModel() || 'gemini-2.5-flash';
+  const models = Array.from(new Set([configured, ...FALLBACK_MODELS])).filter(
+    (m) => !m.startsWith('gemini-3.')
+  );
+
+  let lastError: any = null;
+  const client = new GoogleGenAI({ apiKey });
+
+  for (const model of models) {
+    if (options?.signal?.aborted) {
+      throw new Error('Timed out (20s)');
+    }
+
+    try {
+      const response = await client.models.generateContent({
+        model,
+        contents: prompt,
+        config: options?.maxOutputTokens ? { maxOutputTokens: options.maxOutputTokens } : undefined,
+      });
+      return response.text || '';
+    } catch (err: any) {
+      lastError = err;
+      const status = Number(err?.status || err?.statusCode || 0);
+      const msg = (err?.message || String(err)).toLowerCase();
+      const errorRecord = {
+        status,
+        message: err?.message || String(err),
+      };
+      console.error(`Gemini call error with model "${model}":`, errorRecord);
+
+      if (status === 404 || msg.includes('404') || msg.includes('not found')) {
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastError || new Error('Model not found (404)');
+}
 
 /**
  * AI-powered Bullet Point Improver (STAR Method, Action Verbs, Metrics)
@@ -42,12 +201,8 @@ export async function enhanceBulletPoint(
   originalText: string,
   roleContext?: string
 ): Promise<{ enhanced: string[]; explanation: string }> {
-  const client = getGenAIClient();
-  const model = getStoredModel();
-
-  if (client) {
-    try {
-      const prompt = `You are an elite executive resume writer and ATS optimization specialist.
+  try {
+    const prompt = `You are an elite executive resume writer and ATS optimization specialist.
 Improve the following resume bullet point for a ${roleContext || 'professional'} role.
 Apply the Google "X-Y-Z formula" (Accomplished [X], as measured by [Y], by doing [Z]) and the STAR method.
 Ensure strong action verbs, quantifiable metrics, and remove passive or buzzword filler.
@@ -64,21 +219,19 @@ Return a JSON object strictly in this format (no markdown code blocks, just raw 
   "explanation": "Brief 1-sentence note explaining what makes these options stronger"
 }`;
 
-      const interaction = await client.interactions.create({
-        model: model,
-        input: prompt,
-      });
-
-      const responseText = interaction.output_text || '';
-      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
-      return {
-        enhanced: parsed.enhanced || [originalText],
-        explanation: parsed.explanation || 'Enhanced using high-impact action verbs and quantified results.',
-      };
-    } catch (err) {
-      console.warn('Gemini API call failed, falling back to smart heuristic enhancer:', err);
-    }
+    const responseText = await generateGeminiText(prompt);
+    const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(cleanJson);
+    return {
+      enhanced: parsed.enhanced || [originalText],
+      explanation: parsed.explanation || 'Enhanced using high-impact action verbs and quantified results.',
+    };
+  } catch (err: any) {
+    const status = Number(err?.status || err?.statusCode || 0);
+    console.error('Gemini enhanceBulletPoint fallback triggered:', {
+      status,
+      message: err?.message || String(err),
+    });
   }
 
   // Intelligent Local Heuristic Fallback
@@ -92,16 +245,12 @@ export async function generateSummary(
   resume: Partial<ResumeData>,
   tone: 'impactful' | 'executive' | 'technical' | 'concise' = 'impactful'
 ): Promise<string> {
-  const client = getGenAIClient();
-  const model = getStoredModel();
-
   const title = resume.personalInfo?.jobTitle || 'Software Professional';
   const skills = resume.skills?.flatMap((s) => s.skills).slice(0, 10).join(', ') || 'modern engineering tools';
   const companies = resume.experience?.map((e) => e.company).slice(0, 3).join(', ');
 
-  if (client) {
-    try {
-      const prompt = `Write a compelling 3-4 sentence professional resume summary in a ${tone} tone.
+  try {
+    const prompt = `Write a compelling 3-4 sentence professional resume summary in a ${tone} tone.
 Role: ${title}
 Top Skills: ${skills}
 Past Experience: ${companies || 'Industry leadership'}
@@ -112,17 +261,16 @@ Guidelines:
 - Keep within 50-75 words.
 Return ONLY the raw summary text.`;
 
-      const interaction = await client.interactions.create({
-        model: model,
-        input: prompt,
-      });
-
-      if (interaction.output_text) {
-        return interaction.output_text.trim();
-      }
-    } catch (err) {
-      console.warn('Gemini API call failed, falling back to smart local summary:', err);
+    const responseText = await generateGeminiText(prompt);
+    if (responseText && responseText.trim()) {
+      return responseText.trim();
     }
+  } catch (err: any) {
+    const status = Number(err?.status || err?.statusCode || 0);
+    console.error('Gemini generateSummary fallback triggered:', {
+      status,
+      message: err?.message || String(err),
+    });
   }
 
   // Smart local summary generator fallback
@@ -136,9 +284,6 @@ export async function analyzeJobMatch(
   resume: ResumeData,
   jobDescription: string
 ): Promise<ATSCheckResult> {
-  const client = getGenAIClient();
-  const model = getStoredModel();
-
   const resumeSummaryText = JSON.stringify({
     title: resume.personalInfo.jobTitle,
     summary: resume.summary,
@@ -150,9 +295,8 @@ export async function analyzeJobMatch(
     })),
   });
 
-  if (client) {
-    try {
-      const prompt = `You are a Fortune 500 Senior ATS Recruiter.
+  try {
+    const prompt = `You are a Fortune 500 Senior ATS Recruiter.
 Analyze this resume against the target Job Description.
 
 Resume content:
@@ -173,26 +317,24 @@ Return a JSON object strictly in this structure (no markdown wrappers, raw JSON 
   "suggestions": ["Incorporate Docker or Kubernetes into experience bullets", "Tailor summary to emphasize cloud architectural expertise"]
 }`;
 
-      const interaction = await client.interactions.create({
-        model: model,
-        input: prompt,
-      });
-
-      const responseText = interaction.output_text || '';
-      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
-      return {
-        score: Math.min(100, Math.max(0, parsed.score || 75)),
-        rating: parsed.rating || 'Good',
-        matchedKeywords: parsed.matchedKeywords || [],
-        missingKeywords: parsed.missingKeywords || [],
-        strengths: parsed.strengths || [],
-        weaknesses: parsed.weaknesses || [],
-        suggestions: parsed.suggestions || [],
-      };
-    } catch (err) {
-      console.warn('Gemini API call failed for job matcher, using heuristic parser:', err);
-    }
+    const responseText = await generateGeminiText(prompt);
+    const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(cleanJson);
+    return {
+      score: Math.min(100, Math.max(0, parsed.score || 75)),
+      rating: parsed.rating || 'Good',
+      matchedKeywords: parsed.matchedKeywords || [],
+      missingKeywords: parsed.missingKeywords || [],
+      strengths: parsed.strengths || [],
+      weaknesses: parsed.weaknesses || [],
+      suggestions: parsed.suggestions || [],
+    };
+  } catch (err: any) {
+    const status = Number(err?.status || err?.statusCode || 0);
+    console.error('Gemini analyzeJobMatch fallback triggered:', {
+      status,
+      message: err?.message || String(err),
+    });
   }
 
   // Heuristic Job Matcher
@@ -203,12 +345,8 @@ Return a JSON object strictly in this structure (no markdown wrappers, raw JSON 
  * AI Career Strategist & Modern Resume Upgrade Advisor
  */
 export async function getModernUpgradeTips(resume: ResumeData): Promise<TrendUpgradeTip[]> {
-  const client = getGenAIClient();
-  const model = getStoredModel();
-
-  if (client) {
-    try {
-      const prompt = `You are a cutting-edge tech career advisor and recruiter.
+  try {
+    const prompt = `You are a cutting-edge tech career advisor and recruiter.
 Analyze this candidate's resume and generate 5 highly actionable upgrade recommendations aligned with current hiring trends (such as AI fluency/copilots, quantifiable business ROI, modern tech stacks, ATS compliance, and removing outdated patterns like objective statements or soft skill buzzwords).
 
 Candidate Title: ${resume.personalInfo.jobTitle}
@@ -226,17 +364,15 @@ Return a JSON array strictly in this format:
   }
 ]`;
 
-      const interaction = await client.interactions.create({
-        model: model,
-        input: prompt,
-      });
-
-      const responseText = interaction.output_text || '';
-      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      return JSON.parse(cleanJson);
-    } catch (err) {
-      console.warn('Gemini API call failed for upgrade tips, using curated trends:', err);
-    }
+    const responseText = await generateGeminiText(prompt);
+    const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleanJson);
+  } catch (err: any) {
+    const status = Number(err?.status || err?.statusCode || 0);
+    console.error('Gemini getModernUpgradeTips fallback triggered:', {
+      status,
+      message: err?.message || String(err),
+    });
   }
 
   // Fallback curated trend advice
@@ -372,12 +508,8 @@ export async function tailorResumeToJob(
   resume: ResumeData,
   jobDescription: string
 ): Promise<TailoredChanges> {
-  const client = getGenAIClient();
-  const model = getStoredModel();
-
-  if (client) {
-    try {
-      const prompt = `You are an elite executive resume writer.
+  try {
+    const prompt = `You are an elite executive resume writer.
 Tailor the summary and experience bullet points of the resume to better align with the following Job Description, incorporating relevant keywords and impact metrics.
 
 Job Description:
@@ -397,20 +529,18 @@ Return a JSON object strictly in this structure (raw JSON, no markdown):
     }
   ]
 }`;
-      const interaction = await client.interactions.create({
-        model: model,
-        input: prompt,
-      });
-
-      const responseText = interaction.output_text || '';
-      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
-      if (parsed.summary && parsed.experienceBullets) {
-        return parsed;
-      }
-    } catch (err) {
-      console.warn('Gemini tailoring failed, using heuristic fallback:', err);
+    const responseText = await generateGeminiText(prompt);
+    const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(cleanJson);
+    if (parsed.summary && parsed.experienceBullets) {
+      return parsed;
     }
+  } catch (err: any) {
+    const status = Number(err?.status || err?.statusCode || 0);
+    console.error('Gemini tailorResumeToJob fallback triggered:', {
+      status,
+      message: err?.message || String(err),
+    });
   }
 
   // Heuristic fallback
@@ -433,12 +563,8 @@ Return a JSON object strictly in this structure (raw JSON, no markdown):
  * Parses raw text from an ATS rubric / report into structured ATSProfile criteria.
  */
 export async function parseRubricToATSProfile(rubricText: string): Promise<ATSProfile> {
-  const client = getGenAIClient();
-  const model = getStoredModel();
-
-  if (client) {
-    try {
-      const prompt = `You are an expert ATS (Applicant Tracking System) system architect.
+  try {
+    const prompt = `You are an expert ATS (Applicant Tracking System) system architect.
 Parse the following rubric, guidelines, or ATS report text into an ATS scoring profile with weighted criteria.
 The criteria weights MUST sum to approximately 100.
 Allowed types for each criterion:
@@ -472,32 +598,30 @@ Return ONLY a JSON object strictly in this format (no markdown fences, just pure
   ]
 }`;
 
-      const interaction = await client.interactions.create({
-        model: model,
-        input: prompt,
-      });
-
-      const responseText = interaction.output_text || '';
-      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
-      if (parsed.criteria && Array.isArray(parsed.criteria)) {
-        return {
-          id: 'custom_' + Date.now(),
-          name: parsed.name || 'Custom ATS Rubric',
-          description: parsed.description || 'Custom evaluation rubric parsed with Gemini AI',
-          isCustom: true,
-          criteria: parsed.criteria.map((c: any, idx: number) => ({
-            id: c.id || `crit_${idx + 1}`,
-            label: c.label || `Criterion ${idx + 1}`,
-            weight: Number(c.weight) || 10,
-            type: c.type || 'keyword',
-            params: c.params || { fixSuggestion: 'Review and optimize this area' },
-          })),
-        };
-      }
-    } catch (err) {
-      console.warn('Failed to parse rubric with Gemini, using fallback:', err);
+    const responseText = await generateGeminiText(prompt);
+    const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(cleanJson);
+    if (parsed.criteria && Array.isArray(parsed.criteria)) {
+      return {
+        id: 'custom_' + Date.now(),
+        name: parsed.name || 'Custom ATS Rubric',
+        description: parsed.description || 'Custom evaluation rubric parsed with Gemini AI',
+        isCustom: true,
+        criteria: parsed.criteria.map((c: any, idx: number) => ({
+          id: c.id || `crit_${idx + 1}`,
+          label: c.label || `Criterion ${idx + 1}`,
+          weight: Number(c.weight) || 10,
+          type: c.type || 'keyword',
+          params: c.params || { fixSuggestion: 'Review and optimize this area' },
+        })),
+      };
     }
+  } catch (err: any) {
+    const status = Number(err?.status || err?.statusCode || 0);
+    console.error('Gemini parseRubricToATSProfile fallback triggered:', {
+      status,
+      message: err?.message || String(err),
+    });
   }
 
   // Offline heuristic fallback: Extract simple keywords and create a default customized profile

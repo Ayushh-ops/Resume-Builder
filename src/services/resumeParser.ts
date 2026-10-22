@@ -2,7 +2,12 @@ import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
 import { GoogleGenAI } from '@google/genai';
 import type { ResumeData } from '../types/resume';
-import { getStoredApiKey, getStoredModel } from './geminiService';
+import {
+  getGeminiKey,
+  getStoredModel,
+  FALLBACK_MODELS,
+  formatGeminiErrorNotice,
+} from './geminiService';
 
 // Set up pdf.js worker URL for browser environments
 if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
@@ -106,31 +111,42 @@ export async function structureResumeWithGemini(
   rawText: string,
   externalSignal?: AbortSignal
 ): Promise<StructureResult> {
-  const apiKey = getStoredApiKey();
-  const configuredModel = getStoredModel() || 'gemini-3.8-flash';
-  const modelsToTry = Array.from(new Set([configuredModel, 'gemini-2.5-flash']));
+  const apiKey = getGeminiKey();
+  if (!apiKey) {
+    const fallbackData = fallbackRegexParser(rawText);
+    return {
+      data: fallbackData,
+      fallbackNotice: 'No API key set',
+      isAiFallback: true,
+    };
+  }
 
-  if (apiKey) {
-    const controller = new AbortController();
-    let timedOut = false;
-    const timeoutId = setTimeout(() => {
-      timedOut = true;
-      controller.abort(new Error('Gemini API call timed out after 20s'));
-    }, 20000);
+  const configuredModel = getStoredModel() || 'gemini-2.5-flash';
+  const modelsToTry = Array.from(new Set([configuredModel, ...FALLBACK_MODELS])).filter(
+    (m) => !m.startsWith('gemini-3.')
+  );
 
-    if (externalSignal) {
-      if (externalSignal.aborted) {
+  let lastError: any = null;
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new Error('Timed out (20s)'));
+  }, 20000);
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort(new Error('Request aborted by user'));
+    } else {
+      externalSignal.addEventListener('abort', () => {
         controller.abort(new Error('Request aborted by user'));
-      } else {
-        externalSignal.addEventListener('abort', () => {
-          controller.abort(new Error('Request aborted by user'));
-        });
-      }
+      });
     }
+  }
 
-    try {
-      const client = new GoogleGenAI({ apiKey });
-      const prompt = `You are a professional resume parser. Parse the following raw resume text and extract all information into a structured JSON matching the ResumeData schema.
+  try {
+    const client = new GoogleGenAI({ apiKey });
+    const prompt = `You are a professional resume parser. Parse the following raw resume text and extract all information into a structured JSON matching the ResumeData schema.
 
 ResumeData schema fields:
 - personalInfo: { fullName, jobTitle, email, phone, location, website, linkedin, github }
@@ -146,62 +162,84 @@ ${rawText}
 
 Return strictly a valid JSON object matching this schema. No markdown formatting or code fences. Raw JSON only.`;
 
-      for (const model of modelsToTry) {
-        if (controller.signal.aborted) break;
+    for (const model of modelsToTry) {
+      if (controller.signal.aborted) break;
 
-        try {
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            if (controller.signal.aborted) {
-              reject(timedOut ? new Error('Gemini call timed out after 20s') : new Error('Aborted'));
-            } else {
-              controller.signal.addEventListener('abort', () => {
-                reject(timedOut ? new Error('Gemini call timed out after 20s') : new Error('Aborted'));
-              });
-            }
-          });
-
-          const apiCall = client.interactions.create(
-            {
-              model,
-              input: prompt,
-            },
-            { signal: controller.signal } as any
-          );
-
-          const response: any = await Promise.race([apiCall, timeoutPromise]);
-          const responseText = response?.output_text || '';
-          const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-          const parsed = JSON.parse(cleanJson);
-
-          if (parsed && (parsed.personalInfo || parsed.experience || parsed.education)) {
-            clearTimeout(timeoutId);
-            return {
-              data: normalizeParsedData(parsed),
-              isAiFallback: false,
-            };
+      try {
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          const onAbort = () => {
+            reject(timedOut ? new Error('Timed out (20s)') : new Error('Aborted'));
+          };
+          if (controller.signal.aborted) {
+            onAbort();
           } else {
-            throw new Error('Invalid JSON structure returned by model');
+            controller.signal.addEventListener('abort', onAbort);
           }
-        } catch (err: any) {
-          console.error(`Gemini structuring failed with model "${model}":`, err);
-          if (controller.signal.aborted && timedOut) {
-            console.error('Gemini request exceeded 20s timeout limit.');
-            break;
-          }
+        });
+
+        const apiCall = client.models.generateContent({
+          model,
+          contents: prompt,
+        });
+
+        const response: any = await Promise.race([apiCall, timeoutPromise]);
+        const responseText = response?.text || response?.output_text || '';
+        const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(cleanJson);
+        } catch {
+          throw new Error('Invalid response');
         }
+
+        if (parsed && (parsed.personalInfo || parsed.experience || parsed.education || parsed.skills)) {
+          clearTimeout(timeoutId);
+          return {
+            data: normalizeParsedData(parsed),
+            isAiFallback: false,
+          };
+        } else {
+          throw new Error('Invalid response');
+        }
+      } catch (err: any) {
+        lastError = err;
+        const status = Number(err?.status || err?.statusCode || 0);
+        const msg = (err?.message || String(err)).toLowerCase();
+        const errorRecord = {
+          status,
+          message: err?.message || String(err),
+        };
+        console.error(`Gemini structuring failed with model "${model}":`, errorRecord);
+
+        if (controller.signal.aborted && timedOut) {
+          lastError = new Error('Timed out (20s)');
+          break;
+        }
+
+        // On 404 try next model
+        if (status === 404 || msg.includes('404') || msg.includes('not found')) {
+          continue;
+        }
+        break;
       }
-    } catch (outerErr: any) {
-      console.error('Gemini structuring encountered error:', outerErr);
-    } finally {
-      clearTimeout(timeoutId);
     }
+  } catch (outerErr: any) {
+    lastError = outerErr;
+    const status = Number(outerErr?.status || outerErr?.statusCode || 0);
+    console.error('Gemini structuring encountered outer error:', {
+      status,
+      message: outerErr?.message || String(outerErr),
+    });
+  } finally {
+    clearTimeout(timeoutId);
   }
 
-  // Fallback: offline regex parser automatically
+  // Fallback: offline regex parser automatically with real error reason
+  const fallbackNotice = formatGeminiErrorNotice(lastError);
   const fallbackData = fallbackRegexParser(rawText);
   return {
     data: fallbackData,
-    fallbackNotice: 'AI unavailable, imported with basic parsing',
+    fallbackNotice,
     isAiFallback: true,
   };
 }

@@ -1815,6 +1815,7 @@ export const App: React.FC = () => {
         canReplace={route.type === 'editor'}
         initialFile={uploadedFileForModal}
         onGoToSection={handleGoToSection}
+        onOpenSettings={() => openModal(setIsApiKeyModalOpen)}
       />
 
       <SampleSelectorModal
