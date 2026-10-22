@@ -29,6 +29,7 @@ export default {
         muted: 'rgb(var(--muted) / <alpha-value>)',
         line: 'rgb(var(--line) / <alpha-value>)',
         border: 'rgb(var(--line) / <alpha-value>)',
+        accent: 'rgb(var(--brand-600) / <alpha-value>)',
         'on-brand': 'rgb(var(--on-brand) / <alpha-value>)',
         brand: {
           50:  'rgb(var(--brand-50) / <alpha-value>)',

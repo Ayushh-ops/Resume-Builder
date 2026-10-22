@@ -19,6 +19,12 @@ import {
   Copy,
   Trash2,
   FolderOpen,
+  Check,
+  CheckCircle2,
+  Target,
+  ShieldCheck,
+  ArrowRight,
+  AlertCircle,
 } from 'lucide-react';
 import type { ResumeData, ResumeTheme, TemplateType, ATSProfile } from './types/resume';
 import { sampleProfiles } from './data/sampleData';
@@ -78,93 +84,31 @@ type Route =
   | { type: 'home' }
   | { type: 'editor'; resumeId: string };
 
-const heroPlaceholderResume: ResumeData = {
-  personalInfo: {
-    fullName: 'Your Name',
-    jobTitle: 'Job Title',
-    email: 'email@example.com',
-    phone: '+1 (555) 000-0000',
-    location: 'City, State',
-    website: 'portfolio.com',
-    linkedin: 'linkedin.com/in/username',
-    github: 'github.com/username',
-  },
-  summary:
-    'Results-driven professional with demonstrated experience leading initiatives, building scalable solutions, and driving measurable operational efficiencies.',
-  experience: [
-    {
-      id: 'h-exp-1',
-      company: 'Company Name',
-      position: 'Role Title',
-      location: 'City, State',
-      startDate: '2022',
-      endDate: 'Present',
-      current: true,
-      highlights: [
-        'Led architecture and execution of core product initiatives resulting in a 35% increase in throughput.',
-        'Streamlined team workflows and automated testing pipelines to reduce delivery lead time by 40%.',
-        'Mentored junior team members and standardized operational best practices across groups.',
-      ],
-    },
-    {
-      id: 'h-exp-2',
-      company: 'Previous Company',
-      position: 'Role Title',
-      location: 'City, State',
-      startDate: '2019',
-      endDate: '2022',
-      current: false,
-      highlights: [
-        'Built and deployed reliable services handling high daily active user volumes.',
-        'Collaborated with stakeholders to define technical roadmaps and milestones.',
-      ],
-    },
-  ],
-  education: [
-    {
-      id: 'h-edu-1',
-      institution: 'University Name',
-      degree: 'Bachelor of Science',
-      fieldOfStudy: 'Field of Study',
-      location: 'City, State',
-      startDate: '2015',
-      endDate: '2019',
-      grade: '',
-      highlights: [],
-    },
-  ],
-  skills: [
-    {
-      id: 'h-sk-1',
-      name: 'Core Competencies',
-      skills: ['System Design', 'Project Leadership', 'Cross-Functional Collaboration', 'Data Analysis'],
-    },
-    {
-      id: 'h-sk-2',
-      name: 'Tools & Platforms',
-      skills: ['TypeScript', 'Python', 'React', 'Cloud Services', 'CI/CD Pipelines'],
-    },
-  ],
-  projects: [
-    {
-      id: 'h-proj-1',
-      name: 'Platform Initiative',
-      description: 'Internal developer platform',
-      technologies: ['React', 'Node.js'],
-      highlights: [
-        'Architected and published an internal utility that improved developer velocity by 25%.',
-      ],
-    },
-  ],
-  certifications: [
-    {
-      id: 'h-cert-1',
-      name: 'Professional Industry Certification',
-      issuer: 'Issuing Authority',
-      date: '2023',
-    },
-  ],
-  customSections: [],
+const pathToRoute = (pathname: string): Route => {
+  const match = pathname.match(/^\/(?:editor|r)\/([^/]+)/);
+  if (match) {
+    return { type: 'editor', resumeId: match[1] };
+  }
+  return { type: 'home' };
+};
+
+const migrateHashToPath = (): string => {
+  if (typeof window === 'undefined') return '/';
+  const hash = window.location.hash;
+  if (hash) {
+    const clean = hash.replace(/^#\/?/, '');
+    let newPath = '/';
+    if (clean.startsWith('r/')) {
+      newPath = `/editor/${clean.slice(2)}`;
+    } else if (clean.startsWith('editor/')) {
+      newPath = `/editor/${clean.slice(7)}`;
+    } else if (clean && clean !== '/') {
+      newPath = `/editor/${clean}`;
+    }
+    window.history.replaceState(null, '', newPath);
+    return newPath;
+  }
+  return window.location.pathname || '/';
 };
 
 const formatRelativeTime = (isoString?: string): string => {
@@ -184,17 +128,14 @@ const formatRelativeTime = (isoString?: string): string => {
 };
 
 const computeInitialRoute = (index: ResumeIndexEntry[]): Route => {
-  const hash = typeof window !== 'undefined' ? window.location.hash : '';
-  const clean = hash.replace(/^#/, '');
-
-  if (clean.startsWith('/r/')) {
-    const id = clean.slice(3);
-    const exists = index.some((item) => item.id === id);
-    if (exists && getResume(id)) {
-      return { type: 'editor', resumeId: id };
+  const currentPath = migrateHashToPath();
+  const route = pathToRoute(currentPath);
+  if (route.type === 'editor') {
+    const exists = index.some((item) => item.id === route.resumeId);
+    if (exists && getResume(route.resumeId)) {
+      return route;
     }
   }
-
   return { type: 'home' };
 };
 
@@ -206,6 +147,12 @@ export const App: React.FC = () => {
 
   // Routing State
   const [route, setRoute] = useState<Route>(() => computeInitialRoute(resumeIndex));
+
+  const navigate = useCallback((path: string) => {
+    if (window.location.pathname === path && !window.location.hash) return;
+    window.history.pushState(null, '', path);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, []);
 
   // Current Resume Data
   const [resumeData, setResumeData] = useState<ResumeData>(() => {
@@ -304,14 +251,14 @@ export const App: React.FC = () => {
   // Track IDs created in this session so we never show "Resume not found"
   const justCreatedIdsRef = useRef<Set<string>>(new Set());
 
-  // Sync hash routing and resume data loading
+  // Sync routing and resume data loading via History API (popstate)
   useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash;
-      const clean = hash.replace(/^#/, '');
+    const handleLocationChange = () => {
+      const pathname = migrateHashToPath();
+      const currentRoute = pathToRoute(pathname);
 
-      if (clean.startsWith('/r/')) {
-        const id = clean.slice(3);
+      if (currentRoute.type === 'editor') {
+        const id = currentRoute.resumeId;
         const loaded = getResume(id);
         if (loaded) {
           setRoute({ type: 'editor', resumeId: id });
@@ -324,7 +271,7 @@ export const App: React.FC = () => {
         if (!justCreatedIdsRef.current.has(id)) {
           showToast('Resume not found', 'error');
         }
-        window.location.hash = '#/';
+        window.history.replaceState(null, '', '/');
         setRoute({ type: 'home' });
         return;
       }
@@ -332,23 +279,23 @@ export const App: React.FC = () => {
       setRoute({ type: 'home' });
     };
 
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
   }, [showToast]);
 
-  // Initial load hash synchronization
+  // Initial load path synchronization
   useEffect(() => {
-    const hash = window.location.hash;
-    const clean = hash.replace(/^#/, '');
+    const pathname = migrateHashToPath();
+    const currentRoute = pathToRoute(pathname);
 
-    if (clean.startsWith('/r/')) {
-      const id = clean.slice(3);
+    if (currentRoute.type === 'editor') {
+      const id = currentRoute.resumeId;
       const loaded = getResume(id);
       if (!loaded) {
         if (!justCreatedIdsRef.current.has(id)) {
           showToast('Resume not found', 'error');
         }
-        window.location.hash = '#/';
+        window.history.replaceState(null, '', '/');
         setRoute({ type: 'home' });
       } else {
         setResumeData(loaded);
@@ -356,10 +303,13 @@ export const App: React.FC = () => {
         setHistoryIndex(0);
         setActiveResumeId(id);
       }
-    } else if (!hash || hash === '#' || hash === '#/') {
-      window.location.hash = '#/';
+    } else {
+      if (pathname !== '/') {
+        window.history.replaceState(null, '', '/');
+      }
+      setRoute({ type: 'home' });
     }
-  }, []);
+  }, [showToast]);
 
   // Single Unified App Theme State
   const [currentTheme, setCurrentTheme] = useState<ThemeId>(getInitialTheme);
@@ -490,9 +440,11 @@ export const App: React.FC = () => {
     } else {
       const rect = e.currentTarget.getBoundingClientRect();
       const menuHeight = 180;
+      const menuWidth = 160;
       const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
-      const top = fitsBelow ? rect.bottom + 4 : Math.max(8, rect.top - menuHeight - 4);
-      const right = Math.max(8, window.innerWidth - rect.right);
+      const idealTop = fitsBelow ? rect.bottom + 4 : rect.top - menuHeight - 4;
+      const top = Math.max(8, Math.min(window.innerHeight - menuHeight - 8, idealTop));
+      const right = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, window.innerWidth - rect.right));
       setCardMenuPos({ top, right });
       setOpenCardMenuId(id);
     }
@@ -502,9 +454,12 @@ export const App: React.FC = () => {
     if (!heroSampleMenuOpen && heroSampleBtnRef.current) {
       const rect = heroSampleBtnRef.current.getBoundingClientRect();
       const menuHeight = 120;
+      const menuWidth = 176;
       const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
-      const top = fitsBelow ? rect.bottom + 4 : Math.max(8, rect.top - menuHeight - 4);
-      setHeroSampleMenuPos({ top, left: rect.left });
+      const idealTop = fitsBelow ? rect.bottom + 4 : rect.top - menuHeight - 4;
+      const top = Math.max(8, Math.min(window.innerHeight - menuHeight - 8, idealTop));
+      const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.left));
+      setHeroSampleMenuPos({ top, left });
     }
     setHeroSampleMenuOpen((v) => !v);
   };
@@ -513,9 +468,12 @@ export const App: React.FC = () => {
     if (!homeSampleMenuOpen && homeSampleBtnRef.current) {
       const rect = homeSampleBtnRef.current.getBoundingClientRect();
       const menuHeight = 120;
+      const menuWidth = 224;
       const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
-      const top = fitsBelow ? rect.bottom + 4 : Math.max(8, rect.top - menuHeight - 4);
-      setHomeSampleMenuPos({ top, left: rect.left });
+      const idealTop = fitsBelow ? rect.bottom + 4 : rect.top - menuHeight - 4;
+      const top = Math.max(8, Math.min(window.innerHeight - menuHeight - 8, idealTop));
+      const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.left));
+      setHomeSampleMenuPos({ top, left });
     }
     setHomeSampleMenuOpen((v) => !v);
   };
@@ -552,7 +510,7 @@ export const App: React.FC = () => {
       setResumeIndex(getResumeIndex());
       targetId = newId;
     }
-    window.location.hash = `#/r/${targetId}`;
+    navigate(`/editor/${targetId}`);
     setTimeout(() => {
       openModalFn();
     }, 50);
@@ -726,7 +684,7 @@ export const App: React.FC = () => {
     const newId = createResume(blankResumeData, 'Untitled resume');
     justCreatedIdsRef.current.add(newId);
     setResumeIndex(getResumeIndex());
-    window.location.hash = `#/r/${newId}`;
+    navigate(`/editor/${newId}`);
     showToast('Created new blank resume', 'info');
   };
 
@@ -743,7 +701,7 @@ export const App: React.FC = () => {
       const newId = createResume(sample, name);
       justCreatedIdsRef.current.add(newId);
       setResumeIndex(getResumeIndex());
-      window.location.hash = `#/r/${newId}`;
+      navigate(`/editor/${newId}`);
       showToast(`Created resume from sample: ${name}`, 'success');
       confetti({ particleCount: 50, spread: 60 });
     }
@@ -758,7 +716,7 @@ export const App: React.FC = () => {
     const newId = createResume(importedData, resolvedName);
     justCreatedIdsRef.current.add(newId);
     setResumeIndex(getResumeIndex());
-    window.location.hash = `#/r/${newId}`;
+    navigate(`/editor/${newId}`);
     showToast('Imported and saved as new resume!', 'success');
     confetti({ particleCount: 70, spread: 80 });
   };
@@ -819,7 +777,7 @@ export const App: React.FC = () => {
       showToast('Resume deleted', 'info');
 
       if (route.type === 'editor' && route.resumeId === id) {
-        window.location.hash = '#/';
+        navigate('/');
       }
     } else if (
       confirmAction.type === 'replace' &&
@@ -1117,7 +1075,7 @@ export const App: React.FC = () => {
         savedAt={savedAt}
         onOpenUpload={() => openModal(setIsUploadModalOpen)}
         onOpenHome={() => {
-          window.location.hash = '#/';
+          navigate('/');
         }}
         onNewResume={handleCreateNew}
         allProfiles={allProfiles}
@@ -1132,13 +1090,13 @@ export const App: React.FC = () => {
         onRenameResume={handleRenameResume}
         resumeList={resumeIndex}
         onSelectResume={(id) => {
-          window.location.hash = `#/r/${id}`;
+          navigate(`/editor/${id}`);
         }}
       />
 
       {/* VIEW A: HOME SCREEN ("Your resumes") */}
       {route.type === 'home' && (
-        <div className="flex-1 w-full max-w-5xl mx-auto px-6 py-6 sm:py-8 flex flex-col justify-start min-h-[calc(100vh-3.5rem)] animate-in fade-in duration-150">
+        <div className={`flex-1 w-full max-w-5xl mx-auto px-6 ${displayResumes.length === 0 ? 'py-12' : 'py-6 sm:py-8'} flex flex-col justify-start min-h-[calc(100vh-3.5rem)] animate-in fade-in duration-150`}>
           <input
             type="file"
             ref={homeFileInputRef}
@@ -1214,7 +1172,7 @@ export const App: React.FC = () => {
                               top: heroSampleMenuPos.top,
                               left: heroSampleMenuPos.left,
                             }}
-                            className="w-44 card shadow-menu py-1 z-50 border border-line bg-card rounded-[6px] text-left animate-in fade-in duration-100"
+                            className="w-44 card shadow-menu py-1 z-[60] border border-line bg-card rounded-[6px] text-left animate-in fade-in duration-100"
                           >
                             <button
                               type="button"
@@ -1261,52 +1219,64 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Right Column (span 5): neutral placeholder A4 resume preview */}
+                {/* Right Column (span 5): static ATS check card */}
                 <div className="lg:col-span-5 hidden lg:flex flex-col items-center justify-center">
-                  <div className="w-[230px] h-[325px] bg-card rounded-[6px] border border-line shadow-sm overflow-hidden relative select-none pointer-events-none flex items-start justify-start">
-                    <div
-                      data-theme="light"
-                      style={{
-                        width: '794px',
-                        height: '1123px',
-                        transform: 'scale(0.28967)',
-                        transformOrigin: 'top left',
-                        backgroundColor: '#ffffff',
-                        color: '#16161d',
-                        padding: '12mm 14mm',
-                      }}
-                      className="border-none text-left shrink-0 font-sans"
-                    >
-                      <ModernTemplate
-                        data={heroPlaceholderResume}
-                        theme={{
-                          primaryColor: '#b4451f',
-                          fontFamily: 'sans',
-                          spacing: 'normal',
-                          accentColor: '#b4451f',
-                        }}
-                      />
+                  <div className="card border border-line bg-card p-5 max-w-sm w-full rounded-[6px] shadow-sm select-none">
+                    <div className="flex items-baseline justify-between mb-2">
+                      <span className="text-xs font-medium text-ink/70">ATS score</span>
+                      <span className="font-serif text-3xl font-semibold text-ink leading-none">92</span>
+                    </div>
+                    <div className="w-full h-1 bg-muted rounded-full overflow-hidden mb-4">
+                      <div className="h-full bg-ink rounded-full w-[92%]" />
+                    </div>
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-2 text-xs text-ink/80">
+                        <Check className="w-3.5 h-3.5 text-ink/60 shrink-0" strokeWidth={1.5} />
+                        <span>Contact info found</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-ink/80">
+                        <Check className="w-3.5 h-3.5 text-ink/60 shrink-0" strokeWidth={1.5} />
+                        <span>Standard section headings</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-ink/80">
+                        <Check className="w-3.5 h-3.5 text-ink/60 shrink-0" strokeWidth={1.5} />
+                        <span>Keywords matched 14/18</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-ink/80">
+                        <Check className="w-3.5 h-3.5 text-ink/60 shrink-0" strokeWidth={1.5} />
+                        <span>Dates formatted consistently</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-ink/80">
+                        <Check className="w-3.5 h-3.5 text-ink/60 shrink-0" strokeWidth={1.5} />
+                        <span>One column, no tables</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-ink/50 pt-1.5 border-t border-line">
+                        <AlertCircle className="w-3.5 h-3.5 text-ink/40 shrink-0" strokeWidth={1.5} />
+                        <span>Add metrics to 2 bullets</span>
+                      </div>
                     </div>
                   </div>
-                  <span className="text-[11px] text-ink/40 mt-1.5">Sample</span>
                 </div>
               </div>
 
               {/* 3 Plain Feature Columns */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 py-5 border-t border-line">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 py-6 border-t border-line">
                 <div>
+                  <CheckCircle2 className="w-4 h-4 text-ink/40 mb-2" strokeWidth={1.5} />
                   <h3 className="text-xs font-semibold text-ink">Score against ATS rules</h3>
                   <p className="text-[11px] text-ink/60 mt-1 leading-relaxed">
                     Get instant feedback and actionable fixes based on real recruiter parsing rules.
                   </p>
                 </div>
                 <div>
+                  <Target className="w-4 h-4 text-ink/40 mb-2" strokeWidth={1.5} />
                   <h3 className="text-xs font-semibold text-ink">Match to a job description</h3>
                   <p className="text-[11px] text-ink/60 mt-1 leading-relaxed">
                     Compare your resume to any job post to identify missing keywords and skills.
                   </p>
                 </div>
                 <div>
+                  <ShieldCheck className="w-4 h-4 text-ink/40 mb-2" strokeWidth={1.5} />
                   <h3 className="text-xs font-semibold text-ink">Your data stays in the browser</h3>
                   <p className="text-[11px] text-ink/60 mt-1 leading-relaxed">
                     Resumes are stored privately in local storage without accounts or trackers.
@@ -1322,50 +1292,65 @@ export const App: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => openModal(setIsUploadModalOpen)}
-                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
                   >
-                    <h3 className="text-sm font-semibold text-ink">Upload a resume</h3>
-                    <p className="text-xs text-ink/60 mt-1 truncate">Import PDF, Word, JSON or text</p>
+                    <div>
+                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Upload a resume</h3>
+                      <p className="text-xs text-ink/60 mt-1 truncate">Import PDF, Word, JSON or text</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
                   </button>
 
                   {/* Tool 2: Custom ATS */}
                   <button
                     type="button"
                     onClick={() => openToolWithResume(handleOpenCustomAts)}
-                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
                   >
-                    <h3 className="text-sm font-semibold text-ink">Custom ATS format</h3>
-                    <p className="text-xs text-ink/60 mt-1 truncate">Paste or upload your own scoring rubric</p>
+                    <div>
+                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Custom ATS format</h3>
+                      <p className="text-xs text-ink/60 mt-1 truncate">Paste or upload your own scoring rubric</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
                   </button>
 
                   {/* Tool 3: Match to JD */}
                   <button
                     type="button"
                     onClick={() => openToolWithResume(() => openModal(setIsJobMatcherOpen))}
-                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
                   >
-                    <h3 className="text-sm font-semibold text-ink">Match to a job description</h3>
-                    <p className="text-xs text-ink/60 mt-1 truncate">See missing keywords, tailor your bullets</p>
+                    <div>
+                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Match to a job description</h3>
+                      <p className="text-xs text-ink/60 mt-1 truncate">See missing keywords, tailor your bullets</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
                   </button>
 
                   {/* Tool 4: Job Feeds */}
                   <button
                     type="button"
                     onClick={() => openToolWithResume(() => openModal(setIsJobRadarOpen))}
-                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
                   >
-                    <h3 className="text-sm font-semibold text-ink">Job search feeds</h3>
-                    <p className="text-xs text-ink/60 mt-1 truncate">Fresh listings for your role</p>
+                    <div>
+                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Job search feeds</h3>
+                      <p className="text-xs text-ink/60 mt-1 truncate">Fresh listings for your role</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
                   </button>
 
                   {/* Tool 5: Industry Trends */}
                   <button
                     type="button"
                     onClick={() => openToolWithResume(() => openModal(setIsTrendAdvisorOpen))}
-                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
                   >
-                    <h3 className="text-sm font-semibold text-ink">Industry trends</h3>
-                    <p className="text-xs text-ink/60 mt-1 truncate">Skills and upgrades for your profile</p>
+                    <div>
+                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Industry trends</h3>
+                      <p className="text-xs text-ink/60 mt-1 truncate">Skills and upgrades for your profile</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
                   </button>
 
                   {/* Tool 6: Start from a Sample */}
@@ -1374,10 +1359,13 @@ export const App: React.FC = () => {
                       ref={homeSampleBtnRef}
                       type="button"
                       onClick={handleToggleHomeSample}
-                      className="w-full h-full card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                      className="group w-full h-full card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
                     >
-                      <h3 className="text-sm font-semibold text-ink">Start from a sample</h3>
-                      <p className="text-xs text-ink/60 mt-1 truncate">AI engineer, full-stack, graduate</p>
+                      <div>
+                        <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Start from a sample</h3>
+                        <p className="text-xs text-ink/60 mt-1 truncate">AI engineer, full-stack, graduate</p>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
                     </button>
 
                     {homeSampleMenuOpen &&
@@ -1389,7 +1377,7 @@ export const App: React.FC = () => {
                             top: homeSampleMenuPos.top,
                             left: homeSampleMenuPos.left,
                           }}
-                          className="w-56 card shadow-menu py-1 z-50 border border-line bg-card rounded-[6px] animate-in fade-in duration-100"
+                          className="w-56 card shadow-menu py-1 z-[60] border border-line bg-card rounded-[6px] animate-in fade-in duration-100"
                         >
                           <button
                             type="button"
@@ -1462,7 +1450,7 @@ export const App: React.FC = () => {
               </div>
 
               {/* Resumes Grid */}
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 pt-6 items-stretch">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-6 items-stretch">
                 {displayResumes.map((entry) => {
                   const resumeItemData = getResume(entry.id);
                   const isCardAtsEmpty = isResumeEmptyForAts(resumeItemData);
@@ -1471,7 +1459,7 @@ export const App: React.FC = () => {
                     <div
                       key={entry.id}
                       onClick={() => {
-                        window.location.hash = `#/r/${entry.id}`;
+                        navigate(`/editor/${entry.id}`);
                       }}
                       className="card border border-line bg-card hover:border-ink/40 transition flex flex-col justify-between h-[280px] p-3.5 relative group cursor-pointer"
                     >
@@ -1557,7 +1545,7 @@ export const App: React.FC = () => {
                       </div>
 
                       {/* Top-Right Menu Trigger */}
-                      <div className="absolute top-2.5 right-2.5">
+                      <div className="absolute top-2 right-2 z-10">
                         <button
                           type="button"
                           onClick={(e) => handleToggleCardMenu(entry.id, e)}
@@ -1578,13 +1566,13 @@ export const App: React.FC = () => {
                                 top: cardMenuPos.top,
                                 right: cardMenuPos.right,
                               }}
-                              className="w-40 card shadow-menu py-1 z-50 border border-line bg-card rounded-[6px] animate-in fade-in duration-100"
+                              className="w-40 card shadow-menu py-1 z-[60] border border-line bg-card rounded-[6px] animate-in fade-in duration-100"
                             >
                               <button
                                 type="button"
                                 onClick={() => {
                                   setOpenCardMenuId(null);
-                                  window.location.hash = `#/r/${entry.id}`;
+                                  navigate(`/editor/${entry.id}`);
                                 }}
                                 className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
                               >
@@ -1676,97 +1664,126 @@ export const App: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => openModal(setIsUploadModalOpen)}
-                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
                   >
-                    <h3 className="text-sm font-semibold text-ink">Upload a resume</h3>
-                    <p className="text-xs text-ink/60 mt-1 truncate">Import PDF, Word, JSON or text</p>
+                    <div>
+                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Upload a resume</h3>
+                      <p className="text-xs text-ink/60 mt-1 truncate">Import PDF, Word, JSON or text</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
                   </button>
 
                   {/* Tool 2: Custom ATS */}
                   <button
                     type="button"
                     onClick={() => openToolWithResume(handleOpenCustomAts)}
-                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
                   >
-                    <h3 className="text-sm font-semibold text-ink">Custom ATS format</h3>
-                    <p className="text-xs text-ink/60 mt-1 truncate">Paste or upload your own scoring rubric</p>
+                    <div>
+                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Custom ATS format</h3>
+                      <p className="text-xs text-ink/60 mt-1 truncate">Paste or upload your own scoring rubric</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
                   </button>
 
                   {/* Tool 3: Match to JD */}
                   <button
                     type="button"
                     onClick={() => openToolWithResume(() => openModal(setIsJobMatcherOpen))}
-                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
                   >
-                    <h3 className="text-sm font-semibold text-ink">Match to a job description</h3>
-                    <p className="text-xs text-ink/60 mt-1 truncate">See missing keywords, tailor your bullets</p>
+                    <div>
+                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Match to a job description</h3>
+                      <p className="text-xs text-ink/60 mt-1 truncate">See missing keywords, tailor your bullets</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
                   </button>
 
                   {/* Tool 4: Job Feeds */}
                   <button
                     type="button"
                     onClick={() => openToolWithResume(() => openModal(setIsJobRadarOpen))}
-                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
                   >
-                    <h3 className="text-sm font-semibold text-ink">Job search feeds</h3>
-                    <p className="text-xs text-ink/60 mt-1 truncate">Fresh listings for your role</p>
+                    <div>
+                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Job search feeds</h3>
+                      <p className="text-xs text-ink/60 mt-1 truncate">Fresh listings for your role</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
                   </button>
 
                   {/* Tool 5: Industry Trends */}
                   <button
                     type="button"
                     onClick={() => openToolWithResume(() => openModal(setIsTrendAdvisorOpen))}
-                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
                   >
-                    <h3 className="text-sm font-semibold text-ink">Industry trends</h3>
-                    <p className="text-xs text-ink/60 mt-1 truncate">Skills and upgrades for your profile</p>
+                    <div>
+                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Industry trends</h3>
+                      <p className="text-xs text-ink/60 mt-1 truncate">Skills and upgrades for your profile</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
                   </button>
 
                   {/* Tool 6: Start from a Sample */}
                   <div className="relative" ref={homeSampleMenuRef}>
                     <button
+                      ref={homeSampleBtnRef}
                       type="button"
-                      onClick={() => setHomeSampleMenuOpen((v) => !v)}
-                      className="w-full h-full card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                      onClick={handleToggleHomeSample}
+                      className="group w-full h-full card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
                     >
-                      <h3 className="text-sm font-semibold text-ink">Start from a sample</h3>
-                      <p className="text-xs text-ink/60 mt-1 truncate">AI engineer, full-stack, graduate</p>
+                      <div>
+                        <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Start from a sample</h3>
+                        <p className="text-xs text-ink/60 mt-1 truncate">AI engineer, full-stack, graduate</p>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
                     </button>
 
-                    {homeSampleMenuOpen && (
-                      <div className="absolute left-0 bottom-full mb-1 w-full card shadow-menu py-1 z-30 border border-line bg-card rounded-[6px] animate-in fade-in duration-100">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setHomeSampleMenuOpen(false);
-                            handleLoadSample('aiEngineer');
+                    {homeSampleMenuOpen &&
+                      createPortal(
+                        <div
+                          ref={homeSampleMenuRef}
+                          style={{
+                            position: 'fixed',
+                            top: homeSampleMenuPos.top,
+                            left: homeSampleMenuPos.left,
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                          className="w-56 card shadow-menu py-1 z-[60] border border-line bg-card rounded-[6px] animate-in fade-in duration-100"
                         >
-                          AI Engineer
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setHomeSampleMenuOpen(false);
-                            handleLoadSample('fullStack');
-                          }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                        >
-                          Full-Stack Developer
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setHomeSampleMenuOpen(false);
-                            handleLoadSample('fresherStudent');
-                          }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                        >
-                          Graduate
-                        </button>
-                      </div>
-                    )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHomeSampleMenuOpen(false);
+                              handleLoadSample('aiEngineer');
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                          >
+                            AI Engineer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHomeSampleMenuOpen(false);
+                              handleLoadSample('fullStack');
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                          >
+                            Full-Stack Developer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHomeSampleMenuOpen(false);
+                              handleLoadSample('fresherStudent');
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                          >
+                            Graduate
+                          </button>
+                        </div>,
+                        document.body
+                      )}
                   </div>
                 </div>
               </div>

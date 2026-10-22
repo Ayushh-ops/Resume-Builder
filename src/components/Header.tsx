@@ -191,9 +191,11 @@ export const Header: React.FC<HeaderProps> = ({
     if (!menuOpen && menuBtnRef.current) {
       const rect = menuBtnRef.current.getBoundingClientRect();
       const menuHeight = 360;
+      const menuWidth = 208;
       const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
-      const top = fitsBelow ? rect.bottom + 6 : Math.max(8, rect.top - menuHeight - 6);
-      const right = Math.max(8, window.innerWidth - rect.right);
+      const idealTop = fitsBelow ? rect.bottom + 6 : rect.top - menuHeight - 6;
+      const top = Math.max(8, Math.min(window.innerHeight - menuHeight - 8, idealTop));
+      const right = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, window.innerWidth - rect.right));
       setMenuPos({ top, right });
     }
     setMenuOpen((v) => !v);
@@ -203,9 +205,12 @@ export const Header: React.FC<HeaderProps> = ({
     if (!resumeMenuOpen && resumeMenuBtnRef.current) {
       const rect = resumeMenuBtnRef.current.getBoundingClientRect();
       const menuHeight = 240;
+      const menuWidth = 240;
       const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
-      const top = fitsBelow ? rect.bottom + 6 : Math.max(8, rect.top - menuHeight - 6);
-      setResumeMenuPos({ top, left: rect.left });
+      const idealTop = fitsBelow ? rect.bottom + 6 : rect.top - menuHeight - 6;
+      const top = Math.max(8, Math.min(window.innerHeight - menuHeight - 8, idealTop));
+      const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.left));
+      setResumeMenuPos({ top, left });
     }
     setResumeMenuOpen((v) => !v);
   };
@@ -214,9 +219,11 @@ export const Header: React.FC<HeaderProps> = ({
     if (!atsPopoverOpen && atsBtnRef.current) {
       const rect = atsBtnRef.current.getBoundingClientRect();
       const popoverHeight = 360;
+      const popoverWidth = 288;
       const fitsBelow = rect.bottom + popoverHeight + 8 <= window.innerHeight;
-      const top = fitsBelow ? rect.bottom + 6 : Math.max(8, rect.top - popoverHeight - 6);
-      const right = Math.max(8, window.innerWidth - rect.right);
+      const idealTop = fitsBelow ? rect.bottom + 6 : rect.top - popoverHeight - 6;
+      const top = Math.max(8, Math.min(window.innerHeight - popoverHeight - 8, idealTop));
+      const right = Math.max(8, Math.min(window.innerWidth - popoverWidth - 8, window.innerWidth - rect.right));
       setAtsPos({ top, right });
     }
     setAtsPopoverOpen((v) => !v);
@@ -295,7 +302,7 @@ export const Header: React.FC<HeaderProps> = ({
                       top: resumeMenuPos.top,
                       left: resumeMenuPos.left,
                     }}
-                    className="w-60 card shadow-menu py-1 z-50 border border-line bg-card animate-in fade-in duration-100 max-h-[60vh] overflow-y-auto rounded-[6px]"
+                    className="w-60 card shadow-menu py-1 z-[60] border border-line bg-card animate-in fade-in duration-100 max-h-[60vh] overflow-y-auto rounded-[6px]"
                   >
                     <div className="px-3 py-1.5 text-xs font-medium text-ink/50 border-b border-line flex items-center justify-between">
                       <span>Your resumes</span>
@@ -411,7 +418,7 @@ export const Header: React.FC<HeaderProps> = ({
                       top: atsPos.top,
                       right: atsPos.right,
                     }}
-                    className="w-72 card shadow-menu p-3 z-50 border border-line bg-card space-y-2.5 animate-in fade-in duration-100 rounded-[6px]"
+                    className="w-72 card shadow-menu p-3 z-[60] border border-line bg-card space-y-2.5 animate-in fade-in duration-100 rounded-[6px]"
                   >
                     {/* Header with Profile Selector */}
                     <div className="pb-2 border-b border-line space-y-2">
@@ -562,7 +569,7 @@ export const Header: React.FC<HeaderProps> = ({
                       top: menuPos.top,
                       right: menuPos.right,
                     }}
-                    className="w-52 card shadow-menu py-1 z-50 border border-line bg-card max-h-[85vh] overflow-y-auto animate-in fade-in duration-100 rounded-[6px]"
+                    className="w-52 card shadow-menu py-1 z-[60] border border-line bg-card max-h-[85vh] overflow-y-auto animate-in fade-in duration-100 rounded-[6px]"
                   >
                     <button
                       onClick={() => {

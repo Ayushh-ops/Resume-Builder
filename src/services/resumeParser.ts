@@ -275,42 +275,94 @@ function normalizeParsedData(parsed: any): Partial<ResumeData> {
   };
 }
 
+function normalizeResumeText(text: string): string {
+  let normalized = text;
+
+  // Insert newline before known headings (summary, experience, work history, education, skills, projects, certifications, awards) case-insensitive
+  const headings = [
+    'work\\s+experience',
+    'work\\s+history',
+    'experience',
+    'employment',
+    'education',
+    'skills',
+    'technical\\s+skills',
+    'projects',
+    'certifications?',
+    'awards?',
+    'summary',
+    'objective',
+  ];
+  const headingPattern = new RegExp(`(?:^|[^\\n])\\s*\\b(${headings.join('|')}):?\\s*(?=[\\nA-Z0-9•·\\u2022*\\-])`, 'gi');
+  normalized = normalized.replace(headingPattern, '\n$1\n');
+
+  // Insert newline before bullet chars (•, -, *, \u2022)
+  normalized = normalized.replace(/(?:^|[^\n])\s*([•\u2022·⁃◦*]|-\s+)/g, '\n$1');
+
+  return normalized;
+}
+
 function fallbackRegexParser(rawText: string): Partial<ResumeData> {
-  const lines = rawText
+  const normalizedText = normalizeResumeText(rawText);
+  const lines = normalizedText
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
 
   // Email
-  const emailMatch = rawText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const emailMatch = normalizedText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
   const email = emailMatch ? emailMatch[0] : '';
 
   // Phone
-  const phoneMatch = rawText.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+  const phoneMatch = normalizedText.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
   const phone = phoneMatch ? phoneMatch[0] : '';
 
+  // Location heuristic (City, State / City, Country)
+  let location = '';
+  const locationMatch = normalizedText.match(/\b([A-Z][a-zA-Z\s]+,\s*(?:[A-Z]{2}|[A-Z][a-zA-Z\s]+))\b/);
+  if (locationMatch && !locationMatch[0].includes('University') && !locationMatch[0].includes('Company')) {
+    location = locationMatch[0].trim();
+  }
+
   // LinkedIn
-  const linkedinMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)/i);
+  const linkedinMatch = normalizedText.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)/i);
   const linkedin = linkedinMatch ? linkedinMatch[0] : '';
 
   // GitHub
-  const githubMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_-]+)/i);
+  const githubMatch = normalizedText.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_-]+)/i);
   const github = githubMatch ? githubMatch[0] : '';
 
   // Website / Portfolio
-  const websiteMatch = rawText.match(/(?:https?:\/\/)(?:www\.)?[a-zA-Z0-9-]+\.(?:com|io|dev|org|net|me)/i);
+  const websiteMatch = normalizedText.match(/(?:https?:\/\/)(?:www\.)?[a-zA-Z0-9-]+\.(?:com|io|dev|org|net|me)/i);
   const website = websiteMatch ? websiteMatch[0] : '';
 
-  // Name: first non-empty line that is 2-4 words, no digits/@/url; if none, leave empty
+  // Name: first line with 2-4 alphabetic words, else part of text before email/phone
   let fullName = '';
   for (const line of lines) {
     if (/\d|@|https?:\/\/|www\.|\.(com|org|net|edu|io|dev)\b/i.test(line)) {
       continue;
     }
     const words = line.split(/\s+/).filter(Boolean);
-    if (words.length >= 2 && words.length <= 4 && line.length < 50) {
+    const isAllAlpha = words.every((w) => /^[a-zA-Z.'-]+$/.test(w));
+    if (words.length >= 2 && words.length <= 4 && isAllAlpha && line.length < 50) {
       fullName = line;
       break;
+    }
+  }
+
+  if (!fullName) {
+    const contactIndex = normalizedText.search(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+    if (contactIndex > 0) {
+      const textBefore = normalizedText.slice(0, contactIndex).trim();
+      const beforeLines = textBefore.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      for (const bLine of beforeLines) {
+        const words = bLine.split(/\s+/).filter(Boolean);
+        const isAllAlpha = words.every((w) => /^[a-zA-Z.'-]+$/.test(w));
+        if (words.length >= 2 && words.length <= 4 && isAllAlpha && bLine.length < 50) {
+          fullName = bLine;
+          break;
+        }
+      }
     }
   }
 
@@ -368,72 +420,85 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
   // Summary
   const summary = sectionBuckets.summary.length > 0 ? sectionBuckets.summary.join(' ').slice(0, 500) : '';
 
-  // Experience parsing
+  // Experience parsing with date range anchors
+  const DATE_RANGE_REGEX = /\b(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december)\.?,?\s*)?(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:present|current|(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|may|june|july|august|september|october|november|december)\.?,?\s*)?(?:19|20)\d{2})\b/i;
+
   const experience: any[] = [];
   if (sectionBuckets.experience.length > 0) {
     let currentExp: any = null;
     for (const expLine of sectionBuckets.experience) {
-      const isBullet = /^[•\-*]\s*/.test(expLine);
-      const isDateLine = /(?:19|20)\d{2}/.test(expLine);
+      const isBullet = /^[•·⁃◦*]\s*|^\-\s+/.test(expLine);
+      const hasDateRange = DATE_RANGE_REGEX.test(expLine);
 
-      if (!isBullet && (!currentExp || isDateLine || currentExp.highlights.length > 0)) {
+      if (hasDateRange || (!isBullet && (!currentExp || currentExp.highlights.length > 0))) {
+        const dateMatch = expLine.match(DATE_RANGE_REGEX);
+        const dateStr = dateMatch ? dateMatch[0] : '';
+        const titleCandidate = expLine.replace(DATE_RANGE_REGEX, '').replace(/^[|•·⁃◦*-]\s*/, '').trim();
+
         currentExp = {
           id: `exp-${Date.now()}-${experience.length}`,
-          company: expLine,
+          company: titleCandidate || expLine,
           position: jobTitle || 'Role',
           location: '',
-          startDate: '',
-          endDate: 'Present',
-          current: true,
+          startDate: dateStr ? dateStr.split(/[-–—to]+/i)[0].trim() : '',
+          endDate: dateStr ? (dateStr.split(/[-–—to]+/i)[1] || 'Present').trim() : 'Present',
+          current: /present|current/i.test(dateStr),
           highlights: [],
         };
         experience.push(currentExp);
       } else if (currentExp) {
-        currentExp.highlights.push(expLine.replace(/^[•\-*]\s*/, '').trim());
+        currentExp.highlights.push(expLine.replace(/^[•·⁃◦*]\s*|^\-\s+/, '').trim());
       }
     }
   }
 
-  // Education parsing
+  // Education parsing with degree keywords (B.Tech, B.E., BSc, MSc, MBA, Bachelor, Master, Diploma, 12th, 10th)
+  const DEGREE_KEYWORD_REGEX = /\b(b\.?tech|b\.?e\.?|b\.?sc|m\.?sc|mba|bachelor(?:'s)?|master(?:'s)?|diploma|12th|10th|associate|ph\.?d|bba|bca|mca)\b/i;
+
   const education: any[] = [];
   if (sectionBuckets.education.length > 0) {
     let currentEdu: any = null;
     for (const eduLine of sectionBuckets.education) {
-      const isDegreeOrSchool = /(?:university|college|institute|school|bachelor|master|b\.s|b\.a|m\.s|ph\.d|degree|diploma)/i.test(eduLine);
-      if (isDegreeOrSchool || !currentEdu) {
+      const hasDegree = DEGREE_KEYWORD_REGEX.test(eduLine);
+      const isSchoolOrCollege = /(?:university|college|institute|school|academy)/i.test(eduLine);
+
+      if (hasDegree || isSchoolOrCollege || !currentEdu) {
+        const degreeMatch = eduLine.match(DEGREE_KEYWORD_REGEX);
         currentEdu = {
           id: `edu-${Date.now()}-${education.length}`,
-          institution: eduLine,
-          degree: '',
+          institution: isSchoolOrCollege ? eduLine : 'Institution',
+          degree: degreeMatch ? degreeMatch[0] : (hasDegree ? eduLine : ''),
           fieldOfStudy: '',
           location: '',
           startDate: '',
           endDate: '',
         };
         education.push(currentEdu);
-      } else if (currentEdu && !currentEdu.degree) {
+      } else if (currentEdu && !currentEdu.degree && hasDegree) {
         currentEdu.degree = eduLine;
+      } else if (currentEdu && isSchoolOrCollege) {
+        currentEdu.institution = eduLine;
       }
     }
   }
 
-  // Projects parsing (Detect Projects heading)
+  // Projects parsing
   const projects: any[] = [];
   if (sectionBuckets.projects.length > 0) {
     let currentProj: any = null;
     for (const projLine of sectionBuckets.projects) {
-      const isBullet = /^[•\-*]\s*/.test(projLine);
+      const isBullet = /^[•·⁃◦*]\s*|^\-\s+/.test(projLine);
       if (!isBullet && (!currentProj || currentProj.highlights.length > 0)) {
         currentProj = {
           id: `proj-${Date.now()}-${projects.length}`,
-          name: projLine.replace(/^[•\-*]\s*/, '').trim(),
+          name: projLine.replace(/^[•·⁃◦*]\s*|^\-\s+/, '').trim(),
           description: '',
           technologies: [],
           highlights: [],
         };
         projects.push(currentProj);
       } else if (currentProj) {
-        currentProj.highlights.push(projLine.replace(/^[•\-*]\s*/, '').trim());
+        currentProj.highlights.push(projLine.replace(/^[•·⁃◦*]\s*|^\-\s+/, '').trim());
       }
     }
   }
@@ -443,7 +508,7 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
   const extractedSkillItems: string[] = [];
   if (sectionBuckets.skills.length > 0) {
     for (const sLine of sectionBuckets.skills) {
-      const tokens = sLine.split(/[,|•\-\n/]+/).map((s) => s.trim()).filter((s) => s.length > 1 && s.length < 35);
+      const tokens = sLine.split(/[,|•·⁃◦*\-\n/]+/).map((s) => s.trim()).filter((s) => s.length > 1 && s.length < 35);
       extractedSkillItems.push(...tokens);
     }
   }
@@ -471,7 +536,7 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
       jobTitle,
       email,
       phone,
-      location: '',
+      location,
       website,
       linkedin,
       github,
@@ -489,21 +554,14 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
 function calculateConfidence(data: Partial<ResumeData>): Record<string, number> {
   const confidence: Record<string, number> = {};
 
-  // Personal Info: 0% if empty, <50% if only partial
+  // Personal Info = detected fields / 4 (name, email, phone, location)
   const pi = data.personalInfo;
-  if (!pi || (!pi.fullName && !pi.email && !pi.phone && !pi.jobTitle)) {
-    confidence['personalInfo'] = 0;
-  } else {
-    let filled = 0;
-    if (pi.fullName) filled++;
-    if (pi.email) filled++;
-    if (pi.phone) filled++;
-    if (pi.jobTitle) filled++;
-    if (filled === 1) confidence['personalInfo'] = 25;
-    else if (filled === 2) confidence['personalInfo'] = 45;
-    else if (filled === 3) confidence['personalInfo'] = 75;
-    else confidence['personalInfo'] = 95;
-  }
+  let piFields = 0;
+  if (pi?.fullName?.trim()) piFields++;
+  if (pi?.email?.trim()) piFields++;
+  if (pi?.phone?.trim()) piFields++;
+  if (pi?.location?.trim()) piFields++;
+  confidence['personalInfo'] = Math.round((piFields / 4) * 100);
 
   // Summary: 0% if empty, <50% if only partial
   const sum = (data.summary || '').trim();
