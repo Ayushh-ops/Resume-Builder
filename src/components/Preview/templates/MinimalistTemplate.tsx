@@ -17,12 +17,18 @@ export const MinimalistTemplate: React.FC<TemplateProps> = ({ data }) => {
     >
       {/* Header */}
       <header className="mb-5">
-        <h1 className="text-3xl font-light tracking-tight text-slate-900">
-          <span className="font-bold">{personalInfo.fullName?.split(' ')[0]}</span>{' '}
-          {personalInfo.fullName?.split(' ').slice(1).join(' ') || 'Candidate'}
+        <h1 className={`text-3xl font-light tracking-tight ${personalInfo.fullName ? 'text-slate-900' : 'text-slate-400'}`}>
+          {personalInfo.fullName ? (
+            <>
+              <span className="font-bold">{personalInfo.fullName.split(' ')[0]}</span>{' '}
+              {personalInfo.fullName.split(' ').slice(1).join(' ')}
+            </>
+          ) : (
+            'Your Name'
+          )}
         </h1>
-        <p className="text-xs font-medium tracking-widest uppercase text-slate-500 mt-0.5">
-          {personalInfo.jobTitle || 'Software Engineer'}
+        <p className={`text-xs font-medium tracking-widest uppercase mt-0.5 ${personalInfo.jobTitle ? 'text-slate-500' : 'text-slate-400'}`}>
+          {personalInfo.jobTitle || 'Target Job Title'}
         </p>
 
         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-slate-500 font-mono">

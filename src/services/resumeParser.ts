@@ -5,8 +5,8 @@ import type { ResumeData } from '../types/resume';
 import {
   getGeminiKey,
   getStoredModel,
-  FALLBACK_MODELS,
   formatGeminiErrorNotice,
+  resolveGeminiModels,
 } from './geminiService';
 
 // Set up pdf.js worker URL for browser environments
@@ -109,11 +109,12 @@ export async function parseResumeFile(file: File): Promise<ParseResult> {
  */
 export async function structureResumeWithGemini(
   rawText: string,
-  externalSignal?: AbortSignal
+  externalSignal?: AbortSignal,
+  fileName?: string
 ): Promise<StructureResult> {
   const apiKey = getGeminiKey();
   if (!apiKey) {
-    const fallbackData = fallbackRegexParser(rawText);
+    const fallbackData = fallbackRegexParser(rawText, fileName);
     return {
       data: fallbackData,
       fallbackNotice: 'No API key set',
@@ -121,10 +122,11 @@ export async function structureResumeWithGemini(
     };
   }
 
-  const configuredModel = getStoredModel() || 'gemini-2.5-flash';
-  const modelsToTry = Array.from(new Set([configuredModel, ...FALLBACK_MODELS])).filter(
-    (m) => !m.startsWith('gemini-3.')
-  );
+  const resolved = await resolveGeminiModels(apiKey);
+  const configuredModel = (getStoredModel() || resolved[0] || 'gemini-2.5-flash').replace(/^models\//, '');
+  const modelsToTry = Array.from(new Set([configuredModel, ...resolved]))
+    .filter((m) => !m.startsWith('gemini-3.'))
+    .map((m) => m.replace(/^models\//, ''));
 
   let lastError: any = null;
   const controller = new AbortController();
@@ -236,7 +238,7 @@ Return strictly a valid JSON object matching this schema. No markdown formatting
 
   // Fallback: offline regex parser automatically with real error reason
   const fallbackNotice = formatGeminiErrorNotice(lastError);
-  const fallbackData = fallbackRegexParser(rawText);
+  const fallbackData = fallbackRegexParser(rawText, fileName);
   return {
     data: fallbackData,
     fallbackNotice,
@@ -390,7 +392,7 @@ function normalizeResumeText(text: string): string {
   return normalized;
 }
 
-function fallbackRegexParser(rawText: string): Partial<ResumeData> {
+function fallbackRegexParser(rawText: string, fileName?: string): Partial<ResumeData> {
   const normalizedText = normalizeResumeText(rawText);
   const lines = normalizedText
     .split(/\r?\n/)
@@ -460,6 +462,29 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
 
   if (fullName && isSectionHeadingOrKeyword(fullName)) {
     fullName = '';
+  }
+
+  let nameSource: 'detected' | 'from file name' | undefined = undefined;
+  if (fullName) {
+    nameSource = 'detected';
+  } else if (fileName) {
+    // derive from uploaded file name (strip extension, "resume/cv", underscores/digits) if it yields 2-3 capitalized words
+    const cleanBase = fileName
+      .replace(/\.[^/.]+$/, '')
+      .replace(/\b(resume|cv)\b/gi, ' ')
+      .replace(/[\d_.-]+/g, ' ')
+      .trim();
+    const fileWords = cleanBase.split(/\s+/).filter(Boolean);
+    if (
+      fileWords.length >= 2 &&
+      fileWords.length <= 3 &&
+      fileWords.every((w) => /^[a-zA-Z]+$/.test(w))
+    ) {
+      fullName = fileWords
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+      nameSource = 'from file name';
+    }
   }
 
   // Target role: line right after fullName or near header, empty if not found
@@ -646,7 +671,8 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
       website,
       linkedin,
       github,
-    },
+      nameSource,
+    } as any,
     summary,
     experience,
     education,
@@ -671,69 +697,71 @@ function calculateConfidence(data: Partial<ResumeData>): Record<string, number> 
   if (pi?.location?.trim()) piFields++;
   confidence['personalInfo'] = Math.round((piFields / 4) * 100);
 
-  // Summary: 0% if empty, <50% if only partial
+  // Summary: 0% if empty; Summary by word count 30-90
   const sum = (data.summary || '').trim();
-  if (!sum) {
+  const sumWords = sum ? sum.split(/\s+/).filter(Boolean).length : 0;
+  if (sumWords === 0) {
     confidence['summary'] = 0;
-  } else if (sum.length < 50) {
-    confidence['summary'] = 40;
-  } else if (sum.length < 120) {
-    confidence['summary'] = 70;
+  } else if (sumWords >= 30 && sumWords <= 90) {
+    confidence['summary'] = 100;
+  } else if (sumWords < 30) {
+    confidence['summary'] = Math.round((sumWords / 30) * 100);
   } else {
-    confidence['summary'] = 92;
+    confidence['summary'] = Math.max(50, Math.round(100 - ((sumWords - 90) / 90) * 50));
   }
 
-  // Experience: 0% if empty, <50% if only partial
+  // Experience: 0% if empty; Experience by entries with title+company+dates
   const exp = data.experience || [];
   if (exp.length === 0) {
     confidence['experience'] = 0;
   } else {
-    const withBullets = exp.filter((e) => (e.highlights?.length || 0) > 0);
-    if (withBullets.length === 0) {
-      confidence['experience'] = 35;
-    } else if (withBullets.length === 1) {
-      confidence['experience'] = 75;
-    } else {
-      confidence['experience'] = 94;
-    }
+    const scores = exp.map((e) => {
+      const hasTitle = Boolean(e.position?.trim());
+      const hasCompany = Boolean(e.company?.trim());
+      const hasDates = Boolean(e.startDate?.trim() || e.endDate?.trim());
+      return ((hasTitle ? 1 : 0) + (hasCompany ? 1 : 0) + (hasDates ? 1 : 0)) / 3;
+    });
+    confidence['experience'] = Math.round((scores.reduce((a, b) => a + b, 0) / exp.length) * 100);
   }
 
-  // Education: 0% if empty, <50% if only partial
+  // Education: 0% if empty; Education by degree+school
   const edu = data.education || [];
   if (edu.length === 0) {
     confidence['education'] = 0;
   } else {
-    const valid = edu.filter((e) => e.institution || e.degree);
-    if (valid.length === 0) {
-      confidence['education'] = 30;
-    } else {
-      confidence['education'] = 90;
-    }
+    const scores = edu.map((e) => {
+      const hasDegree = Boolean(e.degree?.trim());
+      const hasSchool = Boolean(e.institution?.trim());
+      return ((hasDegree ? 1 : 0) + (hasSchool ? 1 : 0)) / 2;
+    });
+    confidence['education'] = Math.round((scores.reduce((a, b) => a + b, 0) / edu.length) * 100);
   }
 
-  // Skills: 0% if empty, <50% if only partial
+  // Skills: 0% if empty; Skills by count>=5
   const totalSkills = data.skills?.reduce((acc, c) => acc + (c.skills?.length || 0), 0) || 0;
   if (totalSkills === 0) {
     confidence['skills'] = 0;
-  } else if (totalSkills < 4) {
-    confidence['skills'] = 40;
-  } else if (totalSkills < 8) {
-    confidence['skills'] = 75;
+  } else if (totalSkills >= 5) {
+    confidence['skills'] = 100;
   } else {
-    confidence['skills'] = 95;
+    confidence['skills'] = Math.round((totalSkills / 5) * 100);
   }
 
-  // Projects: 0% if empty, <50% if only partial
+  // Projects: 0% if empty; Projects by entries
   const projs = data.projects || [];
   if (projs.length === 0) {
     confidence['projects'] = 0;
   } else {
-    const valid = projs.filter((p) => p.name);
-    if (valid.length === 0) {
-      confidence['projects'] = 30;
-    } else {
-      confidence['projects'] = 88;
-    }
+    const scores = projs.map((p) => {
+      const hasName = Boolean(p.name?.trim());
+      const hasDetails = Boolean(
+        (p.technologies?.length || 0) > 0 ||
+        (p.highlights?.length || 0) > 0 ||
+        p.description?.trim()
+      );
+      return ((hasName ? 1 : 0) + (hasDetails ? 1 : 0)) / 2;
+    });
+    confidence['projects'] = Math.round((scores.reduce((a, b) => a + b, 0) / projs.length) * 100);
   }
 
   return confidence;
@@ -762,7 +790,8 @@ export async function parseAndStructureResume(
 
   const { data: structured, fallbackNotice, isAiFallback } = await structureResumeWithGemini(
     rawText,
-    abortSignal
+    abortSignal,
+    file.name
   );
   const confidence = calculateConfidence(structured);
 

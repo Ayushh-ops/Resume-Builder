@@ -123,7 +123,7 @@ export const Modal: React.FC<ModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1 rounded-[6px] text-ink/40 hover:text-ink hover:bg-muted transition shrink-0"
+              className="p-1 rounded-[6px] text-ink/40 hover:text-ink hover:bg-muted transition shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600 cursor-pointer"
               title="Close (Esc)"
             >
               <X className="w-4 h-4" />

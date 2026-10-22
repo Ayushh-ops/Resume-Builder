@@ -89,6 +89,20 @@ export const JobRadarModal: React.FC<JobRadarModalProps> = ({
       ]
     : [];
 
+  const handleGoToJobTitle = () => {
+    onClose();
+    if (onGoToSection) {
+      onGoToSection('personal');
+    }
+    setTimeout(() => {
+      const input = document.getElementById('personalInfo.jobTitle') as HTMLInputElement | null;
+      if (input) {
+        input.focus();
+        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -98,11 +112,11 @@ export const JobRadarModal: React.FC<JobRadarModalProps> = ({
       icon={<Radar className="w-4 h-4 text-ink/70" strokeWidth={1.5} />}
       maxWidth="max-w-2xl"
       footer={
-        <div className="w-full flex justify-end items-center text-xs">
+        <div className="w-full flex justify-end items-center text-xs select-none">
           <button
             type="button"
             onClick={onClose}
-            className="btn-outline h-8 px-3.5"
+            className="btn-outline h-8 px-3.5 cursor-pointer"
           >
             Close
           </button>
@@ -113,14 +127,24 @@ export const JobRadarModal: React.FC<JobRadarModalProps> = ({
         <HowToUse toolId="job_radar" />
 
         {!userTitle ? (
-          <div className="p-4 bg-muted border border-line rounded-[6px] text-xs text-ink/60">
-            Add a target job title to get suggestions
+          <div className="p-4 bg-muted border border-line rounded-[6px] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs select-none">
+            <span className="text-ink/80 font-medium">
+              Add a target job title to get suggestions
+            </span>
+            <button
+              type="button"
+              onClick={handleGoToJobTitle}
+              className="btn-primary h-8 px-3 text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer shrink-0 self-start sm:self-auto"
+            >
+              <span>Go to Target Job Title</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         ) : (
           <>
             {/* Search Portals List */}
             <div className="space-y-3">
-              <h3 className="text-[12.5px] font-medium text-ink/60">
+              <h3 className="text-[12.5px] font-medium text-ink/60 select-none">
                 Search links
               </h3>
               <div className="space-y-2">

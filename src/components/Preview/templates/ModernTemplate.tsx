@@ -21,11 +21,11 @@ export const ModernTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
     >
       {/* Header */}
       <header className="border-b-2 pb-4 mb-4" style={{ borderColor: primaryColor }}>
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 uppercase">
-          {personalInfo.fullName || 'Your Full Name'}
+        <h1 className={`text-2xl font-extrabold tracking-tight uppercase ${personalInfo.fullName ? 'text-slate-900' : 'text-slate-400'}`}>
+          {personalInfo.fullName || 'Your Name'}
         </h1>
-        <p className="text-sm font-semibold tracking-wide mt-0.5" style={{ color: primaryColor }}>
-          {personalInfo.jobTitle || 'Target Professional Title'}
+        <p className="text-sm font-semibold tracking-wide mt-0.5" style={{ color: personalInfo.jobTitle ? primaryColor : '#94a3b8' }}>
+          {personalInfo.jobTitle || 'Target Job Title'}
         </p>
 
         {/* Contact Links Bar */}

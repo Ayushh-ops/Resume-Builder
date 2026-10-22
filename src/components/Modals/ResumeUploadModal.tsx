@@ -35,6 +35,12 @@ const getChecklistItems = (data: Partial<ResumeData>) => {
       hint: 'Candidate name was not detected in the file',
       section: 'personal',
     });
+  } else if ((data.personalInfo as any)?.nameSource === 'from file name') {
+    items.push({
+      label: 'Confirm name from file name',
+      hint: 'Name was derived from file name, please verify',
+      section: 'personal',
+    });
   }
   if (!data.personalInfo?.jobTitle?.trim()) {
     items.push({

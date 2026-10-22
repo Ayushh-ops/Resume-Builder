@@ -16,11 +16,11 @@ export const HarvardTemplate: React.FC<TemplateProps> = ({ data }) => {
     >
       {/* Header (Classic Centered) */}
       <header className="text-center pb-3 mb-3 border-b border-black">
-        <h1 className="text-xl font-bold tracking-normal uppercase text-black">
-          {personalInfo.fullName || 'YOUR FULL NAME'}
+        <h1 className={`text-xl font-bold tracking-normal uppercase ${personalInfo.fullName ? 'text-black' : 'text-neutral-400'}`}>
+          {personalInfo.fullName || 'Your Name'}
         </h1>
-        <p className="text-xs italic text-neutral-800 mt-0.5">
-          {personalInfo.jobTitle || 'Professional Title'}
+        <p className={`text-xs italic mt-0.5 ${personalInfo.jobTitle ? 'text-neutral-800' : 'text-neutral-400'}`}>
+          {personalInfo.jobTitle || 'Target Job Title'}
         </p>
 
         {/* Contact Line */}

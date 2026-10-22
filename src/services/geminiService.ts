@@ -4,7 +4,52 @@ import type { ResumeData, TrendUpgradeTip, ATSCheckResult, ATSProfile } from '..
 const LOCAL_STORAGE_KEY = 'resumecraft_gemini_api_key';
 const LOCAL_STORAGE_MODEL_KEY = 'resumecraft_gemini_model';
 
-export const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash'] as const;
+export const CANDIDATE_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'] as const;
+export const FALLBACK_MODELS = CANDIDATE_MODELS;
+
+export async function resolveGeminiModels(apiKey: string): Promise<string[]> {
+  const cleanKey = (apiKey || '').trim().replace(/^["']|["']$/g, '').trim();
+  if (!cleanKey) return [...CANDIDATE_MODELS];
+
+  const cacheKey = `rc_gemini_models_${cleanKey.slice(-6)}`;
+  try {
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {}
+
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`);
+    if (res.ok) {
+      const data = await res.json();
+      const modelsList: Array<{ name: string; supportedGenerationMethods?: string[] }> = data?.models || [];
+      const supported = modelsList.filter((m) =>
+        Array.isArray(m.supportedGenerationMethods) &&
+        m.supportedGenerationMethods.includes('generateContent')
+      );
+
+      const availableCleanNames = supported.map((m) => m.name.replace(/^models\//, ''));
+      const pickedCandidates = CANDIDATE_MODELS.filter((candidate) =>
+        availableCleanNames.some((avail) => avail === candidate || avail.endsWith(candidate))
+      );
+
+      if (pickedCandidates.length > 0) {
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify(pickedCandidates));
+        } catch {}
+        return pickedCandidates;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch available Gemini models list, using fallbacks:', err);
+  }
+
+  return [...CANDIDATE_MODELS];
+}
 
 export const getGeminiKey = (): string => {
   let key = '';
@@ -106,10 +151,11 @@ export async function testGeminiKey(
     return { success: false, message: 'No API key set' };
   }
 
-  const configured = modelToTest || getStoredModel() || 'gemini-2.5-flash';
-  const models = Array.from(new Set([configured, ...FALLBACK_MODELS])).filter(
-    (m) => !m.startsWith('gemini-3.')
-  );
+  const resolvedModels = await resolveGeminiModels(key);
+  const configured = (modelToTest || getStoredModel() || resolvedModels[0] || 'gemini-2.5-flash').replace(/^models\//, '');
+  const models = Array.from(new Set([configured, ...resolvedModels]))
+    .filter((m) => !m.startsWith('gemini-3.'))
+    .map((m) => m.replace(/^models\//, ''));
 
   let lastError: any = null;
   const client = new GoogleGenAI({ apiKey: key });
@@ -154,10 +200,11 @@ export async function generateGeminiText(
     throw new Error('No API key set');
   }
 
-  const configured = getStoredModel() || 'gemini-2.5-flash';
-  const models = Array.from(new Set([configured, ...FALLBACK_MODELS])).filter(
-    (m) => !m.startsWith('gemini-3.')
-  );
+  const resolvedModels = await resolveGeminiModels(apiKey);
+  const configured = (getStoredModel() || resolvedModels[0] || 'gemini-2.5-flash').replace(/^models\//, '');
+  const models = Array.from(new Set([configured, ...resolvedModels]))
+    .filter((m) => !m.startsWith('gemini-3.'))
+    .map((m) => m.replace(/^models\//, ''));
 
   let lastError: any = null;
   const client = new GoogleGenAI({ apiKey });

@@ -43,6 +43,8 @@ export const PersonalInfoForm: React.FC<PersonalInfoFormProps> = ({ data, onChan
           <div className="relative">
             <Briefcase className="w-4 h-4 text-ink/40 absolute left-3 top-2.5" />
             <input
+              id="personalInfo.jobTitle"
+              name="jobTitle"
               type="text"
               value={data.jobTitle || ''}
               title={data.jobTitle || ''}

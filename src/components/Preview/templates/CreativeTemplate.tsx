@@ -19,9 +19,11 @@ export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
     >
       {/* Top Banner */}
       <div className="bg-slate-900 text-white p-5 rounded-xl mb-4 -mx-1 -mt-1 shadow-xs">
-        <h1 className="text-2xl font-black tracking-tight">{personalInfo.fullName || 'Your Name'}</h1>
-        <p className="text-xs font-semibold text-indigo-300 tracking-wide mt-0.5">
-          {personalInfo.jobTitle || 'Target Role'}
+        <h1 className={`text-2xl font-black tracking-tight ${personalInfo.fullName ? 'text-white' : 'text-slate-400'}`}>
+          {personalInfo.fullName || 'Your Name'}
+        </h1>
+        <p className={`text-xs font-semibold tracking-wide mt-0.5 ${personalInfo.jobTitle ? 'text-indigo-300' : 'text-slate-400'}`}>
+          {personalInfo.jobTitle || 'Target Job Title'}
         </p>
 
         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5 text-[11px] text-slate-300">
