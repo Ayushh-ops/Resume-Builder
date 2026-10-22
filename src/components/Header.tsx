@@ -3,16 +3,9 @@ import { createPortal } from 'react-dom';
 import {
   Download,
   Printer,
-  Radar,
-  TrendingUp,
-  Target,
-  Sliders,
   Settings,
   FolderOpen,
   ChevronDown,
-  User,
-  Code2,
-  GraduationCap,
   MoreHorizontal,
   Undo2,
   Redo2,
@@ -88,10 +81,7 @@ const getScoreColors = (score: number, isEmpty?: boolean) => {
 export const Header: React.FC<HeaderProps> = ({
   atsResult,
   onOpenJobMatcher,
-  onOpenJobRadar,
-  onOpenTrendAdvisor,
   onOpenApiKeyModal,
-  onLoadSample,
   onExportJson,
   onPrint,
   onDownloadPdf,
@@ -117,7 +107,6 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectResume,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [samplesExpanded, setSamplesExpanded] = useState(false);
   const [atsPopoverOpen, setAtsPopoverOpen] = useState(false);
   const [resumeMenuOpen, setResumeMenuOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -504,9 +493,8 @@ export const Header: React.FC<HeaderProps> = ({
                       top: menuPos.top,
                       right: menuPos.right,
                     }}
-                    className="w-56 card shadow-menu py-1 z-40 border border-line bg-card max-h-[70vh] overflow-y-auto animate-in fade-in duration-100 rounded-[6px]"
+                    className="w-48 card shadow-menu py-1 z-40 border border-line bg-card overflow-y-auto animate-in fade-in duration-100 rounded-[6px]"
                   >
-                    {/* Actions */}
                     <button
                       onClick={() => {
                         onOpenHome?.();
@@ -530,83 +518,25 @@ export const Header: React.FC<HeaderProps> = ({
 
                     <div className="my-1 border-t border-line" />
 
-                    {/* Tools */}
-                    <p className="px-3 py-1 text-[11px] font-medium text-ink/40">Tools</p>
-                    <button onClick={() => { onOpenJobRadar(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer">
-                      <Radar className="w-3.5 h-3.5" strokeWidth={1.5} /> Job search feeds
-                    </button>
-                    <button onClick={() => { onOpenTrendAdvisor(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer">
-                      <TrendingUp className="w-3.5 h-3.5" strokeWidth={1.5} /> Industry trends
-                    </button>
-                    <button onClick={() => { onOpenJobMatcher(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer">
-                      <Target className="w-3.5 h-3.5" strokeWidth={1.5} /> Match to job description
-                    </button>
-                    <button onClick={() => { onOpenCustomAts?.(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer">
-                      <Sliders className="w-3.5 h-3.5" strokeWidth={1.5} /> Custom ATS format
-                    </button>
-
-                    <div className="my-1 border-t border-line" />
-
-                    {/* Submenu: Load sample */}
                     <button
-                      type="button"
-                      onClick={() => setSamplesExpanded((v) => !v)}
-                      className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer"
+                      onClick={() => {
+                        onExportJson();
+                        close();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer"
                     >
-                      <span className="flex items-center gap-2.5">
-                        <FolderOpen className="w-3.5 h-3.5" strokeWidth={1.5} />
-                        <span>Load sample</span>
-                      </span>
-                      <ChevronDown
-                        className={`w-3.5 h-3.5 text-ink/50 transition-transform ${samplesExpanded ? 'rotate-180' : ''}`}
-                        strokeWidth={1.75}
-                      />
+                      <Download className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Export JSON</span>
                     </button>
-
-                    {samplesExpanded && (
-                      <div className="py-1 pl-6 pr-2 space-y-0.5 bg-muted/40 border-y border-line/50">
-                        <button
-                          onClick={() => {
-                            onLoadSample('aiEngineer');
-                            close();
-                          }}
-                          className="w-full flex items-center gap-2 px-2 py-1 text-xs text-ink/80 hover:text-brand-600 hover:bg-muted rounded transition cursor-pointer"
-                        >
-                          <User className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          <span>AI Engineer</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            onLoadSample('fullStack');
-                            close();
-                          }}
-                          className="w-full flex items-center gap-2 px-2 py-1 text-xs text-ink/80 hover:text-brand-600 hover:bg-muted rounded transition cursor-pointer"
-                        >
-                          <Code2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          <span>Full-Stack Dev</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            onLoadSample('fresherStudent');
-                            close();
-                          }}
-                          className="w-full flex items-center gap-2 px-2 py-1 text-xs text-ink/80 hover:text-brand-600 hover:bg-muted rounded transition cursor-pointer"
-                        >
-                          <GraduationCap className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          <span>Graduate</span>
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="my-1 border-t border-line" />
-
-                    {/* Data */}
-                    <p className="px-3 py-1 text-[11px] font-medium text-ink/40">Data & export</p>
-                    <button onClick={() => { onExportJson(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer">
-                      <FolderOpen className="w-3.5 h-3.5" strokeWidth={1.5} /> Export JSON
-                    </button>
-                    <button onClick={() => { onPrint(); close(); }} className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer">
-                      <Printer className="w-3.5 h-3.5" strokeWidth={1.5} /> Print
+                    <button
+                      onClick={() => {
+                        onPrint();
+                        close();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Print</span>
                     </button>
                   </div>,
                   document.body

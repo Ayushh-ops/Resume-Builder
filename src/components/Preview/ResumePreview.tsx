@@ -199,8 +199,8 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
 
           {/* Empty State Overlay */}
           {isEmpty && (
-            <div className="no-print absolute inset-0 bg-white/90 flex items-center justify-center p-6 z-10 animate-in fade-in">
-              <div className="card p-6 max-w-sm text-center space-y-3 border border-line bg-card shadow-modal">
+            <div className="no-print absolute inset-0 bg-white/90 flex items-start justify-center pt-20 p-6 z-10 animate-in fade-in">
+              <div className="card p-6 max-w-sm text-center space-y-3 border border-line bg-card shadow-modal max-h-full overflow-y-auto">
                 <h4 className="text-sm font-semibold text-ink">Your resume is empty</h4>
                 <p className="text-xs text-ink/60">
                   Import a document or choose a sample profile to begin.

@@ -22,6 +22,36 @@
   --dot-color: 28 27 25;
 }
 
+[data-theme="navy"] {
+  color-scheme: dark;
+  --canvas: 10 14 26;    /* #0a0e1a */
+  --card: 17 23 40;      /* #111728 */
+  --muted: 24 32 54;
+  --ink: 232 236 246;    /* #e8ecf6 */
+  --line: 32 41 68;
+  --brand-50: 25 31 58;
+  --brand-500: 99 102 241;
+  --brand-600: 99 102 241; /* #6366f1 */
+  --brand-700: 79 70 229;
+  --on-brand: 255 255 255;
+  --dot-color: 232 236 246;
+}
+
+[data-theme="inkblue"] {
+  color-scheme: dark;
+  --canvas: 7 9 18;      /* #070912 */
+  --card: 13 17 31;      /* #0d111f */
+  --muted: 20 26 46;
+  --ink: 230 234 245;    /* #e6eaf5 */
+  --line: 26 34 58;
+  --brand-50: 17 36 62;
+  --brand-500: 56 189 248;
+  --brand-600: 56 189 248; /* #38bdf8 */
+  --brand-700: 14 165 233;
+  --on-brand: 7 9 18;
+  --dot-color: 230 234 245;
+}
+
 [data-theme="dark"] {
   color-scheme: dark;
   --canvas: 18 18 18;    /* #121212 */
