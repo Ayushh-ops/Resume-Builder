@@ -45,26 +45,11 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
   const getSeverityBadge = (severity: string) => {
     switch (severity) {
       case 'high':
-        return (
-          <span className="inline-flex items-center gap-1.5 text-xs text-ink/70">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
-            <span>High priority</span>
-          </span>
-        );
+        return <span className="text-xs text-ink/50">High priority</span>;
       case 'medium':
-        return (
-          <span className="inline-flex items-center gap-1.5 text-xs text-ink/70">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
-            <span>Recommended</span>
-          </span>
-        );
+        return <span className="text-xs text-ink/50">Recommended</span>;
       default:
-        return (
-          <span className="inline-flex items-center gap-1.5 text-xs text-ink/70">
-            <span className="w-1.5 h-1.5 rounded-full bg-brand-600 shrink-0" />
-            <span>Polish</span>
-          </span>
-        );
+        return <span className="text-xs text-ink/50">Polish</span>;
     }
   };
 

@@ -38,7 +38,13 @@ export const Modal: React.FC<ModalProps> = ({
 
     previousActiveElement.current = document.activeElement as HTMLElement | null;
 
+    const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
     const originalOverflow = document.body.style.overflow;
+    const originalPaddingRight = document.body.style.paddingRight;
+
+    if (scrollBarWidth > 0) {
+      document.body.style.paddingRight = `${scrollBarWidth}px`;
+    }
     document.body.style.overflow = 'hidden';
 
     // Auto-focus first focusable control
@@ -65,6 +71,7 @@ export const Modal: React.FC<ModalProps> = ({
     return () => {
       clearTimeout(timer);
       document.body.style.overflow = originalOverflow;
+      document.body.style.paddingRight = originalPaddingRight;
       window.removeEventListener('keydown', handleKeyDown);
       previousActiveElement.current?.focus?.();
     };

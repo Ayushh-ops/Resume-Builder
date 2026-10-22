@@ -14,6 +14,11 @@ import {
   CheckCircle2,
   AlertCircle,
   XCircle,
+  Target,
+  Sliders,
+  Radar,
+  TrendingUp,
+  Sparkles,
 } from 'lucide-react';
 import type { ATSCheckResult, ATSProfile } from '../types/resume';
 import { type ThemeId, isDarkTheme } from '../services/themeService';
@@ -80,7 +85,10 @@ const getScoreColors = (score: number, isEmpty?: boolean) => {
 export const Header: React.FC<HeaderProps> = ({
   atsResult,
   onOpenJobMatcher,
+  onOpenJobRadar,
+  onOpenTrendAdvisor,
   onOpenApiKeyModal,
+  onLoadSample,
   onExportJson,
   onPrint,
   onDownloadPdf,
@@ -182,7 +190,11 @@ export const Header: React.FC<HeaderProps> = ({
   const handleToggleMenu = () => {
     if (!menuOpen && menuBtnRef.current) {
       const rect = menuBtnRef.current.getBoundingClientRect();
-      setMenuPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+      const menuHeight = 360;
+      const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
+      const top = fitsBelow ? rect.bottom + 6 : Math.max(8, rect.top - menuHeight - 6);
+      const right = Math.max(8, window.innerWidth - rect.right);
+      setMenuPos({ top, right });
     }
     setMenuOpen((v) => !v);
   };
@@ -190,7 +202,10 @@ export const Header: React.FC<HeaderProps> = ({
   const handleToggleResumeMenu = () => {
     if (!resumeMenuOpen && resumeMenuBtnRef.current) {
       const rect = resumeMenuBtnRef.current.getBoundingClientRect();
-      setResumeMenuPos({ top: rect.bottom + 6, left: rect.left });
+      const menuHeight = 240;
+      const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
+      const top = fitsBelow ? rect.bottom + 6 : Math.max(8, rect.top - menuHeight - 6);
+      setResumeMenuPos({ top, left: rect.left });
     }
     setResumeMenuOpen((v) => !v);
   };
@@ -198,7 +213,11 @@ export const Header: React.FC<HeaderProps> = ({
   const handleToggleAts = () => {
     if (!atsPopoverOpen && atsBtnRef.current) {
       const rect = atsBtnRef.current.getBoundingClientRect();
-      setAtsPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+      const popoverHeight = 360;
+      const fitsBelow = rect.bottom + popoverHeight + 8 <= window.innerHeight;
+      const top = fitsBelow ? rect.bottom + 6 : Math.max(8, rect.top - popoverHeight - 6);
+      const right = Math.max(8, window.innerWidth - rect.right);
+      setAtsPos({ top, right });
     }
     setAtsPopoverOpen((v) => !v);
   };
@@ -276,7 +295,7 @@ export const Header: React.FC<HeaderProps> = ({
                       top: resumeMenuPos.top,
                       left: resumeMenuPos.left,
                     }}
-                    className="w-60 card shadow-menu py-1 z-[9999] border border-line bg-card animate-in fade-in duration-100 max-h-[60vh] overflow-y-auto"
+                    className="w-60 card shadow-menu py-1 z-50 border border-line bg-card animate-in fade-in duration-100 max-h-[60vh] overflow-y-auto rounded-[6px]"
                   >
                     <div className="px-3 py-1.5 text-xs font-medium text-ink/50 border-b border-line flex items-center justify-between">
                       <span>Your resumes</span>
@@ -392,32 +411,35 @@ export const Header: React.FC<HeaderProps> = ({
                       top: atsPos.top,
                       right: atsPos.right,
                     }}
-                    className="w-72 card shadow-menu p-3 z-[9999] border border-line bg-card space-y-2.5 animate-in fade-in duration-100"
+                    className="w-72 card shadow-menu p-3 z-50 border border-line bg-card space-y-2.5 animate-in fade-in duration-100 rounded-[6px]"
                   >
                     {/* Header with Profile Selector */}
-                    <div className="pb-2 border-b border-line space-y-1.5">
+                    <div className="pb-2 border-b border-line space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold text-ink">ATS evaluation</span>
                         <span className={`text-xs font-medium tabular-nums ${atsResult.isEmpty ? 'text-ink/40' : 'text-brand-600'}`}>
-                          {atsResult.isEmpty ? 'ATS --' : `${atsResult.score}/100`}
+                          {atsResult.isEmpty ? '--' : `${atsResult.score}/100`}
                         </span>
                       </div>
 
-                      {/* Profile selector dropdown */}
+                      {/* Profile selector dropdown with label above and custom chevron */}
                       {allProfiles.length > 0 && onSelectProfileId && (
-                        <div className="flex items-center gap-1.5 pt-0.5">
-                          <span className="text-[11px] text-ink/50 shrink-0">Profile:</span>
-                          <select
-                            value={activeProfileId}
-                            onChange={(e) => onSelectProfileId(e.target.value)}
-                            className="text-xs bg-muted border border-line rounded px-1.5 py-0.5 text-ink flex-1 focus:outline-none focus:border-brand-600"
-                          >
-                            {allProfiles.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} {p.isCustom ? '(Custom)' : ''}
-                              </option>
-                            ))}
-                          </select>
+                        <div className="flex flex-col gap-1.5 pt-0.5">
+                          <label className="text-[11px] font-medium text-ink/60">Profile</label>
+                          <div className="relative w-full">
+                            <select
+                              value={activeProfileId}
+                              onChange={(e) => onSelectProfileId(e.target.value)}
+                              className="w-full text-xs bg-muted border border-line rounded-[6px] pl-2.5 pr-7 py-1.5 text-ink appearance-none focus:outline-none focus:border-brand-600 cursor-pointer"
+                            >
+                              {allProfiles.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} {p.isCustom ? '(Custom)' : ''}
+                                </option>
+                              ))}
+                            </select>
+                            <ChevronDown className="w-3.5 h-3.5 text-ink/40 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" strokeWidth={1.5} />
+                          </div>
                         </div>
                       )}
                     </div>
@@ -540,8 +562,85 @@ export const Header: React.FC<HeaderProps> = ({
                       top: menuPos.top,
                       right: menuPos.right,
                     }}
-                    className="w-48 card shadow-menu py-1 z-[9999] border border-line bg-card overflow-y-auto animate-in fade-in duration-100 rounded-[6px]"
+                    className="w-52 card shadow-menu py-1 z-50 border border-line bg-card max-h-[85vh] overflow-y-auto animate-in fade-in duration-100 rounded-[6px]"
                   >
+                    <button
+                      onClick={() => {
+                        onOpenJobMatcher();
+                        close();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer"
+                    >
+                      <Target className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Match to job</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (onOpenCustomAts) onOpenCustomAts();
+                        else onOpenJobMatcher();
+                        close();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer"
+                    >
+                      <Sliders className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Custom ATS</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        onOpenJobRadar();
+                        close();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer"
+                    >
+                      <Radar className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Job feeds</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        onOpenTrendAdvisor();
+                        close();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer"
+                    >
+                      <TrendingUp className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Industry trends</span>
+                    </button>
+
+                    <div className="my-1 border-t border-line" />
+
+                    <button
+                      onClick={() => {
+                        onLoadSample('aiEngineer');
+                        close();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Sample: AI Engineer</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        onLoadSample('fullStack');
+                        close();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Sample: Full-Stack</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        onLoadSample('fresherStudent');
+                        close();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-xs text-ink/80 hover:bg-muted hover:text-brand-600 transition cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Sample: Graduate</span>
+                    </button>
+
+                    <div className="my-1 border-t border-line" />
+
                     <button
                       onClick={() => {
                         onOpenHome?.();

@@ -200,7 +200,7 @@ Return a JSON object strictly in this structure (no markdown wrappers, raw JSON 
 }
 
 /**
- * AI Career Strategist & Modern 2025/2026 Resume Upgrade Advisor
+ * AI Career Strategist & Modern Resume Upgrade Advisor
  */
 export async function getModernUpgradeTips(resume: ResumeData): Promise<TrendUpgradeTip[]> {
   const client = getGenAIClient();
@@ -208,8 +208,8 @@ export async function getModernUpgradeTips(resume: ResumeData): Promise<TrendUpg
 
   if (client) {
     try {
-      const prompt = `You are a cutting-edge 2025/2026 tech career advisor and recruiter.
-Analyze this candidate's resume and generate 5 highly actionable upgrade recommendations aligned with the latest 2025/2026 hiring trends (such as AI fluency/copilots, quantifiable business ROI, modern tech stacks, ATS compliance, and removing outdated 2018-era patterns like objective statements or soft skill buzzwords).
+      const prompt = `You are a cutting-edge tech career advisor and recruiter.
+Analyze this candidate's resume and generate 5 highly actionable upgrade recommendations aligned with current hiring trends (such as AI fluency/copilots, quantifiable business ROI, modern tech stacks, ATS compliance, and removing outdated patterns like objective statements or soft skill buzzwords).
 
 Candidate Title: ${resume.personalInfo.jobTitle}
 Summary: ${resume.summary}
@@ -220,7 +220,7 @@ Return a JSON array strictly in this format:
   {
     "category": "AI & Modern Tech",
     "title": "Highlight Applied AI & GenAI Fluency",
-    "description": "Recruiters in 2025/2026 actively prioritize engineers who integrate LLMs, RAG, or AI productivity tools into their day-to-day workflow.",
+    "description": "Recruiters actively prioritize engineers who integrate LLMs, RAG, or AI productivity tools into their day-to-day workflow.",
     "severity": "high",
     "actionableStep": "Add specific examples of how you leveraged LLM APIs or AI automation to accelerate delivery."
   }
@@ -235,11 +235,11 @@ Return a JSON array strictly in this format:
       const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
       return JSON.parse(cleanJson);
     } catch (err) {
-      console.warn('Gemini API call failed for upgrade tips, using curated 2025/2026 trends:', err);
+      console.warn('Gemini API call failed for upgrade tips, using curated trends:', err);
     }
   }
 
-  // Fallback curated 2025/2026 trend advice
+  // Fallback curated trend advice
   return getCuratedTrendTips(resume);
 }
 
@@ -319,7 +319,7 @@ function getCuratedTrendTips(resume: ResumeData): TrendUpgradeTip[] {
     {
       category: 'AI & Modern Tech',
       title: 'Emphasize AI-Assisted Workflows & LLM Integration',
-      description: 'Hiring managers in 2025/2026 prize talent that multiplies output using AI tooling (Gemini, Copilots, prompt engineering, or LLM APIs).',
+      description: 'Hiring managers actively prize talent that multiplies output using AI tooling (Gemini, Copilots, prompt engineering, or LLM APIs).',
       severity: 'high',
       actionableStep: 'Add 1-2 bullet points demonstrating how you evaluated, built with, or used AI tools to accelerate code quality or automate workflows.',
     },

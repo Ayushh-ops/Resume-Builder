@@ -35,22 +35,22 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
   onOpenUpload,
   onOpenCustomAts,
   onLoadSample,
-  appAccent,
 }) => {
   const [zoom, setZoom] = useState(100);
 
-  const defaultAccent = appAccent || '#b4451f';
+  const defaultAccent = '#b4451f';
 
   const presets = [
-    { id: 'default',   name: 'Default',   color: defaultAccent, font: 'sans' as const },
-    { id: 'executive', name: 'Executive', color: '#1e3a8a',     font: 'serif' as const },
-    { id: 'tech',      name: 'Tech',      color: '#4a49d8',     font: 'sans' as const },
-    { id: 'warm',      name: 'Warm',      color: '#c2410c',     font: 'serif' as const },
-    { id: 'mono',      name: 'Mono',      color: '#16161d',     font: 'mono' as const },
+    { id: 'default',   name: 'Default',   color: '#b4451f', font: 'sans' as const },
+    { id: 'executive', name: 'Executive', color: '#1e3a8a', font: 'serif' as const },
+    { id: 'tech',      name: 'Tech',      color: '#4a49d8', font: 'sans' as const },
+    { id: 'warm',      name: 'Warm',      color: '#c2410c', font: 'serif' as const },
+    { id: 'mono',      name: 'Mono',      color: '#16161d', font: 'mono' as const },
   ];
 
+  const currentPrimary = (theme.primaryColor || defaultAccent).toLowerCase();
   const matchedPreset = presets.find(
-    (p) => p.color.toLowerCase() === (theme.primaryColor || '').toLowerCase()
+    (p) => p.color.toLowerCase() === currentPrimary
   );
   const activePresetId = matchedPreset ? matchedPreset.id : 'custom';
 

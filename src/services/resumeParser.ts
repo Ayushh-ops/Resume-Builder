@@ -301,14 +301,152 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
   const websiteMatch = rawText.match(/(?:https?:\/\/)(?:www\.)?[a-zA-Z0-9-]+\.(?:com|io|dev|org|net|me)/i);
   const website = websiteMatch ? websiteMatch[0] : '';
 
-  // First line likely full name
-  const fullName = lines[0] && lines[0].length < 40 ? lines[0] : 'Candidate Name';
-  const jobTitle = lines[1] && lines[1].length < 50 && !lines[1].includes('@') ? lines[1] : 'Software Engineer';
+  // Name: first non-empty line that is 2-4 words, no digits/@/url; if none, leave empty
+  let fullName = '';
+  for (const line of lines) {
+    if (/\d|@|https?:\/\/|www\.|\.(com|org|net|edu|io|dev)\b/i.test(line)) {
+      continue;
+    }
+    const words = line.split(/\s+/).filter(Boolean);
+    if (words.length >= 2 && words.length <= 4 && line.length < 50) {
+      fullName = line;
+      break;
+    }
+  }
+
+  const SECTION_HEADING_REGEX = /^(?:professional\s+)?(?:summary|profile|about(?:\s+me)?|objective|work\s+experience|experience|employment|work\s+history|education|academic(?:\s+background)?|academics|projects|personal\s+projects|key\s+projects|skills|technical\s+skills|core\s+competencies|certifications?|licenses?)$/i;
+
+  // Target role: line right after fullName or near header, empty if not found
+  let jobTitle = '';
+  if (fullName) {
+    const nameIdx = lines.indexOf(fullName);
+    if (nameIdx !== -1 && nameIdx + 1 < lines.length) {
+      const candidateLine = lines[nameIdx + 1];
+      if (
+        !/\d|@|https?:\/\/|www\.|\.(com|org|net|edu|io|dev)\b/i.test(candidateLine) &&
+        !SECTION_HEADING_REGEX.test(candidateLine)
+      ) {
+        const words = candidateLine.split(/\s+/).filter(Boolean);
+        if (words.length >= 1 && words.length <= 6 && candidateLine.length < 60) {
+          jobTitle = candidateLine;
+        }
+      }
+    }
+  }
+
+  // Detect section headings and group lines
+  const headingDetectors: { key: string; regex: RegExp }[] = [
+    { key: 'summary', regex: /^(?:professional\s+)?(?:summary|profile|about(?:\s+me)?|objective)$/i },
+    { key: 'experience', regex: /^(?:work\s+)?(?:experience|employment|work\s+history|professional\s+experience)$/i },
+    { key: 'education', regex: /^(?:education|academic(?:\s+background)?|academics)$/i },
+    { key: 'projects', regex: /^(?:projects|personal\s+projects|key\s+projects|technical\s+projects)$/i },
+    { key: 'skills', regex: /^(?:skills|technical\s+skills|core\s+competencies|technologies)$/i },
+    { key: 'certifications', regex: /^(?:certifications?|licenses?|credentials?)$/i },
+  ];
+
+  type SecKey = 'header' | 'summary' | 'experience' | 'education' | 'projects' | 'skills' | 'certifications';
+  const sectionBuckets: Record<SecKey, string[]> = {
+    header: [],
+    summary: [],
+    experience: [],
+    education: [],
+    projects: [],
+    skills: [],
+    certifications: [],
+  };
+
+  let activeSection: SecKey = 'header';
+  for (const line of lines) {
+    const matched = headingDetectors.find((h) => h.regex.test(line));
+    if (matched) {
+      activeSection = matched.key as SecKey;
+    } else {
+      sectionBuckets[activeSection].push(line);
+    }
+  }
 
   // Summary
-  const summary = lines.slice(2, 6).join(' ').slice(0, 300);
+  const summary = sectionBuckets.summary.length > 0 ? sectionBuckets.summary.join(' ').slice(0, 500) : '';
 
-  // Heuristic skills detection
+  // Experience parsing
+  const experience: any[] = [];
+  if (sectionBuckets.experience.length > 0) {
+    let currentExp: any = null;
+    for (const expLine of sectionBuckets.experience) {
+      const isBullet = /^[•\-*]\s*/.test(expLine);
+      const isDateLine = /(?:19|20)\d{2}/.test(expLine);
+
+      if (!isBullet && (!currentExp || isDateLine || currentExp.highlights.length > 0)) {
+        currentExp = {
+          id: `exp-${Date.now()}-${experience.length}`,
+          company: expLine,
+          position: jobTitle || 'Role',
+          location: '',
+          startDate: '',
+          endDate: 'Present',
+          current: true,
+          highlights: [],
+        };
+        experience.push(currentExp);
+      } else if (currentExp) {
+        currentExp.highlights.push(expLine.replace(/^[•\-*]\s*/, '').trim());
+      }
+    }
+  }
+
+  // Education parsing
+  const education: any[] = [];
+  if (sectionBuckets.education.length > 0) {
+    let currentEdu: any = null;
+    for (const eduLine of sectionBuckets.education) {
+      const isDegreeOrSchool = /(?:university|college|institute|school|bachelor|master|b\.s|b\.a|m\.s|ph\.d|degree|diploma)/i.test(eduLine);
+      if (isDegreeOrSchool || !currentEdu) {
+        currentEdu = {
+          id: `edu-${Date.now()}-${education.length}`,
+          institution: eduLine,
+          degree: '',
+          fieldOfStudy: '',
+          location: '',
+          startDate: '',
+          endDate: '',
+        };
+        education.push(currentEdu);
+      } else if (currentEdu && !currentEdu.degree) {
+        currentEdu.degree = eduLine;
+      }
+    }
+  }
+
+  // Projects parsing (Detect Projects heading)
+  const projects: any[] = [];
+  if (sectionBuckets.projects.length > 0) {
+    let currentProj: any = null;
+    for (const projLine of sectionBuckets.projects) {
+      const isBullet = /^[•\-*]\s*/.test(projLine);
+      if (!isBullet && (!currentProj || currentProj.highlights.length > 0)) {
+        currentProj = {
+          id: `proj-${Date.now()}-${projects.length}`,
+          name: projLine.replace(/^[•\-*]\s*/, '').trim(),
+          description: '',
+          technologies: [],
+          highlights: [],
+        };
+        projects.push(currentProj);
+      } else if (currentProj) {
+        currentProj.highlights.push(projLine.replace(/^[•\-*]\s*/, '').trim());
+      }
+    }
+  }
+
+  // Skills parsing
+  const skills: any[] = [];
+  const extractedSkillItems: string[] = [];
+  if (sectionBuckets.skills.length > 0) {
+    for (const sLine of sectionBuckets.skills) {
+      const tokens = sLine.split(/[,|•\-\n/]+/).map((s) => s.trim()).filter((s) => s.length > 1 && s.length < 35);
+      extractedSkillItems.push(...tokens);
+    }
+  }
   const commonTech = [
     'JavaScript', 'TypeScript', 'React', 'Node.js', 'Python', 'Go', 'Docker',
     'Kubernetes', 'AWS', 'GCP', 'SQL', 'PostgreSQL', 'MongoDB', 'Git', 'CI/CD',
@@ -317,6 +455,15 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
   const detectedSkills = commonTech.filter((tech) =>
     new RegExp(`\\b${tech}\\b`, 'i').test(rawText)
   );
+  const finalSkills = Array.from(new Set([...extractedSkillItems, ...detectedSkills])).slice(0, 20);
+
+  if (finalSkills.length > 0) {
+    skills.push({
+      id: `skill-${Date.now()}-1`,
+      name: 'Technical Skills',
+      skills: finalSkills,
+    });
+  }
 
   return {
     personalInfo: {
@@ -329,41 +476,11 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
       linkedin,
       github,
     },
-    summary: summary || `${jobTitle} with experience building scalable, reliable applications and modern software architectures.`,
-    experience: [
-      {
-        id: `exp-${Date.now()}-1`,
-        company: 'Technology Solutions',
-        position: jobTitle,
-        location: 'Remote',
-        startDate: '2022',
-        endDate: 'Present',
-        current: true,
-        highlights: [
-          'Engineered and maintained high-performance software modules ensuring 99.9% uptime.',
-          'Collaborated with cross-functional teams to deliver critical production features on schedule.',
-        ],
-      },
-    ],
-    education: [
-      {
-        id: `edu-${Date.now()}-1`,
-        institution: 'University',
-        degree: 'Bachelor of Science',
-        fieldOfStudy: 'Computer Science',
-        location: '',
-        startDate: '2018',
-        endDate: '2022',
-      },
-    ],
-    skills: [
-      {
-        id: `skill-${Date.now()}-1`,
-        name: 'Technical Skills',
-        skills: detectedSkills.length > 0 ? detectedSkills : ['React', 'TypeScript', 'Node.js'],
-      },
-    ],
-    projects: [],
+    summary,
+    experience,
+    education,
+    projects,
+    skills,
     certifications: [],
     customSections: [],
   };
@@ -372,31 +489,86 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
 function calculateConfidence(data: Partial<ResumeData>): Record<string, number> {
   const confidence: Record<string, number> = {};
 
-  // Personal Info
-  let piScore = 40;
-  if (data.personalInfo?.fullName) piScore += 20;
-  if (data.personalInfo?.email) piScore += 20;
-  if (data.personalInfo?.phone) piScore += 10;
-  if (data.personalInfo?.jobTitle) piScore += 10;
-  confidence['personalInfo'] = Math.min(100, piScore);
+  // Personal Info: 0% if empty, <50% if only partial
+  const pi = data.personalInfo;
+  if (!pi || (!pi.fullName && !pi.email && !pi.phone && !pi.jobTitle)) {
+    confidence['personalInfo'] = 0;
+  } else {
+    let filled = 0;
+    if (pi.fullName) filled++;
+    if (pi.email) filled++;
+    if (pi.phone) filled++;
+    if (pi.jobTitle) filled++;
+    if (filled === 1) confidence['personalInfo'] = 25;
+    else if (filled === 2) confidence['personalInfo'] = 45;
+    else if (filled === 3) confidence['personalInfo'] = 75;
+    else confidence['personalInfo'] = 95;
+  }
 
-  // Summary
-  confidence['summary'] = data.summary && data.summary.length > 40 ? 92 : 60;
+  // Summary: 0% if empty, <50% if only partial
+  const sum = (data.summary || '').trim();
+  if (!sum) {
+    confidence['summary'] = 0;
+  } else if (sum.length < 50) {
+    confidence['summary'] = 40;
+  } else if (sum.length < 120) {
+    confidence['summary'] = 70;
+  } else {
+    confidence['summary'] = 92;
+  }
 
-  // Experience
-  const expCount = data.experience?.length || 0;
-  confidence['experience'] = expCount >= 2 ? 94 : expCount === 1 ? 82 : 40;
+  // Experience: 0% if empty, <50% if only partial
+  const exp = data.experience || [];
+  if (exp.length === 0) {
+    confidence['experience'] = 0;
+  } else {
+    const withBullets = exp.filter((e) => (e.highlights?.length || 0) > 0);
+    if (withBullets.length === 0) {
+      confidence['experience'] = 35;
+    } else if (withBullets.length === 1) {
+      confidence['experience'] = 75;
+    } else {
+      confidence['experience'] = 94;
+    }
+  }
 
-  // Education
-  const eduCount = data.education?.length || 0;
-  confidence['education'] = eduCount >= 1 ? 90 : 40;
+  // Education: 0% if empty, <50% if only partial
+  const edu = data.education || [];
+  if (edu.length === 0) {
+    confidence['education'] = 0;
+  } else {
+    const valid = edu.filter((e) => e.institution || e.degree);
+    if (valid.length === 0) {
+      confidence['education'] = 30;
+    } else {
+      confidence['education'] = 90;
+    }
+  }
 
-  // Skills
+  // Skills: 0% if empty, <50% if only partial
   const totalSkills = data.skills?.reduce((acc, c) => acc + (c.skills?.length || 0), 0) || 0;
-  confidence['skills'] = totalSkills >= 5 ? 95 : totalSkills > 0 ? 80 : 35;
+  if (totalSkills === 0) {
+    confidence['skills'] = 0;
+  } else if (totalSkills < 4) {
+    confidence['skills'] = 40;
+  } else if (totalSkills < 8) {
+    confidence['skills'] = 75;
+  } else {
+    confidence['skills'] = 95;
+  }
 
-  // Projects
-  confidence['projects'] = (data.projects?.length || 0) > 0 ? 88 : 50;
+  // Projects: 0% if empty, <50% if only partial
+  const projs = data.projects || [];
+  if (projs.length === 0) {
+    confidence['projects'] = 0;
+  } else {
+    const valid = projs.filter((p) => p.name);
+    if (valid.length === 0) {
+      confidence['projects'] = 30;
+    } else {
+      confidence['projects'] = 88;
+    }
+  }
 
   return confidence;
 }

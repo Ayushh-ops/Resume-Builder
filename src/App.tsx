@@ -14,23 +14,17 @@ import {
   Upload,
   AlertTriangle,
   Download,
-  Sliders,
   Plus,
   MoreVertical,
   Copy,
   Trash2,
   FolderOpen,
-  Target,
-  Radar,
-  TrendingUp,
-  ChevronDown,
 } from 'lucide-react';
 import type { ResumeData, ResumeTheme, TemplateType, ATSProfile } from './types/resume';
 import { sampleProfiles } from './data/sampleData';
 import {
   calculateLiveATSScore,
   isResumeEmptyForAts,
-  isResumeEmpty,
   getAllATSProfiles,
   getActiveProfileId,
   setActiveProfileId,
@@ -83,6 +77,95 @@ import type { TailoredChanges } from './services/geminiService';
 type Route =
   | { type: 'home' }
   | { type: 'editor'; resumeId: string };
+
+const heroPlaceholderResume: ResumeData = {
+  personalInfo: {
+    fullName: 'Your Name',
+    jobTitle: 'Job Title',
+    email: 'email@example.com',
+    phone: '+1 (555) 000-0000',
+    location: 'City, State',
+    website: 'portfolio.com',
+    linkedin: 'linkedin.com/in/username',
+    github: 'github.com/username',
+  },
+  summary:
+    'Results-driven professional with demonstrated experience leading initiatives, building scalable solutions, and driving measurable operational efficiencies.',
+  experience: [
+    {
+      id: 'h-exp-1',
+      company: 'Company Name',
+      position: 'Role Title',
+      location: 'City, State',
+      startDate: '2022',
+      endDate: 'Present',
+      current: true,
+      highlights: [
+        'Led architecture and execution of core product initiatives resulting in a 35% increase in throughput.',
+        'Streamlined team workflows and automated testing pipelines to reduce delivery lead time by 40%.',
+        'Mentored junior team members and standardized operational best practices across groups.',
+      ],
+    },
+    {
+      id: 'h-exp-2',
+      company: 'Previous Company',
+      position: 'Role Title',
+      location: 'City, State',
+      startDate: '2019',
+      endDate: '2022',
+      current: false,
+      highlights: [
+        'Built and deployed reliable services handling high daily active user volumes.',
+        'Collaborated with stakeholders to define technical roadmaps and milestones.',
+      ],
+    },
+  ],
+  education: [
+    {
+      id: 'h-edu-1',
+      institution: 'University Name',
+      degree: 'Bachelor of Science',
+      fieldOfStudy: 'Field of Study',
+      location: 'City, State',
+      startDate: '2015',
+      endDate: '2019',
+      grade: '',
+      highlights: [],
+    },
+  ],
+  skills: [
+    {
+      id: 'h-sk-1',
+      name: 'Core Competencies',
+      skills: ['System Design', 'Project Leadership', 'Cross-Functional Collaboration', 'Data Analysis'],
+    },
+    {
+      id: 'h-sk-2',
+      name: 'Tools & Platforms',
+      skills: ['TypeScript', 'Python', 'React', 'Cloud Services', 'CI/CD Pipelines'],
+    },
+  ],
+  projects: [
+    {
+      id: 'h-proj-1',
+      name: 'Platform Initiative',
+      description: 'Internal developer platform',
+      technologies: ['React', 'Node.js'],
+      highlights: [
+        'Architected and published an internal utility that improved developer velocity by 25%.',
+      ],
+    },
+  ],
+  certifications: [
+    {
+      id: 'h-cert-1',
+      name: 'Professional Industry Certification',
+      issuer: 'Issuing Authority',
+      date: '2023',
+    },
+  ],
+  customSections: [],
+};
 
 const formatRelativeTime = (isoString?: string): string => {
   if (!isoString) return '';
@@ -287,16 +370,13 @@ export const App: React.FC = () => {
 
   // Template & Theme
   const [activeTemplate, setActiveTemplate] = useState<TemplateType>('modern');
-  const [theme, setTheme] = useState<ResumeTheme>(() => {
-    const initT = getInitialTheme();
-    const initAccent = THEME_PRESETS.find((p) => p.id === initT)?.accent || '#b4451f';
-    return {
-      primaryColor: initAccent,
-      fontFamily: 'sans',
-      spacing: 'normal',
-      accentColor: initAccent,
-    };
-  });
+  const [theme, setTheme] = useState<ResumeTheme>(() => ({
+    primaryColor: '#b4451f',
+    secondaryColor: '#475569',
+    fontFamily: 'sans',
+    spacing: 'normal',
+    accentColor: '#b4451f',
+  }));
 
   const handleToggleTheme = () => {
     setCurrentTheme((prev) => toggleLightDarkTheme(prev));
@@ -391,21 +471,17 @@ export const App: React.FC = () => {
   const [cardRenameValue, setCardRenameValue] = useState('');
   const cardMenuRef = useRef<HTMLDivElement>(null);
 
-  // Sample menus (Home and Editor slim tools bar)
+  // Sample menus (Home and Hero)
   const [homeSampleMenuOpen, setHomeSampleMenuOpen] = useState(false);
   const [heroSampleMenuOpen, setHeroSampleMenuOpen] = useState(false);
-  const [editorSamplesOpen, setEditorSamplesOpen] = useState(false);
   const [cardMenuPos, setCardMenuPos] = useState({ top: 0, right: 0 });
   const [homeSampleMenuPos, setHomeSampleMenuPos] = useState({ top: 0, left: 0 });
   const [heroSampleMenuPos, setHeroSampleMenuPos] = useState({ top: 0, left: 0 });
-  const [editorSamplesPos, setEditorSamplesPos] = useState({ top: 0, left: 0 });
 
   const homeSampleBtnRef = useRef<HTMLButtonElement>(null);
   const heroSampleBtnRef = useRef<HTMLButtonElement>(null);
-  const editorSamplesBtnRef = useRef<HTMLButtonElement>(null);
   const homeSampleMenuRef = useRef<HTMLDivElement>(null);
   const heroSampleMenuRef = useRef<HTMLDivElement>(null);
-  const editorSamplesRef = useRef<HTMLDivElement>(null);
 
   const handleToggleCardMenu = (id: string, e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
@@ -413,7 +489,11 @@ export const App: React.FC = () => {
       setOpenCardMenuId(null);
     } else {
       const rect = e.currentTarget.getBoundingClientRect();
-      setCardMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+      const menuHeight = 180;
+      const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
+      const top = fitsBelow ? rect.bottom + 4 : Math.max(8, rect.top - menuHeight - 4);
+      const right = Math.max(8, window.innerWidth - rect.right);
+      setCardMenuPos({ top, right });
       setOpenCardMenuId(id);
     }
   };
@@ -421,7 +501,10 @@ export const App: React.FC = () => {
   const handleToggleHeroSample = () => {
     if (!heroSampleMenuOpen && heroSampleBtnRef.current) {
       const rect = heroSampleBtnRef.current.getBoundingClientRect();
-      setHeroSampleMenuPos({ top: rect.bottom + 4, left: rect.left });
+      const menuHeight = 120;
+      const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
+      const top = fitsBelow ? rect.bottom + 4 : Math.max(8, rect.top - menuHeight - 4);
+      setHeroSampleMenuPos({ top, left: rect.left });
     }
     setHeroSampleMenuOpen((v) => !v);
   };
@@ -429,17 +512,12 @@ export const App: React.FC = () => {
   const handleToggleHomeSample = () => {
     if (!homeSampleMenuOpen && homeSampleBtnRef.current) {
       const rect = homeSampleBtnRef.current.getBoundingClientRect();
-      setHomeSampleMenuPos({ top: rect.top - 100, left: rect.left });
+      const menuHeight = 120;
+      const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
+      const top = fitsBelow ? rect.bottom + 4 : Math.max(8, rect.top - menuHeight - 4);
+      setHomeSampleMenuPos({ top, left: rect.left });
     }
     setHomeSampleMenuOpen((v) => !v);
-  };
-
-  const handleToggleEditorSamples = () => {
-    if (!editorSamplesOpen && editorSamplesBtnRef.current) {
-      const rect = editorSamplesBtnRef.current.getBoundingClientRect();
-      setEditorSamplesPos({ top: rect.bottom + 4, left: rect.left });
-    }
-    setEditorSamplesOpen((v) => !v);
   };
 
   // Drop zone states for Home landing
@@ -481,7 +559,7 @@ export const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!openCardMenuId && !homeSampleMenuOpen && !heroSampleMenuOpen && !editorSamplesOpen) return;
+    if (!openCardMenuId && !homeSampleMenuOpen && !heroSampleMenuOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (cardMenuRef.current && !cardMenuRef.current.contains(e.target as Node)) {
         setOpenCardMenuId(null);
@@ -502,18 +580,10 @@ export const App: React.FC = () => {
       ) {
         setHeroSampleMenuOpen(false);
       }
-      if (
-        editorSamplesRef.current &&
-        !editorSamplesRef.current.contains(e.target as Node) &&
-        editorSamplesBtnRef.current &&
-        !editorSamplesBtnRef.current.contains(e.target as Node)
-      ) {
-        setEditorSamplesOpen(false);
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [openCardMenuId, homeSampleMenuOpen, heroSampleMenuOpen, editorSamplesOpen]);
+  }, [openCardMenuId, homeSampleMenuOpen, heroSampleMenuOpen]);
 
   // Modal History Stack helper (Modals pushState({modal: true}), Back closes topmost modal)
   const isClosingViaCodeRef = useRef(false);
@@ -1086,7 +1156,7 @@ export const App: React.FC = () => {
                   <h1 className="text-3xl sm:text-4xl font-serif font-semibold text-ink tracking-tight mb-2">
                     Build an ATS-ready resume
                   </h1>
-                  <p className="text-xs sm:text-sm text-ink/60 mb-5 leading-relaxed">
+                  <p className="text-xs sm:text-sm text-ink/60 mb-5 leading-relaxed max-w-[34rem] text-balance">
                     Upload your current resume or start fresh. Score it, match it to a job, and export a clean PDF.
                   </p>
 
@@ -1144,7 +1214,7 @@ export const App: React.FC = () => {
                               top: heroSampleMenuPos.top,
                               left: heroSampleMenuPos.left,
                             }}
-                            className="w-44 card shadow-menu py-1 z-[9999] border border-line bg-card rounded-[6px] text-left animate-in fade-in duration-100"
+                            className="w-44 card shadow-menu py-1 z-50 border border-line bg-card rounded-[6px] text-left animate-in fade-in duration-100"
                           >
                             <button
                               type="button"
@@ -1191,24 +1261,24 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Right Column (span 5): static scaled A4 sample resume */}
-                <div className="lg:col-span-5 hidden lg:flex justify-center items-center">
-                  <div className="w-full max-w-[340px] h-[330px] bg-muted/20 rounded-[8px] border border-line overflow-hidden relative flex justify-center items-start pt-2 select-none pointer-events-none">
+                {/* Right Column (span 5): neutral placeholder A4 resume preview */}
+                <div className="lg:col-span-5 hidden lg:flex flex-col items-center justify-center">
+                  <div className="w-[230px] h-[325px] bg-card rounded-[6px] border border-line shadow-sm overflow-hidden relative select-none pointer-events-none flex items-start justify-start">
                     <div
                       data-theme="light"
                       style={{
                         width: '794px',
-                        minHeight: '1123px',
-                        transform: 'scale(0.38)',
-                        transformOrigin: 'top center',
+                        height: '1123px',
+                        transform: 'scale(0.28967)',
+                        transformOrigin: 'top left',
                         backgroundColor: '#ffffff',
                         color: '#16161d',
                         padding: '12mm 14mm',
                       }}
-                      className="shadow border border-line text-left shrink-0 font-sans"
+                      className="border-none text-left shrink-0 font-sans"
                     >
                       <ModernTemplate
-                        data={sampleProfiles.aiEngineer}
+                        data={heroPlaceholderResume}
                         theme={{
                           primaryColor: '#b4451f',
                           fontFamily: 'sans',
@@ -1218,6 +1288,7 @@ export const App: React.FC = () => {
                       />
                     </div>
                   </div>
+                  <span className="text-[11px] text-ink/40 mt-1.5">Sample</span>
                 </div>
               </div>
 
@@ -1318,7 +1389,7 @@ export const App: React.FC = () => {
                             top: homeSampleMenuPos.top,
                             left: homeSampleMenuPos.left,
                           }}
-                          className="w-56 card shadow-menu py-1 z-[9999] border border-line bg-card rounded-[6px] animate-in fade-in duration-100"
+                          className="w-56 card shadow-menu py-1 z-50 border border-line bg-card rounded-[6px] animate-in fade-in duration-100"
                         >
                           <button
                             type="button"
@@ -1507,7 +1578,7 @@ export const App: React.FC = () => {
                                 top: cardMenuPos.top,
                                 right: cardMenuPos.right,
                               }}
-                              className="w-40 card shadow-menu py-1 z-[9999] border border-line bg-card animate-in fade-in duration-100"
+                              className="w-40 card shadow-menu py-1 z-50 border border-line bg-card rounded-[6px] animate-in fade-in duration-100"
                             >
                               <button
                                 type="button"
@@ -1707,115 +1778,6 @@ export const App: React.FC = () => {
       {/* VIEW B: EDITOR WORKSPACE */}
       {route.type === 'editor' && (
         <>
-          {/* Slim Tools Bar */}
-          <div className="no-print h-9 border-b border-line bg-card flex items-center gap-1 px-4 overflow-x-auto shrink-0 select-none">
-            <button
-              type="button"
-              onClick={() => openModal(setIsJobMatcherOpen)}
-              className="text-xs font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
-            >
-              <Target className="w-3.5 h-3.5" strokeWidth={1.5} />
-              <span>Match to job</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleOpenCustomAts}
-              className="text-xs font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
-            >
-              <Sliders className="w-3.5 h-3.5" strokeWidth={1.5} />
-              <span>Custom ATS</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => openModal(setIsJobRadarOpen)}
-              className="text-xs font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
-            >
-              <Radar className="w-3.5 h-3.5" strokeWidth={1.5} />
-              <span>Job feeds</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => openModal(setIsTrendAdvisorOpen)}
-              className="text-xs font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
-            >
-              <TrendingUp className="w-3.5 h-3.5" strokeWidth={1.5} />
-              <span>Trends</span>
-            </button>
-
-            {/* Samples Dropdown via Portal */}
-            <div className="relative" ref={editorSamplesRef}>
-              <button
-                ref={editorSamplesBtnRef}
-                type="button"
-                onClick={handleToggleEditorSamples}
-                className="text-xs font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
-              >
-                <FolderOpen className="w-3.5 h-3.5" strokeWidth={1.5} />
-                <span>Samples</span>
-                <ChevronDown className={`w-3 h-3 transition-transform ${editorSamplesOpen ? 'rotate-180' : ''}`} strokeWidth={1.75} />
-              </button>
-
-              {editorSamplesOpen &&
-                createPortal(
-                  <div
-                    ref={editorSamplesRef}
-                    style={{
-                      position: 'fixed',
-                      top: editorSamplesPos.top,
-                      left: editorSamplesPos.left,
-                    }}
-                    className="w-44 card shadow-menu py-1 z-[9999] border border-line bg-card rounded-[6px] animate-in fade-in duration-100"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditorSamplesOpen(false);
-                        handleLoadSample('aiEngineer');
-                      }}
-                      className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                    >
-                      AI Engineer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditorSamplesOpen(false);
-                        handleLoadSample('fullStack');
-                      }}
-                      className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                    >
-                      Full-Stack Developer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditorSamplesOpen(false);
-                        handleLoadSample('fresherStudent');
-                      }}
-                      className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                    >
-                      Graduate
-                    </button>
-                  </div>,
-                  document.body
-                )}
-            </div>
-
-            {!isResumeEmpty(resumeData) && (
-              <button
-                type="button"
-                onClick={() => openModal(setIsUploadModalOpen)}
-                className="text-xs font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
-              >
-                <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
-                <span>Upload</span>
-              </button>
-            )}
-          </div>
-
           {/* Mobile Tab Toggle */}
           <div className="no-print lg:hidden flex border-b border-line bg-card sticky top-13 z-20">
             <button

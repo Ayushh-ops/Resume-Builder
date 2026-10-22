@@ -149,12 +149,6 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
     }
   };
 
-  const getConfidenceStyle = (score: number) => {
-    if (score >= 85) return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800';
-    if (score >= 70) return 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-300 dark:border-blue-800';
-    return 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border-amber-300 dark:border-amber-800';
-  };
-
   return (
     <Modal
       isOpen={isOpen}
@@ -413,25 +407,28 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
                     <div>
                       <span className="text-ink/60 block text-[12.5px]">Experience</span>
                       <span className="font-semibold text-ink">
-                        {parsedResult.data.experience?.length || 0} Roles
+                        {parsedResult.data.experience?.length || 0}{' '}
+                        {(parsedResult.data.experience?.length || 0) === 1 ? 'role' : 'roles'}
                       </span>
                     </div>
                     <div>
                       <span className="text-ink/60 block text-[12.5px]">Education</span>
                       <span className="font-semibold text-ink">
-                        {parsedResult.data.education?.length || 0} Degrees
+                        {parsedResult.data.education?.length || 0}{' '}
+                        {(parsedResult.data.education?.length || 0) === 1 ? 'degree' : 'degrees'}
                       </span>
                     </div>
                     <div>
                       <span className="text-ink/60 block text-[12.5px]">Skills</span>
                       <span className="font-semibold text-ink">
-                        {parsedResult.data.skills?.reduce((a, s) => a + s.skills.length, 0) || 0} Skills
+                        {parsedResult.data.skills?.reduce((a, s) => a + s.skills.length, 0) || 0} skills
                       </span>
                     </div>
                     <div>
                       <span className="text-ink/60 block text-[12.5px]">Projects</span>
                       <span className="font-semibold text-ink">
-                        {parsedResult.data.projects?.length || 0} Projects
+                        {parsedResult.data.projects?.length || 0}{' '}
+                        {(parsedResult.data.projects?.length || 0) === 1 ? 'project' : 'projects'}
                       </span>
                     </div>
                   </div>
@@ -447,13 +444,14 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
                   {Object.entries(parsedResult.confidence).map(([section, score]) => (
                     <div key={section} className="flex items-center justify-between text-xs">
                       <span className="capitalize text-ink/70">{section}</span>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getConfidenceStyle(
-                          score
-                        )}`}
-                      >
-                        {score}% confidence
-                      </span>
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            score >= 80 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+                          }`}
+                        />
+                        <span className="tabular-nums font-medium text-ink">{score}%</span>
+                      </div>
                     </div>
                   ))}
                 </div>
