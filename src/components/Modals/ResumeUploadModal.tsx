@@ -19,6 +19,7 @@ interface ResumeUploadModalProps {
   onSaveAsNew: (data: Partial<ResumeData>, fileName?: string) => void;
   onReplaceCurrent?: (data: Partial<ResumeData>) => void;
   canReplace?: boolean;
+  initialFile?: File | null;
 }
 
 type UploadStep = 'upload' | 'parsing' | 'review' | 'error';
@@ -29,6 +30,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
   onSaveAsNew,
   onReplaceCurrent,
   canReplace = false,
+  initialFile = null,
 }) => {
   const [step, setStep] = useState<UploadStep>('upload');
   const [dragActive, setDragActive] = useState(false);
@@ -40,13 +42,17 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setStep('upload');
-      setErrorMessage('');
-      setFileName('');
-      setParsedResult(null);
-      setParsingStage(1);
+      if (initialFile) {
+        handleFileProcess(initialFile);
+      } else {
+        setStep('upload');
+        setErrorMessage('');
+        setFileName('');
+        setParsedResult(null);
+        setParsingStage(1);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, initialFile]);
 
   if (!isOpen) return null;
 
@@ -286,26 +292,26 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Left Column: Detected Content */}
               <div className="card p-4 space-y-3 bg-card border border-line">
-                <h4 className="text-xs font-bold text-ink uppercase tracking-wider">
-                  Detected Candidate Profile
+                <h4 className="text-[12.5px] font-medium text-ink/60">
+                  Detected candidate profile
                 </h4>
                 <div className="space-y-2 text-xs">
                   <div>
-                    <span className="text-ink/40 block text-[10px] uppercase font-semibold">Name</span>
+                    <span className="text-ink/60 block text-[12.5px]">Name</span>
                     <span className="font-semibold text-ink">
                       {parsedResult.data.personalInfo?.fullName || 'Not detected'}
                     </span>
                   </div>
 
                   <div>
-                    <span className="text-ink/40 block text-[10px] uppercase font-semibold">Target Role</span>
+                    <span className="text-ink/60 block text-[12.5px]">Target role</span>
                     <span className="text-ink">
                       {parsedResult.data.personalInfo?.jobTitle || 'Not detected'}
                     </span>
                   </div>
 
                   <div>
-                    <span className="text-ink/40 block text-[10px] uppercase font-semibold">Email & Contact</span>
+                    <span className="text-ink/60 block text-[12.5px]">Email & contact</span>
                     <span className="text-ink">
                       {parsedResult.data.personalInfo?.email || 'Not detected'}{' '}
                       {parsedResult.data.personalInfo?.phone ? `• ${parsedResult.data.personalInfo.phone}` : ''}
@@ -314,25 +320,25 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
 
                   <div className="pt-2 border-t border-line grid grid-cols-2 gap-2 text-[11px]">
                     <div>
-                      <span className="text-ink/40 block text-[10px]">Experience</span>
+                      <span className="text-ink/60 block text-[12.5px]">Experience</span>
                       <span className="font-semibold text-ink">
                         {parsedResult.data.experience?.length || 0} Roles
                       </span>
                     </div>
                     <div>
-                      <span className="text-ink/40 block text-[10px]">Education</span>
+                      <span className="text-ink/60 block text-[12.5px]">Education</span>
                       <span className="font-semibold text-ink">
                         {parsedResult.data.education?.length || 0} Degrees
                       </span>
                     </div>
                     <div>
-                      <span className="text-ink/40 block text-[10px]">Skills</span>
+                      <span className="text-ink/60 block text-[12.5px]">Skills</span>
                       <span className="font-semibold text-ink">
                         {parsedResult.data.skills?.reduce((a, s) => a + s.skills.length, 0) || 0} Skills
                       </span>
                     </div>
                     <div>
-                      <span className="text-ink/40 block text-[10px]">Projects</span>
+                      <span className="text-ink/60 block text-[12.5px]">Projects</span>
                       <span className="font-semibold text-ink">
                         {parsedResult.data.projects?.length || 0} Projects
                       </span>
@@ -343,8 +349,8 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
 
               {/* Right Column: Confidence Breakdown */}
               <div className="card p-4 space-y-3 bg-card border border-line">
-                <h4 className="text-xs font-bold text-ink uppercase tracking-wider">
-                  Parser Confidence
+                <h4 className="text-[12.5px] font-medium text-ink/60">
+                  Parser confidence
                 </h4>
                 <div className="space-y-2">
                   {Object.entries(parsedResult.confidence).map(([section, score]) => (

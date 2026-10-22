@@ -29,6 +29,7 @@ import { sampleProfiles } from './data/sampleData';
 import {
   calculateLiveATSScore,
   isResumeEmptyForAts,
+  isResumeEmpty,
   getAllATSProfiles,
   getActiveProfileId,
   setActiveProfileId,
@@ -38,6 +39,7 @@ import {
   getInitialTheme,
   applyTheme,
   toggleLightDarkTheme,
+  THEME_PRESETS,
   type ThemeId,
 } from './services/themeService';
 import {
@@ -51,6 +53,7 @@ import {
   deleteResume,
   setActiveResumeId,
   blankResumeData,
+  isResumeCompletelyEmpty,
   type ResumeIndexEntry,
 } from './services/resumeStorage';
 import { Header } from './components/Header';
@@ -274,17 +277,25 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Template & Theme
-  const [activeTemplate, setActiveTemplate] = useState<TemplateType>('modern');
-  const [theme, setTheme] = useState<ResumeTheme>({
-    primaryColor: '#b4451f',
-    fontFamily: 'sans',
-    spacing: 'normal',
-    accentColor: '#b4451f',
-  });
-
   // Single Unified App Theme State
   const [currentTheme, setCurrentTheme] = useState<ThemeId>(getInitialTheme);
+
+  const appAccent = useMemo(() => {
+    return THEME_PRESETS.find((p) => p.id === currentTheme)?.accent || '#b4451f';
+  }, [currentTheme]);
+
+  // Template & Theme
+  const [activeTemplate, setActiveTemplate] = useState<TemplateType>('modern');
+  const [theme, setTheme] = useState<ResumeTheme>(() => {
+    const initT = getInitialTheme();
+    const initAccent = THEME_PRESETS.find((p) => p.id === initT)?.accent || '#b4451f';
+    return {
+      primaryColor: initAccent,
+      fontFamily: 'sans',
+      spacing: 'normal',
+      accentColor: initAccent,
+    };
+  });
 
   const handleToggleTheme = () => {
     setCurrentTheme((prev) => toggleLightDarkTheme(prev));
@@ -357,6 +368,22 @@ export const App: React.FC = () => {
     dataToReplace?: Partial<ResumeData>;
   } | null>(null);
 
+  // Non-empty resumes for the library
+  const displayResumes = useMemo(() => {
+    return resumeIndex.filter((entry) => {
+      const data = getResume(entry.id);
+      return !isResumeCompletelyEmpty(data);
+    });
+  }, [resumeIndex]);
+
+  // Clean empty resumes from storage when returning to or viewing Home
+  useEffect(() => {
+    if (route.type === 'home') {
+      const cleaned = initResumeStorage();
+      setResumeIndex(cleaned);
+    }
+  }, [route.type]);
+
   // Home card dropdown menu & inline rename states
   const [openCardMenuId, setOpenCardMenuId] = useState<string | null>(null);
   const [renamingCardId, setRenamingCardId] = useState<string | null>(null);
@@ -365,13 +392,38 @@ export const App: React.FC = () => {
 
   // Sample menus (Home and Editor slim tools bar)
   const [homeSampleMenuOpen, setHomeSampleMenuOpen] = useState(false);
+  const [heroSampleMenuOpen, setHeroSampleMenuOpen] = useState(false);
   const [editorSamplesOpen, setEditorSamplesOpen] = useState(false);
   const homeSampleMenuRef = useRef<HTMLDivElement>(null);
+  const heroSampleMenuRef = useRef<HTMLDivElement>(null);
   const editorSamplesRef = useRef<HTMLDivElement>(null);
+
+  // Drop zone states for Home landing
+  const homeFileInputRef = useRef<HTMLInputElement>(null);
+  const [homeDragActive, setHomeDragActive] = useState(false);
+  const [uploadedFileForModal, setUploadedFileForModal] = useState<File | null>(null);
+
+  const handleHomeDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setHomeDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      setUploadedFileForModal(e.dataTransfer.files[0]);
+      openModal(setIsUploadModalOpen);
+    }
+  };
+
+  const handleHomeFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setUploadedFileForModal(e.target.files[0]);
+      openModal(setIsUploadModalOpen);
+      e.target.value = '';
+    }
+  };
 
   // Tool Launcher: opens most recent resume first (or creates a new blank one) then launches modal
   const openToolWithResume = (openModalFn: () => void) => {
-    let targetId = resumeIndex[0]?.id;
+    let targetId = displayResumes[0]?.id;
     if (!targetId || !getResume(targetId)) {
       const newId = createResume(blankResumeData, 'Untitled resume');
       setResumeIndex(getResumeIndex());
@@ -384,7 +436,7 @@ export const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!openCardMenuId && !homeSampleMenuOpen && !editorSamplesOpen) return;
+    if (!openCardMenuId && !homeSampleMenuOpen && !heroSampleMenuOpen && !editorSamplesOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (cardMenuRef.current && !cardMenuRef.current.contains(e.target as Node)) {
         setOpenCardMenuId(null);
@@ -392,13 +444,16 @@ export const App: React.FC = () => {
       if (homeSampleMenuRef.current && !homeSampleMenuRef.current.contains(e.target as Node)) {
         setHomeSampleMenuOpen(false);
       }
+      if (heroSampleMenuRef.current && !heroSampleMenuRef.current.contains(e.target as Node)) {
+        setHeroSampleMenuOpen(false);
+      }
       if (editorSamplesRef.current && !editorSamplesRef.current.contains(e.target as Node)) {
         setEditorSamplesOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [openCardMenuId, homeSampleMenuOpen, editorSamplesOpen]);
+  }, [openCardMenuId, homeSampleMenuOpen, heroSampleMenuOpen, editorSamplesOpen]);
 
   // Modal History Stack helper (Modals pushState({modal: true}), Back closes topmost modal)
   const isClosingViaCodeRef = useRef(false);
@@ -951,319 +1006,553 @@ export const App: React.FC = () => {
       {/* VIEW A: HOME SCREEN ("Your resumes") */}
       {route.type === 'home' && (
         <div className="flex-1 w-full max-w-6xl mx-auto px-6 py-8 sm:py-10 flex flex-col justify-start min-h-[calc(100vh-3.5rem)] animate-in fade-in duration-150">
-          {/* Header row */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-line">
-            <div>
-              <h1 className="text-2xl font-serif font-semibold text-ink tracking-tight">
-                Your resumes
+          <input
+            type="file"
+            ref={homeFileInputRef}
+            onChange={handleHomeFileSelect}
+            accept=".pdf,.docx,.doc,.json,.txt"
+            className="hidden"
+          />
+
+          {displayResumes.length === 0 ? (
+            /* Centered Hero when NO resumes exist */
+            <div className="w-full max-w-2xl mx-auto py-16 text-center">
+              <h1 className="text-3xl font-serif font-semibold text-ink tracking-tight mb-6">
+                Start with your resume
               </h1>
-              <p className="text-xs text-ink/60 mt-0.5">
-                Manage and edit your saved resumes.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => openModal(setIsUploadModalOpen)}
-                className="btn-outline h-8 px-3 text-xs font-medium flex items-center gap-1.5 cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
-                <span>Upload resume</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateNew}
-                className="btn-primary h-8 px-3 text-xs font-medium flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" strokeWidth={1.5} />
-                <span>New resume</span>
-              </button>
-            </div>
-          </div>
 
-          {/* Resumes Grid */}
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 pt-6 items-stretch">
-            {resumeIndex.map((entry) => {
-              const resumeItemData = getResume(entry.id);
-              const isCardAtsEmpty = isResumeEmptyForAts(resumeItemData);
+              {/* Large dashed drop zone */}
+              <div
+                onClick={() => homeFileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setHomeDragActive(true);
+                }}
+                onDragLeave={() => setHomeDragActive(false)}
+                onDrop={handleHomeDrop}
+                className={`min-h-[220px] w-full border-2 border-dashed rounded-lg bg-card transition flex flex-col items-center justify-center p-8 cursor-pointer group select-none ${
+                  homeDragActive
+                    ? 'border-brand-600 bg-muted/30'
+                    : 'border-line hover:border-brand-600'
+                }`}
+              >
+                <Upload className="w-8 h-8 text-ink/40 group-hover:text-brand-600 transition mb-3" strokeWidth={1.5} />
+                <p className="text-sm font-medium text-ink">
+                  Drag a PDF, Word, JSON or text file here, or click to browse
+                </p>
+                <p className="text-xs text-ink/40 mt-1">
+                  Supports PDF, Word, JSON or text files up to 5MB
+                </p>
+              </div>
 
-              return (
-                <div
-                  key={entry.id}
-                  onClick={() => {
-                    window.location.hash = `#/r/${entry.id}`;
-                  }}
-                  className="card border border-line bg-card hover:border-ink/40 transition flex flex-col justify-between h-[280px] p-3.5 relative group cursor-pointer"
+              {/* Text links row */}
+              <div className="mt-4 text-xs text-ink/60 flex items-center justify-center gap-2 flex-wrap">
+                <span>or</span>
+                <button
+                  type="button"
+                  onClick={handleCreateNew}
+                  className="text-brand-600 hover:underline cursor-pointer font-medium"
                 >
-                  {/* Scaled A4 Real Resume Thumbnail on WHITE paper */}
-                  <div className="w-full h-36 bg-muted/30 rounded-[6px] border border-line overflow-hidden relative flex justify-center items-start pt-1.5 select-none pointer-events-none">
-                    <div
-                      data-theme="light"
-                      style={{
-                        width: '794px',
-                        minHeight: '1123px',
-                        transform: 'scale(0.24)',
-                        transformOrigin: 'top center',
-                        backgroundColor: '#ffffff',
-                        color: '#16161d',
-                        padding: '12mm 14mm',
-                      }}
-                      className="shadow-sm border border-black/10 text-left shrink-0 font-sans"
-                    >
-                      {resumeItemData ? (
-                        <ModernTemplate
-                          data={resumeItemData}
-                          theme={{
-                            primaryColor: '#b4451f',
-                            fontFamily: 'sans',
-                            spacing: 'normal',
-                            accentColor: '#b4451f',
-                          }}
-                        />
-                      ) : null}
-                    </div>
-                  </div>
+                  start from scratch
+                </button>
+                <span>·</span>
+                <div className="relative inline-block" ref={heroSampleMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setHeroSampleMenuOpen((v) => !v)}
+                    className="text-brand-600 hover:underline cursor-pointer font-medium"
+                  >
+                    use a sample
+                  </button>
 
-                  {/* Title & Info (hide subtitle if no title) */}
-                  <div className="mt-2.5 min-w-0">
-                    {renamingCardId === entry.id ? (
-                      <input
-                        type="text"
-                        value={cardRenameValue}
-                        onChange={(e) => setCardRenameValue(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleFinishCardRename(entry.id);
-                          if (e.key === 'Escape') setRenamingCardId(null);
+                  {heroSampleMenuOpen && (
+                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 w-44 card shadow-menu py-1 z-30 border border-line bg-card rounded-[6px] text-left animate-in fade-in duration-100">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHeroSampleMenuOpen(false);
+                          handleLoadSample('aiEngineer');
                         }}
-                        onBlur={() => handleFinishCardRename(entry.id)}
-                        autoFocus
-                        className="w-full text-xs font-semibold px-2 py-0.5 rounded-[4px] bg-card border border-brand-600 text-ink focus:outline-none"
-                      />
-                    ) : (
-                      <h3
-                        className="text-xs font-semibold text-ink group-hover:text-brand-600 transition-colors truncate"
-                        title={entry.name}
+                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
                       >
-                        {entry.name}
-                      </h3>
-                    )}
-                    {entry.title?.trim() ? (
-                      <p className="text-[11px] text-ink/60 truncate mt-0.5">
-                        {entry.title}
-                      </p>
-                    ) : null}
-                  </div>
+                        AI Engineer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHeroSampleMenuOpen(false);
+                          handleLoadSample('fullStack');
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                      >
+                        Full-Stack Developer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHeroSampleMenuOpen(false);
+                          handleLoadSample('fresherStudent');
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                      >
+                        Graduate
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <span>·</span>
+                <button
+                  type="button"
+                  onClick={handleOpenCustomAts}
+                  className="text-brand-600 hover:underline cursor-pointer font-medium"
+                >
+                  add a custom ATS format
+                </button>
+              </div>
 
-                  {/* Footer info: last edited & score */}
-                  <div className="mt-2 pt-2 border-t border-line flex items-center justify-between text-[11px] text-ink/40">
-                    <span>{formatRelativeTime(entry.updatedAt)}</span>
-                    {isCardAtsEmpty || entry.score === undefined ? (
-                      <span className="text-ink/40 font-medium">ATS --</span>
-                    ) : (
-                      <span className="text-ink/70 font-medium flex items-center gap-1">
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            entry.score >= 80
-                              ? 'bg-emerald-600'
-                              : entry.score >= 60
-                              ? 'bg-amber-600'
-                              : 'bg-rose-600'
-                          }`}
-                        />
-                        <span>ATS {entry.score}</span>
-                      </span>
-                    )}
-                  </div>
+              {/* Tools grid below the hero */}
+              <div className="mt-14 pt-8 border-t border-line text-left">
+                <h2 className="text-sm font-semibold text-ink mb-3">Tools</h2>
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
+                  {/* Tool 1: Upload */}
+                  <button
+                    type="button"
+                    onClick={() => openModal(setIsUploadModalOpen)}
+                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                  >
+                    <h3 className="text-sm font-semibold text-ink">Upload a resume</h3>
+                    <p className="text-xs text-ink/60 mt-1 truncate">Import PDF, Word, JSON or text</p>
+                  </button>
 
-                  {/* Top-Right Menu Trigger */}
-                  <div className="absolute top-2.5 right-2.5">
+                  {/* Tool 2: Custom ATS */}
+                  <button
+                    type="button"
+                    onClick={() => openToolWithResume(handleOpenCustomAts)}
+                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                  >
+                    <h3 className="text-sm font-semibold text-ink">Custom ATS format</h3>
+                    <p className="text-xs text-ink/60 mt-1 truncate">Paste or upload your own scoring rubric</p>
+                  </button>
+
+                  {/* Tool 3: Match to JD */}
+                  <button
+                    type="button"
+                    onClick={() => openToolWithResume(() => openModal(setIsJobMatcherOpen))}
+                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                  >
+                    <h3 className="text-sm font-semibold text-ink">Match to a job description</h3>
+                    <p className="text-xs text-ink/60 mt-1 truncate">See missing keywords, tailor your bullets</p>
+                  </button>
+
+                  {/* Tool 4: Job Feeds */}
+                  <button
+                    type="button"
+                    onClick={() => openToolWithResume(() => openModal(setIsJobRadarOpen))}
+                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                  >
+                    <h3 className="text-sm font-semibold text-ink">Job search feeds</h3>
+                    <p className="text-xs text-ink/60 mt-1 truncate">Fresh listings for your role</p>
+                  </button>
+
+                  {/* Tool 5: Industry Trends */}
+                  <button
+                    type="button"
+                    onClick={() => openToolWithResume(() => openModal(setIsTrendAdvisorOpen))}
+                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                  >
+                    <h3 className="text-sm font-semibold text-ink">Industry trends</h3>
+                    <p className="text-xs text-ink/60 mt-1 truncate">Skills and upgrades for your profile</p>
+                  </button>
+
+                  {/* Tool 6: Start from a Sample */}
+                  <div className="relative" ref={homeSampleMenuRef}>
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenCardMenuId((prev) => (prev === entry.id ? null : entry.id));
-                      }}
-                      className="p-1 rounded-[4px] bg-card/90 border border-line text-ink/50 hover:text-ink hover:bg-muted transition cursor-pointer"
-                      title="Actions"
+                      onClick={() => setHomeSampleMenuOpen((v) => !v)}
+                      className="w-full h-full card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
                     >
-                      <MoreVertical className="w-3.5 h-3.5" />
+                      <h3 className="text-sm font-semibold text-ink">Start from a sample</h3>
+                      <p className="text-xs text-ink/60 mt-1 truncate">AI engineer, full-stack, graduate</p>
                     </button>
 
-                    {/* Card Dropdown Menu */}
-                    {openCardMenuId === entry.id && (
-                      <div
-                        ref={cardMenuRef}
-                        onClick={(e) => e.stopPropagation()}
-                        className="absolute right-0 top-7 w-40 card shadow-menu py-1 z-20 border border-line bg-card animate-in fade-in duration-100"
-                      >
+                    {homeSampleMenuOpen && (
+                      <div className="absolute left-0 bottom-full mb-1 w-full card shadow-menu py-1 z-30 border border-line bg-card rounded-[6px] animate-in fade-in duration-100">
                         <button
                           type="button"
                           onClick={() => {
-                            setOpenCardMenuId(null);
-                            window.location.hash = `#/r/${entry.id}`;
+                            setHomeSampleMenuOpen(false);
+                            handleLoadSample('aiEngineer');
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                          className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
                         >
-                          <FolderOpen className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
-                          <span>Open</span>
+                          AI Engineer
                         </button>
                         <button
                           type="button"
                           onClick={() => {
-                            setOpenCardMenuId(null);
-                            setRenamingCardId(entry.id);
-                            setCardRenameValue(entry.name);
+                            setHomeSampleMenuOpen(false);
+                            handleLoadSample('fullStack');
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                          className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
                         >
-                          <Edit3 className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
-                          <span>Rename</span>
+                          Full-Stack Developer
                         </button>
                         <button
                           type="button"
                           onClick={() => {
-                            setOpenCardMenuId(null);
-                            handleDuplicateResume(entry.id);
+                            setHomeSampleMenuOpen(false);
+                            handleLoadSample('fresherStudent');
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                          className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
                         >
-                          <Copy className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
-                          <span>Duplicate</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOpenCardMenuId(null);
-                            handleExportJson(entry.id);
-                          }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
-                        >
-                          <Download className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
-                          <span>Export JSON</span>
-                        </button>
-                        <div className="my-1 border-t border-line" />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOpenCardMenuId(null);
-                            handleDeleteResume(entry.id, entry.name);
-                          }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2 transition cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-                          <span>Delete</span>
+                          Graduate
                         </button>
                       </div>
                     )}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-
-          {/* Tools Section */}
-          <div className="mt-8 pt-6 border-t border-line">
-            <h2 className="text-sm font-semibold text-ink mb-3">Tools</h2>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
-              {/* Tool 1: Upload */}
-              <button
-                type="button"
-                onClick={() => openModal(setIsUploadModalOpen)}
-                className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
-              >
-                <h3 className="text-sm font-semibold text-ink">Upload a resume</h3>
-                <p className="text-xs text-ink/60 mt-1 truncate">Import PDF, Word, JSON or text</p>
-              </button>
-
-              {/* Tool 2: Custom ATS */}
-              <button
-                type="button"
-                onClick={() => openToolWithResume(handleOpenCustomAts)}
-                className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
-              >
-                <h3 className="text-sm font-semibold text-ink">Custom ATS format</h3>
-                <p className="text-xs text-ink/60 mt-1 truncate">Paste or upload your own scoring rubric</p>
-              </button>
-
-              {/* Tool 3: Match to JD */}
-              <button
-                type="button"
-                onClick={() => openToolWithResume(() => openModal(setIsJobMatcherOpen))}
-                className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
-              >
-                <h3 className="text-sm font-semibold text-ink">Match to a job description</h3>
-                <p className="text-xs text-ink/60 mt-1 truncate">See missing keywords, tailor your bullets</p>
-              </button>
-
-              {/* Tool 4: Job Feeds */}
-              <button
-                type="button"
-                onClick={() => openToolWithResume(() => openModal(setIsJobRadarOpen))}
-                className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
-              >
-                <h3 className="text-sm font-semibold text-ink">Job search feeds</h3>
-                <p className="text-xs text-ink/60 mt-1 truncate">Fresh listings for your role</p>
-              </button>
-
-              {/* Tool 5: Industry Trends */}
-              <button
-                type="button"
-                onClick={() => openToolWithResume(() => openModal(setIsTrendAdvisorOpen))}
-                className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
-              >
-                <h3 className="text-sm font-semibold text-ink">Industry trends</h3>
-                <p className="text-xs text-ink/60 mt-1 truncate">Skills and upgrades for your profile</p>
-              </button>
-
-              {/* Tool 6: Start from a Sample */}
-              <div className="relative" ref={homeSampleMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setHomeSampleMenuOpen((v) => !v)}
-                  className="w-full h-full card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
-                >
-                  <h3 className="text-sm font-semibold text-ink">Start from a sample</h3>
-                  <p className="text-xs text-ink/60 mt-1 truncate">AI engineer, full-stack, graduate</p>
-                </button>
-
-                {homeSampleMenuOpen && (
-                  <div className="absolute left-0 bottom-full mb-1 w-full card shadow-menu py-1 z-30 border border-line bg-card rounded-[6px] animate-in fade-in duration-100">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setHomeSampleMenuOpen(false);
-                        handleLoadSample('aiEngineer');
-                      }}
-                      className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                    >
-                      AI Engineer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setHomeSampleMenuOpen(false);
-                        handleLoadSample('fullStack');
-                      }}
-                      className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                    >
-                      Full-Stack Developer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setHomeSampleMenuOpen(false);
-                        handleLoadSample('fresherStudent');
-                      }}
-                      className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                    >
-                      Graduate
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
-          </div>
+          ) : (
+            /* Resumes exist: Grid of resumes, compact drop zone, then Tools */
+            <>
+              {/* Header row */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-line">
+                <div>
+                  <h1 className="text-2xl font-serif font-semibold text-ink tracking-tight">
+                    Your resumes
+                  </h1>
+                  <p className="text-xs text-ink/60 mt-0.5">
+                    Manage and edit your saved resumes.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openModal(setIsUploadModalOpen)}
+                    className="btn-outline h-8 px-3 text-xs font-medium flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
+                    <span>Upload resume</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreateNew}
+                    className="btn-primary h-8 px-3 text-xs font-medium flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" strokeWidth={1.5} />
+                    <span>New resume</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Resumes Grid */}
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4 pt-6 items-stretch">
+                {displayResumes.map((entry) => {
+                  const resumeItemData = getResume(entry.id);
+                  const isCardAtsEmpty = isResumeEmptyForAts(resumeItemData);
+
+                  return (
+                    <div
+                      key={entry.id}
+                      onClick={() => {
+                        window.location.hash = `#/r/${entry.id}`;
+                      }}
+                      className="card border border-line bg-card hover:border-ink/40 transition flex flex-col justify-between h-[280px] p-3.5 relative group cursor-pointer"
+                    >
+                      {/* Scaled A4 Real Resume Thumbnail on WHITE paper */}
+                      <div className="w-full h-36 bg-muted/30 rounded-[6px] border border-line overflow-hidden relative flex justify-center items-start pt-1.5 select-none pointer-events-none">
+                        <div
+                          data-theme="light"
+                          style={{
+                            width: '794px',
+                            minHeight: '1123px',
+                            transform: 'scale(0.24)',
+                            transformOrigin: 'top center',
+                            backgroundColor: '#ffffff',
+                            color: '#16161d',
+                            padding: '12mm 14mm',
+                          }}
+                          className="shadow-sm border border-black/10 text-left shrink-0 font-sans"
+                        >
+                          {resumeItemData ? (
+                            <ModernTemplate
+                              data={resumeItemData}
+                              theme={{
+                                primaryColor: '#b4451f',
+                                fontFamily: 'sans',
+                                spacing: 'normal',
+                                accentColor: '#b4451f',
+                              }}
+                            />
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {/* Title & Info (hide subtitle if no title) */}
+                      <div className="mt-2.5 min-w-0">
+                        {renamingCardId === entry.id ? (
+                          <input
+                            type="text"
+                            value={cardRenameValue}
+                            onChange={(e) => setCardRenameValue(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleFinishCardRename(entry.id);
+                              if (e.key === 'Escape') setRenamingCardId(null);
+                            }}
+                            onBlur={() => handleFinishCardRename(entry.id)}
+                            autoFocus
+                            className="w-full text-xs font-semibold px-2 py-0.5 rounded-[4px] bg-card border border-brand-600 text-ink focus:outline-none"
+                          />
+                        ) : (
+                          <h3
+                            className="text-xs font-semibold text-ink group-hover:text-brand-600 transition-colors truncate"
+                            title={entry.name}
+                          >
+                            {entry.name}
+                          </h3>
+                        )}
+                        {entry.title?.trim() ? (
+                          <p className="text-[11px] text-ink/60 truncate mt-0.5">
+                            {entry.title}
+                          </p>
+                        ) : null}
+                      </div>
+
+                      {/* Footer info: last edited & score */}
+                      <div className="mt-2 pt-2 border-t border-line flex items-center justify-between text-[11px] text-ink/40">
+                        <span>{formatRelativeTime(entry.updatedAt)}</span>
+                        {isCardAtsEmpty || entry.score === undefined ? (
+                          <span className="text-ink/40 font-medium">ATS --</span>
+                        ) : (
+                          <span className="text-ink/70 font-medium flex items-center gap-1">
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                entry.score >= 80
+                                  ? 'bg-emerald-600'
+                                  : entry.score >= 60
+                                  ? 'bg-amber-600'
+                                  : 'bg-rose-600'
+                              }`}
+                            />
+                            <span>ATS {entry.score}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Top-Right Menu Trigger */}
+                      <div className="absolute top-2.5 right-2.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenCardMenuId((prev) => (prev === entry.id ? null : entry.id));
+                          }}
+                          className="p-1 rounded-[4px] bg-card/90 border border-line text-ink/50 hover:text-ink hover:bg-muted transition cursor-pointer"
+                          title="Actions"
+                        >
+                          <MoreVertical className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Card Dropdown Menu */}
+                        {openCardMenuId === entry.id && (
+                          <div
+                            ref={cardMenuRef}
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute right-0 top-7 w-40 card shadow-menu py-1 z-20 border border-line bg-card animate-in fade-in duration-100"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenCardMenuId(null);
+                                window.location.hash = `#/r/${entry.id}`;
+                              }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                            >
+                              <FolderOpen className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
+                              <span>Open</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenCardMenuId(null);
+                                setRenamingCardId(entry.id);
+                                setCardRenameValue(entry.name);
+                              }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
+                              <span>Rename</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenCardMenuId(null);
+                                handleDuplicateResume(entry.id);
+                              }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                            >
+                              <Copy className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
+                              <span>Duplicate</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenCardMenuId(null);
+                                handleExportJson(entry.id);
+                              }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                            >
+                              <Download className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
+                              <span>Export JSON</span>
+                            </button>
+                            <div className="my-1 border-t border-line" />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenCardMenuId(null);
+                                handleDeleteResume(entry.id, entry.name);
+                              }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2 transition cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Compact "Import a resume" drop zone (h-24) */}
+              <div
+                onClick={() => homeFileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setHomeDragActive(true);
+                }}
+                onDragLeave={() => setHomeDragActive(false)}
+                onDrop={handleHomeDrop}
+                className={`mt-6 w-full h-24 border-2 border-dashed rounded-lg bg-card transition flex items-center justify-center gap-3 cursor-pointer group px-4 select-none ${
+                  homeDragActive
+                    ? 'border-brand-600 bg-muted/30'
+                    : 'border-line hover:border-brand-600'
+                }`}
+              >
+                <Upload className="w-5 h-5 text-ink/40 group-hover:text-brand-600 transition shrink-0" strokeWidth={1.5} />
+                <div className="text-left">
+                  <span className="text-xs font-medium text-ink block">Import a resume</span>
+                  <span className="text-[11px] text-ink/50 block">Drag PDF, Word, JSON, or text here, or click to browse</span>
+                </div>
+              </div>
+
+              {/* Tools Section */}
+              <div className="mt-8 pt-6 border-t border-line">
+                <h2 className="text-sm font-semibold text-ink mb-3">Tools</h2>
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
+                  {/* Tool 1: Upload */}
+                  <button
+                    type="button"
+                    onClick={() => openModal(setIsUploadModalOpen)}
+                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                  >
+                    <h3 className="text-sm font-semibold text-ink">Upload a resume</h3>
+                    <p className="text-xs text-ink/60 mt-1 truncate">Import PDF, Word, JSON or text</p>
+                  </button>
+
+                  {/* Tool 2: Custom ATS */}
+                  <button
+                    type="button"
+                    onClick={() => openToolWithResume(handleOpenCustomAts)}
+                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                  >
+                    <h3 className="text-sm font-semibold text-ink">Custom ATS format</h3>
+                    <p className="text-xs text-ink/60 mt-1 truncate">Paste or upload your own scoring rubric</p>
+                  </button>
+
+                  {/* Tool 3: Match to JD */}
+                  <button
+                    type="button"
+                    onClick={() => openToolWithResume(() => openModal(setIsJobMatcherOpen))}
+                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                  >
+                    <h3 className="text-sm font-semibold text-ink">Match to a job description</h3>
+                    <p className="text-xs text-ink/60 mt-1 truncate">See missing keywords, tailor your bullets</p>
+                  </button>
+
+                  {/* Tool 4: Job Feeds */}
+                  <button
+                    type="button"
+                    onClick={() => openToolWithResume(() => openModal(setIsJobRadarOpen))}
+                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                  >
+                    <h3 className="text-sm font-semibold text-ink">Job search feeds</h3>
+                    <p className="text-xs text-ink/60 mt-1 truncate">Fresh listings for your role</p>
+                  </button>
+
+                  {/* Tool 5: Industry Trends */}
+                  <button
+                    type="button"
+                    onClick={() => openToolWithResume(() => openModal(setIsTrendAdvisorOpen))}
+                    className="card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                  >
+                    <h3 className="text-sm font-semibold text-ink">Industry trends</h3>
+                    <p className="text-xs text-ink/60 mt-1 truncate">Skills and upgrades for your profile</p>
+                  </button>
+
+                  {/* Tool 6: Start from a Sample */}
+                  <div className="relative" ref={homeSampleMenuRef}>
+                    <button
+                      type="button"
+                      onClick={() => setHomeSampleMenuOpen((v) => !v)}
+                      className="w-full h-full card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
+                    >
+                      <h3 className="text-sm font-semibold text-ink">Start from a sample</h3>
+                      <p className="text-xs text-ink/60 mt-1 truncate">AI engineer, full-stack, graduate</p>
+                    </button>
+
+                    {homeSampleMenuOpen && (
+                      <div className="absolute left-0 bottom-full mb-1 w-full card shadow-menu py-1 z-30 border border-line bg-card rounded-[6px] animate-in fade-in duration-100">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHomeSampleMenuOpen(false);
+                            handleLoadSample('aiEngineer');
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                        >
+                          AI Engineer
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHomeSampleMenuOpen(false);
+                            handleLoadSample('fullStack');
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                        >
+                          Full-Stack Developer
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHomeSampleMenuOpen(false);
+                            handleLoadSample('fresherStudent');
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                        >
+                          Graduate
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1356,14 +1645,16 @@ export const App: React.FC = () => {
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => openModal(setIsUploadModalOpen)}
-              className="text-[13px] font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
-            >
-              <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
-              <span>Upload</span>
-            </button>
+            {!isResumeEmpty(resumeData) && (
+              <button
+                type="button"
+                onClick={() => openModal(setIsUploadModalOpen)}
+                className="text-[13px] font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
+              >
+                <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
+                <span>Upload</span>
+              </button>
+            )}
           </div>
 
           {/* Mobile Tab Toggle */}
@@ -1431,6 +1722,7 @@ export const App: React.FC = () => {
                 onOpenUpload={() => openModal(setIsUploadModalOpen)}
                 onOpenCustomAts={handleOpenCustomAts}
                 onLoadSample={handleLoadSample}
+                appAccent={appAccent}
               />
             </div>
           </main>
@@ -1518,10 +1810,14 @@ export const App: React.FC = () => {
 
       <ResumeUploadModal
         isOpen={isUploadModalOpen}
-        onClose={() => closeModal(setIsUploadModalOpen)}
+        onClose={() => {
+          closeModal(setIsUploadModalOpen);
+          setUploadedFileForModal(null);
+        }}
         onSaveAsNew={handleUploadSaveAsNew}
         onReplaceCurrent={handleUploadReplaceCurrent}
         canReplace={route.type === 'editor'}
+        initialFile={uploadedFileForModal}
       />
 
       <CommandPalette

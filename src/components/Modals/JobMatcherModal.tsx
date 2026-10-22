@@ -33,6 +33,7 @@ import {
   getActiveProfileId,
   setActiveProfileId,
   calculateLiveATSScore,
+  isResumeEmptyForAts,
 } from '../../services/atsScorer';
 import { parseResumeFile } from '../../services/resumeParser';
 
@@ -408,11 +409,11 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                       <div className="p-2.5 bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/50 rounded-lg text-ink/70">
-                        <span className="block text-[10px] font-bold uppercase text-rose-500 mb-1">Current</span>
+                        <span className="block text-[12.5px] font-medium text-rose-500 mb-1">Current</span>
                         <p className="leading-relaxed">{resumeData.summary || '(Empty summary)'}</p>
                       </div>
                       <div className="p-2.5 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50 rounded-lg text-ink">
-                        <span className="block text-[10px] font-bold uppercase text-emerald-600 mb-1">Tailored Suggestion</span>
+                        <span className="block text-[12.5px] font-medium text-emerald-600 mb-1">Tailored suggestion</span>
                         <p className="leading-relaxed font-medium">{tailoredChanges.summary}</p>
                       </div>
                     </div>
@@ -420,7 +421,7 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
 
                   {/* Bullets Diff */}
                   <div className="space-y-3">
-                    <h4 className="text-xs font-bold text-ink">Experience Bullet Points</h4>
+                    <h4 className="text-[12.5px] font-medium text-ink/60">Experience bullet points</h4>
                     {tailoredChanges.experienceBullets.map((eb) => {
                       const role = resumeData.experience[eb.index];
                       if (!role) return null;
@@ -439,7 +440,7 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                                   className="p-2.5 bg-card rounded-lg border border-border space-y-2"
                                 >
                                   <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-bold text-ink/40 uppercase">
+                                    <span className="text-[12.5px] font-medium text-ink/60">
                                       Bullet #{bi + 1}
                                     </span>
                                     <button
@@ -489,15 +490,14 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                 /* Normal Matcher View */
                 <>
                   <div className="space-y-2">
-                    <label className="block text-xs font-bold text-ink">
-                      Paste Target Job Description (LinkedIn, Indeed, Greenhouse, etc.):
+                    <label className="block text-[12.5px] font-medium text-ink/70">
+                      Paste target job description (LinkedIn, Indeed, Greenhouse, etc.):
                     </label>
                     <textarea
-                      rows={4}
                       value={jobDescription}
                       onChange={(e) => setJobDescription(e.target.value)}
                       placeholder="e.g. Seeking Senior AI Engineer with expertise in PyTorch, Gemini API, RAG architectures, Kubernetes, and high-throughput systems..."
-                      className="input font-mono text-xs"
+                      className="input font-sans text-xs min-h-[160px] resize-y"
                     />
                     <div className="flex justify-end gap-2">
                       <button
@@ -516,80 +516,89 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                   </div>
 
                   {/* Results Display */}
-                  <div className="p-5 bg-muted border border-line rounded-2xl space-y-5">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line pb-4">
-                      <div>
-                        <span className="text-[11px] font-bold text-ink/40 uppercase tracking-wider">
-                          {hasScanned ? 'Job Posting ATS Compatibility' : 'General Resume ATS Health'}
-                        </span>
-                        <div className="flex items-baseline gap-2 mt-0.5">
-                          <span className="text-3xl font-black text-ink tabular-nums">
-                            {analysisResult.score}%
+                  {isResumeEmptyForAts(resumeData) ? (
+                    <div className="p-6 bg-muted border border-line rounded-lg text-center space-y-1.5">
+                      <p className="text-xs font-semibold text-ink">Add your details to see a score</p>
+                      <p className="text-[11px] text-ink/60 max-w-sm mx-auto">
+                        Fill in your experience, skills, or education to evaluate keyword matching against job postings.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-5 bg-muted border border-line rounded-lg space-y-5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line pb-4">
+                        <div>
+                          <span className="text-[12.5px] font-medium text-ink/60">
+                            {hasScanned ? 'Job posting ATS compatibility' : 'General resume ATS health'}
                           </span>
-                          <span
-                            className={`text-xs font-bold px-2 py-0.5 rounded-full border ${getScoreColor(
-                              analysisResult.score
-                            )}`}
+                          <div className="flex items-baseline gap-2 mt-0.5">
+                            <span className="text-3xl font-black text-ink tabular-nums">
+                              {analysisResult.score}%
+                            </span>
+                            <span
+                              className={`text-xs font-medium px-2 py-0.5 rounded-full border ${getScoreColor(
+                                analysisResult.score
+                              )}`}
+                            >
+                              {analysisResult.rating} Match
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:items-end gap-2">
+                          <button
+                            type="button"
+                            onClick={handleStartTailoring}
+                            disabled={isTailoring || !jobDescription.trim()}
+                            className="btn-primary"
                           >
-                            {analysisResult.rating} Match
+                            {isTailoring ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Wand2 className="w-3.5 h-3.5" />
+                            )}
+                            <span>{isTailoring ? 'AI Tailoring...' : 'Tailor Resume to Job'}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Keywords */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <span className="text-xs font-medium text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                            <CheckCircle className="w-4 h-4 text-emerald-600" />
+                            Matched keywords ({analysisResult.matchedKeywords.length})
                           </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {analysisResult.matchedKeywords.map((kw, i) => (
+                              <span
+                                key={i}
+                                className="px-2 py-0.5 text-[11px] font-medium bg-muted text-ink border border-line rounded-md"
+                              >
+                                ✓ {kw}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="flex flex-col sm:items-end gap-2">
-                        <button
-                          type="button"
-                          onClick={handleStartTailoring}
-                          disabled={isTailoring || !jobDescription.trim()}
-                          className="btn-primary"
-                        >
-                          {isTailoring ? (
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Wand2 className="w-3.5 h-3.5" />
-                          )}
-                          <span>{isTailoring ? 'AI Tailoring...' : 'Tailor Resume to Job'}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Keywords */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-                          <CheckCircle className="w-4 h-4 text-emerald-600" />
-                          Matched Keywords ({analysisResult.matchedKeywords.length})
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {analysisResult.matchedKeywords.map((kw, i) => (
-                            <span
-                              key={i}
-                              className="px-2 py-0.5 text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-md"
-                            >
-                              ✓ {kw}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <span className="text-xs font-bold text-rose-800 dark:text-rose-300 flex items-center gap-1.5">
-                          <AlertCircle className="w-4 h-4 text-rose-600" />
-                          Missing Keywords ({analysisResult.missingKeywords.length})
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {analysisResult.missingKeywords.map((kw, i) => (
-                            <span
-                              key={i}
-                              className="px-2 py-0.5 text-[11px] font-medium bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-md"
-                            >
-                              + {kw}
-                            </span>
-                          ))}
+                        <div className="space-y-2">
+                          <span className="text-xs font-medium text-rose-800 dark:text-rose-300 flex items-center gap-1.5">
+                            <AlertCircle className="w-4 h-4 text-rose-600" />
+                            Missing keywords ({analysisResult.missingKeywords.length})
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {analysisResult.missingKeywords.map((kw, i) => (
+                              <span
+                                key={i}
+                                className="px-2 py-0.5 text-[11px] font-medium bg-muted text-ink border border-line rounded-md"
+                              >
+                                + {kw}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </>
               )}
             </>
@@ -683,12 +692,12 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                             {/* Live Score against this profile */}
                             <div className="flex items-center justify-between p-3 bg-canvas/60 rounded-xl border border-line">
                               <div>
-                                <span className="text-[10px] uppercase font-bold text-ink/40">Deterministic Match Score</span>
+                                <span className="text-[12.5px] font-medium text-ink/60">Deterministic match score</span>
                                 <div className="flex items-baseline gap-2">
                                   <span className="text-2xl font-black text-ink tabular-nums">
                                     {profileAtsResult.isEmpty ? '--' : `${profileAtsResult.score}/100`}
                                   </span>
-                                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${getScoreColor(profileAtsResult.score)}`}>
+                                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${getScoreColor(profileAtsResult.score)}`}>
                                     {profileAtsResult.rating}
                                   </span>
                                 </div>
@@ -702,8 +711,8 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
 
                             {/* Criteria Breakdown */}
                             <div className="space-y-2">
-                              <h4 className="text-xs font-bold text-ink uppercase tracking-wider text-ink/50">
-                                Criteria Breakdown ({currentProf.criteria.length} Rules)
+                              <h4 className="text-[12.5px] font-medium text-ink/60">
+                                Criteria breakdown ({currentProf.criteria.length} rules)
                               </h4>
 
                               <div className="space-y-2">
@@ -722,8 +731,8 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                                       )}
                                       <div className="min-w-0">
                                         <div className="flex items-center gap-2">
-                                          <span className="text-xs font-bold text-ink">{cr.criterion.label}</span>
-                                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-muted border border-line text-ink/60 uppercase font-mono">
+                                          <span className="text-xs font-medium text-ink">{cr.criterion.label}</span>
+                                          <span className="text-[11px] px-1.5 py-0.2 rounded bg-muted border border-line text-ink/60 font-mono">
                                             {cr.criterion.type}
                                           </span>
                                         </div>

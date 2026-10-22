@@ -85,12 +85,12 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               <Palette className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
               <span>Theme</span>
             </span>
-            <span className="text-xs text-ink/50 font-mono">
-              {currentTheme}
+            <span className="text-xs text-ink/60 font-sans capitalize">
+              {THEME_PRESETS.find((p) => p.id === currentTheme)?.name || currentTheme}
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {THEME_PRESETS.map((preset) => {
               const isActive = currentTheme === preset.id;
               return (

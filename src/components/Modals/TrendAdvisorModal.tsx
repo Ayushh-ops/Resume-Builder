@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   TrendingUp,
   Sparkles,
-  ArrowRight,
   RefreshCw,
   Lightbulb,
 } from 'lucide-react';
@@ -48,20 +47,23 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
     switch (severity) {
       case 'high':
         return (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-            High Priority
+          <span className="inline-flex items-center gap-1.5 text-xs text-ink/70">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+            <span>High priority</span>
           </span>
         );
       case 'medium':
         return (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-            Recommended
+          <span className="inline-flex items-center gap-1.5 text-xs text-ink/70">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+            <span>Recommended</span>
           </span>
         );
       default:
         return (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-50 text-brand-600 border border-brand-500/20">
-            Polish
+          <span className="inline-flex items-center gap-1.5 text-xs text-ink/70">
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-600 shrink-0" />
+            <span>Polish</span>
           </span>
         );
     }
@@ -100,8 +102,8 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
         </div>
 
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-ink/60">
-            Personalized Recommendations ({tips.length})
+          <h3 className="text-[12.5px] font-medium text-ink/60">
+            Personalized recommendations ({tips.length})
           </h3>
           <button
             onClick={loadTips}
@@ -133,10 +135,10 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-ink">{tip.title}</span>
+                      <span className="text-xs font-semibold text-ink">{tip.title}</span>
                       {getSeverityBadge(tip.severity)}
                     </div>
-                    <span className="text-[10px] font-semibold text-ink/40 uppercase tracking-wider">
+                    <span className="text-xs text-ink/50">
                       {tip.category}
                     </span>
                   </div>
@@ -144,11 +146,10 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
 
                 <p className="text-xs text-ink/70 leading-relaxed">{tip.description}</p>
 
-                {/* Actionable Step Box */}
-                <div className="p-2.5 bg-brand-50/50 border border-brand-500/20 rounded-lg flex items-start gap-2 text-xs text-ink">
-                  <ArrowRight className="w-3.5 h-3.5 text-brand-600 shrink-0 mt-0.5" />
+                {/* Actionable Step Box - plain left border 2px accent, no tinted bg */}
+                <div className="py-1 px-3 border-l-2 border-brand-600 text-xs text-ink">
                   <div>
-                    <span className="font-bold text-brand-600">Next Action: </span>
+                    <span className="font-semibold text-ink">Next action: </span>
                     <span className="text-ink/80">{tip.actionableStep}</span>
                   </div>
                 </div>

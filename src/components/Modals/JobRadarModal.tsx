@@ -79,9 +79,9 @@ export const JobRadarModal: React.FC<JobRadarModalProps> = ({ isOpen, onClose, r
 
         {/* Quick-Launch 24-Hour Search Portals */}
         <div>
-          <h3 className="text-xs font-bold uppercase tracking-wider text-ink/60 mb-3 flex items-center gap-1.5">
+          <h3 className="text-[12.5px] font-medium text-ink/60 mb-3 flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5 text-brand-600" />
-            <span>Launch Live Earliest-Postings Queries</span>
+            <span>Launch live earliest-postings queries</span>
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {earlyLinks.map((item, idx) => (
@@ -118,9 +118,9 @@ export const JobRadarModal: React.FC<JobRadarModalProps> = ({ isOpen, onClose, r
         {/* Targeted Opportunities Match Graph */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-ink/60 flex items-center gap-1.5">
+            <h3 className="text-[12.5px] font-medium text-ink/60 flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-              <span>Recommended Fresh Roles for Your Resume Profile</span>
+              <span>Recommended fresh roles for your resume profile</span>
             </h3>
             <span className="text-[11px] text-ink/50">Based on your skill & title overlap</span>
           </div>

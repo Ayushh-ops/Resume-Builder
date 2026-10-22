@@ -99,7 +99,12 @@ export const getResumeIndex = (): ResumeIndexEntry[] => {
     const raw = localStorage.getItem('rc-index');
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item) => {
+          const data = getResume(item.id);
+          return !isResumeCompletelyEmpty(data);
+        });
+      }
     }
   } catch (err) {
     console.warn('Failed to parse rc-index', err);

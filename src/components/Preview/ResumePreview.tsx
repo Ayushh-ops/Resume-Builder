@@ -16,14 +16,8 @@ interface ResumePreviewProps {
   onOpenUpload?: () => void;
   onOpenCustomAts?: () => void;
   onLoadSample?: (key: string) => void;
+  appAccent?: string;
 }
-
-const RESUME_THEME_PRESETS = [
-  { id: 'executive', name: 'Executive', color: '#1e3a8a', font: 'serif' as const },
-  { id: 'tech',      name: 'Tech',      color: '#4a49d8', font: 'sans' as const },
-  { id: 'warm',      name: 'Warm',      color: '#c2410c', font: 'serif' as const },
-  { id: 'mono',      name: 'Mono',      color: '#16161d', font: 'mono' as const },
-];
 
 const TEMPLATES = [
   { id: 'modern',     label: 'Modern'     },
@@ -41,8 +35,24 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
   onOpenUpload,
   onOpenCustomAts,
   onLoadSample,
+  appAccent,
 }) => {
   const [zoom, setZoom] = useState(100);
+
+  const defaultAccent = appAccent || '#b4451f';
+
+  const presets = [
+    { id: 'default',   name: 'Default',   color: defaultAccent, font: 'sans' as const },
+    { id: 'executive', name: 'Executive', color: '#1e3a8a',     font: 'serif' as const },
+    { id: 'tech',      name: 'Tech',      color: '#4a49d8',     font: 'sans' as const },
+    { id: 'warm',      name: 'Warm',      color: '#c2410c',     font: 'serif' as const },
+    { id: 'mono',      name: 'Mono',      color: '#16161d',     font: 'mono' as const },
+  ];
+
+  const matchedPreset = presets.find(
+    (p) => p.color.toLowerCase() === (theme.primaryColor || '').toLowerCase()
+  );
+  const activePresetId = matchedPreset ? matchedPreset.id : 'custom';
 
   const handleZoomIn  = () => setZoom((prev) => Math.min(prev + 10, 150));
   const handleZoomOut = () => setZoom((prev) => Math.max(prev - 10, 60));
@@ -87,17 +97,14 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
           <div className="flex items-center gap-1.5">
             <span className="text-[11px] text-ink/50 font-medium">Preset</span>
             <select
-              value={
-                RESUME_THEME_PRESETS.find(
-                  (p) => p.color === theme.primaryColor && p.font === theme.fontFamily
-                )?.id || 'custom'
-              }
+              value={activePresetId}
               onChange={(e) => {
-                const selected = RESUME_THEME_PRESETS.find((p) => p.id === e.target.value);
+                const selected = presets.find((p) => p.id === e.target.value);
                 if (selected) {
                   onChangeTheme({
                     ...theme,
                     primaryColor: selected.color,
+                    accentColor: selected.color,
                     fontFamily: selected.font,
                   });
                 }
@@ -105,12 +112,14 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
               className="h-7 text-xs bg-card border border-line rounded-[6px] px-2 text-ink focus:outline-none focus:border-brand-600 cursor-pointer"
               title="Resume style preset"
             >
-              {RESUME_THEME_PRESETS.map((p) => (
+              {presets.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
-              <option value="custom" disabled>Custom</option>
+              {activePresetId === 'custom' && (
+                <option value="custom">Custom</option>
+              )}
             </select>
           </div>
 
@@ -123,12 +132,12 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
             >
               <span
                 className="w-3.5 h-3.5 rounded-full border border-black/15 shrink-0"
-                style={{ backgroundColor: theme.primaryColor || '#b4451f' }}
+                style={{ backgroundColor: theme.primaryColor || defaultAccent }}
               />
               <input
                 type="color"
-                value={theme.primaryColor || '#b4451f'}
-                onChange={(e) => onChangeTheme({ ...theme, primaryColor: e.target.value })}
+                value={theme.primaryColor || defaultAccent}
+                onChange={(e) => onChangeTheme({ ...theme, primaryColor: e.target.value, accentColor: e.target.value })}
                 className="sr-only"
               />
             </label>
@@ -195,49 +204,49 @@ export const ResumePreview: React.FC<ResumePreviewProps> = ({
             color: '#16161d',
           }}
         >
-          {renderTemplate()}
+          {!isEmpty && renderTemplate()}
 
-          {/* Empty State Overlay */}
+          {/* Empty State: Clean white paper with centered card, no ghost template */}
           {isEmpty && (
-            <div className="no-print absolute inset-0 bg-white/90 flex items-start justify-center pt-20 p-6 z-10 animate-in fade-in">
+            <div className="no-print absolute inset-0 flex items-center justify-center p-6 z-10 animate-in fade-in">
               <div className="card p-6 max-w-sm text-center space-y-3 border border-line bg-card shadow-modal max-h-full overflow-y-auto">
                 <h4 className="text-sm font-semibold text-ink">Your resume is empty</h4>
                 <p className="text-xs text-ink/60">
                   Import a document or choose a sample profile to begin.
                 </p>
                 <div className="flex flex-col gap-2 pt-2">
+                  {onOpenUpload && (
+                    <button
+                      type="button"
+                      onClick={onOpenUpload}
+                      className="btn-primary w-full justify-center h-8"
+                    >
+                      <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
+                      <span>Upload resume</span>
+                    </button>
+                  )}
                   <div className="flex gap-2">
-                    {onOpenUpload && (
+                    {onLoadSample && (
                       <button
                         type="button"
-                        onClick={onOpenUpload}
-                        className="btn-primary flex-1 justify-center h-8"
+                        onClick={() => onLoadSample('aiEngineer')}
+                        className="btn-outline flex-1 justify-center h-8 text-xs"
                       >
-                        <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
-                        <span>Upload resume</span>
+                        <User className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        <span>Load sample</span>
                       </button>
                     )}
                     {onOpenCustomAts && (
                       <button
                         type="button"
                         onClick={onOpenCustomAts}
-                        className="btn-outline flex-1 justify-center h-8"
+                        className="btn-outline flex-1 justify-center h-8 text-xs"
                       >
                         <Sliders className="w-3.5 h-3.5" strokeWidth={1.5} />
                         <span>Custom ATS</span>
                       </button>
                     )}
                   </div>
-                  {onLoadSample && (
-                    <button
-                      type="button"
-                      onClick={() => onLoadSample('aiEngineer')}
-                      className="btn-ghost w-full justify-center h-8"
-                    >
-                      <User className="w-3.5 h-3.5" strokeWidth={1.5} />
-                      <span>Load sample profile</span>
-                    </button>
-                  )}
                 </div>
               </div>
             </div>
