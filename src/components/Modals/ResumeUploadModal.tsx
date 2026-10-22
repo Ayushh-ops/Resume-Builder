@@ -38,7 +38,23 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
   const [fileName, setFileName] = useState('');
   const [parsingStage, setParsingStage] = useState<1 | 2 | 3>(1);
   const [parsedResult, setParsedResult] = useState<ParsedResumeResult | null>(null);
+  const [currentFile, setCurrentFile] = useState<File | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    let interval: any = null;
+    if (step === 'parsing') {
+      setElapsedSeconds(0);
+      interval = setInterval(() => {
+        setElapsedSeconds((s) => s + 1);
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [step]);
 
   useEffect(() => {
     if (isOpen) {
@@ -50,13 +66,29 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
         setFileName('');
         setParsedResult(null);
         setParsingStage(1);
+        setCurrentFile(null);
+      }
+    } else {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
     }
   }, [isOpen, initialFile]);
 
   if (!isOpen) return null;
 
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setStep('upload');
+    setErrorMessage('');
+    setParsingStage(1);
+    setParsedResult(null);
+  };
+
   const handleFileProcess = async (file: File) => {
+    setCurrentFile(file);
     setFileName(file.name.replace(/\.[^/.]+$/, ''));
     // 5MB limit
     if (file.size > 5 * 1024 * 1024) {
@@ -68,12 +100,14 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
     setStep('parsing');
     setParsingStage(1);
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
-      // Simulate/trigger staged visual progress while parsing
       const timer1 = setTimeout(() => setParsingStage(2), 600);
       const timer2 = setTimeout(() => setParsingStage(3), 1400);
 
-      const result = await parseAndStructureResume(file);
+      const result = await parseAndStructureResume(file, controller.signal);
 
       clearTimeout(timer1);
       clearTimeout(timer2);
@@ -82,8 +116,9 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
       setTimeout(() => {
         setParsedResult(result);
         setStep('review');
-      }, 500);
+      }, 400);
     } catch (err: any) {
+      console.error('File parsing failed:', err);
       setErrorMessage(err.message || 'Failed to parse resume document. Please try again or paste in text.');
       setStep('error');
     }
@@ -159,6 +194,47 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
               className="btn-primary h-8 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
             >
               <span>Save as new resume</span>
+            </button>
+          </div>
+        ) : step === 'parsing' ? (
+          <div className="flex items-center justify-between w-full">
+            <span className="text-xs text-ink/50 tabular-nums">
+              {elapsedSeconds}s elapsed
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="btn-outline h-8 px-3 text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => currentFile && handleFileProcess(currentFile)}
+                className="btn-outline h-8 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry</span>
+              </button>
+            </div>
+          </div>
+        ) : step === 'error' ? (
+          <div className="flex items-center justify-end gap-2 w-full">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="btn-outline h-8 px-3 text-xs cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => currentFile && handleFileProcess(currentFile)}
+              className="btn-primary h-8 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry</span>
             </button>
           </div>
         ) : (
@@ -266,7 +342,10 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
                   3. AI Field Structuring & Polish
                 </span>
                 {parsingStage >= 3 ? (
-                  <RefreshCw className="w-3.5 h-3.5 text-brand-600 animate-spin" />
+                  <div className="flex items-center gap-1.5 text-ink/60 text-[11px] font-normal">
+                    <RefreshCw className="w-3.5 h-3.5 text-brand-600 animate-spin" />
+                    <span className="tabular-nums">{elapsedSeconds}s</span>
+                  </div>
                 ) : (
                   <span className="text-[10px] text-ink/30">Pending</span>
                 )}
@@ -278,15 +357,27 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
         {/* STEP 3: REVIEW */}
         {step === 'review' && parsedResult && (
           <div className="space-y-4">
-            <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl flex items-center gap-3 text-xs text-emerald-900 dark:text-emerald-200">
-              <FileCheck className="w-5 h-5 text-emerald-600 shrink-0" />
-              <div>
-                <span className="font-bold">Resume Parsed Successfully!</span>
-                <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5">
-                  Review the detected fields and extraction confidence before importing into the editor.
-                </p>
+            {parsedResult.fallbackNotice ? (
+              <div className="p-3 bg-muted border border-line rounded-[6px] flex items-center gap-2.5 text-xs text-ink/80">
+                <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                <div className="flex-1">
+                  <span className="font-semibold text-ink">{parsedResult.fallbackNotice}</span>
+                  <p className="text-[11px] text-ink/60 mt-0.5">
+                    Review detected fields below and refine them in the editor.
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="p-3 bg-muted border border-line rounded-[6px] flex items-center gap-2.5 text-xs text-ink">
+                <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div className="flex-1">
+                  <span className="font-semibold">Resume parsed successfully</span>
+                  <p className="text-[11px] text-ink/60 mt-0.5">
+                    Review detected fields and extraction confidence before importing.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* 2-column layout: Left = Detected fields, Right = Confidence tags */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

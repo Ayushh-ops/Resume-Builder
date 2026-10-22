@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   TrendingUp,
-  Sparkles,
   RefreshCw,
   Lightbulb,
 } from 'lucide-react';
@@ -73,7 +72,7 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Industry Trends & Recommendations"
+      title="Industry trends & recommendations"
       subtitle="Suggestions to align your resume with current industry expectations"
       icon={<TrendingUp className="w-4 h-4 text-ink/70" strokeWidth={1.5} />}
       maxWidth="max-w-3xl"
@@ -91,12 +90,12 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
     >
       <div className="space-y-5">
         {/* Quick 2026 Hiring Landscape Overview */}
-        <div className="p-4 bg-muted/60 border border-line rounded-xl flex items-start gap-3 text-xs text-ink">
-          <Lightbulb className="w-5 h-5 text-brand-600 shrink-0 mt-0.5" />
+        <div className="p-4 bg-muted/60 border border-line rounded-lg flex items-start gap-3 text-xs text-ink">
+          <Lightbulb className="w-4 h-4 text-ink/70 shrink-0 mt-0.5" strokeWidth={1.5} />
           <div>
-            <p className="font-bold text-ink">What 2026 Recruiters Care About Most:</p>
+            <p className="font-semibold text-ink">Current hiring landscape</p>
             <p className="text-[11px] text-ink/70 mt-1 leading-relaxed">
-              Recruiters are filtering for <strong>quantifiable business outcomes</strong> (not passive responsibilities), <strong>demonstrated AI & LLM tooling adoption</strong>, and <strong>crisp 1-page ATS formatting</strong>. Here is your customized upgrade checklist:
+              Recruiters prioritize quantifiable outcomes over passive duties, demonstrated tooling adoption, and crisp 1-page formatting.
             </p>
           </div>
         </div>
@@ -108,29 +107,25 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
           <button
             onClick={loadTips}
             disabled={isLoading}
-            className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-brand-600 bg-brand-50 hover:bg-brand-50/80 border border-brand-500/20 rounded-lg transition-colors disabled:opacity-50"
+            className="btn-outline h-7 px-2.5 text-xs inline-flex items-center gap-1.5 disabled:opacity-50"
           >
-            {isLoading ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="w-3.5 h-3.5" />
-            )}
-            <span>{isLoading ? 'Analyzing...' : 'Re-Run AI Trend Audit'}</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} strokeWidth={1.5} />
+            <span>{isLoading ? 'Analyzing...' : 'Re-run trend audit'}</span>
           </button>
         </div>
 
         {/* Tips List */}
         {isLoading ? (
           <div className="py-12 flex flex-col items-center justify-center text-ink/50 space-y-2">
-            <RefreshCw className="w-6 h-6 animate-spin text-brand-600" />
-            <p className="text-xs">Analyzing resume against 2026 tech market benchmarks...</p>
+            <RefreshCw className="w-5 h-5 animate-spin text-ink/40" />
+            <p className="text-xs">Analyzing resume against market benchmarks...</p>
           </div>
         ) : (
           <div className="space-y-3.5">
             {tips.map((tip, idx) => (
               <div
                 key={idx}
-                className="p-4 bg-card hover:bg-muted border border-line rounded-xl transition-all shadow-soft space-y-2"
+                className="p-4 bg-card hover:bg-muted border border-line rounded-lg transition-colors space-y-2"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>

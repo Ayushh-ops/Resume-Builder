@@ -26,6 +26,14 @@ export interface ParsedResumeResult {
   confidence: Record<string, number>;
   rawText: string;
   method: ParseMethod;
+  fallbackNotice?: string;
+  isAiFallback?: boolean;
+}
+
+export interface StructureResult {
+  data: Partial<ResumeData>;
+  fallbackNotice?: string;
+  isAiFallback?: boolean;
 }
 
 /**
@@ -91,12 +99,35 @@ export async function parseResumeFile(file: File): Promise<ParseResult> {
 
 /**
  * Structures raw resume text into ResumeData schema using Gemini, with a local regex fallback.
+ * Uses an AbortController with a 20s timeout, tries configured model then 'gemini-2.5-flash',
+ * and falls back to regex parser with a notice if anything fails or times out.
  */
-export async function structureResumeWithGemini(rawText: string): Promise<Partial<ResumeData>> {
+export async function structureResumeWithGemini(
+  rawText: string,
+  externalSignal?: AbortSignal
+): Promise<StructureResult> {
   const apiKey = getStoredApiKey();
-  const model = getStoredModel();
+  const configuredModel = getStoredModel() || 'gemini-3.8-flash';
+  const modelsToTry = Array.from(new Set([configuredModel, 'gemini-2.5-flash']));
 
   if (apiKey) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort(new Error('Gemini API call timed out after 20s'));
+    }, 20000);
+
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort(new Error('Request aborted by user'));
+      } else {
+        externalSignal.addEventListener('abort', () => {
+          controller.abort(new Error('Request aborted by user'));
+        });
+      }
+    }
+
     try {
       const client = new GoogleGenAI({ apiKey });
       const prompt = `You are a professional resume parser. Parse the following raw resume text and extract all information into a structured JSON matching the ResumeData schema.
@@ -115,24 +146,64 @@ ${rawText}
 
 Return strictly a valid JSON object matching this schema. No markdown formatting or code fences. Raw JSON only.`;
 
-      const response = await client.interactions.create({
-        model,
-        input: prompt,
-      });
+      for (const model of modelsToTry) {
+        if (controller.signal.aborted) break;
 
-      const responseText = response.output_text || '';
-      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleanJson);
-      if (parsed && (parsed.personalInfo || parsed.experience || parsed.education)) {
-        return normalizeParsedData(parsed);
+        try {
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            if (controller.signal.aborted) {
+              reject(timedOut ? new Error('Gemini call timed out after 20s') : new Error('Aborted'));
+            } else {
+              controller.signal.addEventListener('abort', () => {
+                reject(timedOut ? new Error('Gemini call timed out after 20s') : new Error('Aborted'));
+              });
+            }
+          });
+
+          const apiCall = client.interactions.create(
+            {
+              model,
+              input: prompt,
+            },
+            { signal: controller.signal } as any
+          );
+
+          const response: any = await Promise.race([apiCall, timeoutPromise]);
+          const responseText = response?.output_text || '';
+          const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+          const parsed = JSON.parse(cleanJson);
+
+          if (parsed && (parsed.personalInfo || parsed.experience || parsed.education)) {
+            clearTimeout(timeoutId);
+            return {
+              data: normalizeParsedData(parsed),
+              isAiFallback: false,
+            };
+          } else {
+            throw new Error('Invalid JSON structure returned by model');
+          }
+        } catch (err: any) {
+          console.error(`Gemini structuring failed with model "${model}":`, err);
+          if (controller.signal.aborted && timedOut) {
+            console.error('Gemini request exceeded 20s timeout limit.');
+            break;
+          }
+        }
       }
-    } catch (err) {
-      console.warn('Gemini resume structuring failed, falling back to heuristic regex parser:', err);
+    } catch (outerErr: any) {
+      console.error('Gemini structuring encountered error:', outerErr);
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
-  // Regex and heuristic fallback
-  return fallbackRegexParser(rawText);
+  // Fallback: offline regex parser automatically
+  const fallbackData = fallbackRegexParser(rawText);
+  return {
+    data: fallbackData,
+    fallbackNotice: 'AI unavailable, imported with basic parsing',
+    isAiFallback: true,
+  };
 }
 
 function normalizeParsedData(parsed: any): Partial<ResumeData> {
@@ -334,7 +405,10 @@ function calculateConfidence(data: Partial<ResumeData>): Record<string, number> 
  * High-level orchestration that parses any resume file, structures it with Gemini (or fallback),
  * and computes confidence metrics.
  */
-export async function parseAndStructureResume(file: File): Promise<ParsedResumeResult> {
+export async function parseAndStructureResume(
+  file: File,
+  abortSignal?: AbortSignal
+): Promise<ParsedResumeResult> {
   const { rawText, method, jsonData } = await parseResumeFile(file);
 
   if (jsonData && jsonData.personalInfo) {
@@ -344,10 +418,14 @@ export async function parseAndStructureResume(file: File): Promise<ParsedResumeR
       confidence,
       rawText,
       method,
+      isAiFallback: false,
     };
   }
 
-  const structured = await structureResumeWithGemini(rawText);
+  const { data: structured, fallbackNotice, isAiFallback } = await structureResumeWithGemini(
+    rawText,
+    abortSignal
+  );
   const confidence = calculateConfidence(structured);
 
   return {
@@ -355,5 +433,7 @@ export async function parseAndStructureResume(file: File): Promise<ParsedResumeR
     confidence,
     rawText,
     method,
+    fallbackNotice,
+    isAiFallback,
   };
 }

@@ -6,7 +6,6 @@ import {
   Settings,
   FolderOpen,
   ChevronDown,
-  MoreHorizontal,
   Undo2,
   Redo2,
   FilePlus2,
@@ -112,11 +111,15 @@ export const Header: React.FC<HeaderProps> = ({
   const [isRenaming, setIsRenaming] = useState(false);
   const [nameInput, setNameInput] = useState(currentResumeName || '');
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
+  const [resumeMenuPos, setResumeMenuPos] = useState({ top: 0, left: 0 });
+  const [atsPos, setAtsPos] = useState({ top: 0, right: 0 });
 
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const atsRef = useRef<HTMLDivElement>(null);
+  const atsBtnRef = useRef<HTMLButtonElement>(null);
   const resumeMenuRef = useRef<HTMLDivElement>(null);
+  const resumeMenuBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setNameInput(currentResumeName || '');
@@ -132,12 +135,19 @@ export const Header: React.FC<HeaderProps> = ({
       ) {
         setMenuOpen(false);
       }
-      if (atsRef.current && !atsRef.current.contains(e.target as Node)) {
+      if (
+        atsRef.current &&
+        !atsRef.current.contains(e.target as Node) &&
+        atsBtnRef.current &&
+        !atsBtnRef.current.contains(e.target as Node)
+      ) {
         setAtsPopoverOpen(false);
       }
       if (
         resumeMenuRef.current &&
-        !resumeMenuRef.current.contains(e.target as Node)
+        !resumeMenuRef.current.contains(e.target as Node) &&
+        resumeMenuBtnRef.current &&
+        !resumeMenuBtnRef.current.contains(e.target as Node)
       ) {
         setResumeMenuOpen(false);
       }
@@ -177,13 +187,29 @@ export const Header: React.FC<HeaderProps> = ({
     setMenuOpen((v) => !v);
   };
 
+  const handleToggleResumeMenu = () => {
+    if (!resumeMenuOpen && resumeMenuBtnRef.current) {
+      const rect = resumeMenuBtnRef.current.getBoundingClientRect();
+      setResumeMenuPos({ top: rect.bottom + 6, left: rect.left });
+    }
+    setResumeMenuOpen((v) => !v);
+  };
+
+  const handleToggleAts = () => {
+    if (!atsPopoverOpen && atsBtnRef.current) {
+      const rect = atsBtnRef.current.getBoundingClientRect();
+      setAtsPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    }
+    setAtsPopoverOpen((v) => !v);
+  };
+
   const close = () => setMenuOpen(false);
 
   const scoreInfo = getScoreColors(atsResult.score, atsResult.isEmpty);
 
   return (
-    <header className="no-print sticky top-0 z-40 h-13 flex items-center bg-card border-b border-line outline-none transition-colors select-none">
-      <div className="w-full max-w-6xl mx-auto px-6 flex items-center justify-between gap-4">
+    <header className="no-print sticky top-0 z-40 h-14 flex items-center bg-card border-b border-line outline-none transition-colors select-none">
+      <div className={`w-full ${isHome ? 'max-w-5xl mx-auto px-6' : 'px-4'} flex items-center justify-between gap-4`}>
 
         {/* Left: Logo & Resume Selector */}
         <div className="flex items-center gap-3 shrink-0 min-w-0">
@@ -229,8 +255,9 @@ export const Header: React.FC<HeaderProps> = ({
                     {currentResumeName || 'Untitled resume'}
                   </span>
                   <button
+                    ref={resumeMenuBtnRef}
                     type="button"
-                    onClick={() => setResumeMenuOpen((v) => !v)}
+                    onClick={handleToggleResumeMenu}
                     className="p-1 rounded-[4px] hover:bg-muted text-ink/40 hover:text-ink transition cursor-pointer shrink-0"
                     title="Switch resume"
                   >
@@ -239,62 +266,72 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               )}
 
-              {/* Resume Switcher Dropdown */}
-              {resumeMenuOpen && (
-                <div className="absolute top-9 left-2 w-60 card shadow-menu py-1 z-50 border border-line bg-card animate-in fade-in duration-100 max-h-[60vh] overflow-y-auto">
-                  <div className="px-3 py-1.5 text-xs font-medium text-ink/50 border-b border-line flex items-center justify-between">
-                    <span>Your resumes</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setResumeMenuOpen(false);
-                        onOpenHome?.();
-                      }}
-                      className="text-brand-600 hover:underline cursor-pointer"
-                    >
-                      All resumes →
-                    </button>
-                  </div>
-
-                  <div className="py-0.5">
-                    {resumeList.map((r) => (
+              {/* Resume Switcher Dropdown via Portal */}
+              {resumeMenuOpen &&
+                createPortal(
+                  <div
+                    ref={resumeMenuRef}
+                    style={{
+                      position: 'fixed',
+                      top: resumeMenuPos.top,
+                      left: resumeMenuPos.left,
+                    }}
+                    className="w-60 card shadow-menu py-1 z-[9999] border border-line bg-card animate-in fade-in duration-100 max-h-[60vh] overflow-y-auto"
+                  >
+                    <div className="px-3 py-1.5 text-xs font-medium text-ink/50 border-b border-line flex items-center justify-between">
+                      <span>Your resumes</span>
                       <button
-                        key={r.id}
                         type="button"
                         onClick={() => {
                           setResumeMenuOpen(false);
-                          onSelectResume?.(r.id);
+                          onOpenHome?.();
                         }}
-                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between transition cursor-pointer ${
-                          r.id === currentResumeId
-                            ? 'bg-muted text-ink font-semibold'
-                            : 'text-ink/80 hover:bg-muted'
-                        }`}
+                        className="text-brand-600 hover:underline cursor-pointer"
                       >
-                        <div className="truncate mr-2">
-                          <span className="block truncate">{r.name}</span>
-                          {r.title && <span className="block text-[11px] text-ink/40 truncate font-normal">{r.title}</span>}
-                        </div>
-                        {r.id === currentResumeId && <CheckCircle2 className="w-3.5 h-3.5 text-brand-600 shrink-0" />}
+                        All resumes →
                       </button>
-                    ))}
-                  </div>
+                    </div>
 
-                  <div className="pt-0.5 border-t border-line">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setResumeMenuOpen(false);
-                        onNewResume?.();
-                      }}
-                      className="w-full text-left px-3 py-1.5 text-xs text-brand-600 hover:bg-muted font-medium flex items-center gap-1.5 transition cursor-pointer"
-                    >
-                      <FilePlus2 className="w-3.5 h-3.5" />
-                      <span>New resume</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+                    <div className="py-0.5">
+                      {resumeList.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => {
+                            setResumeMenuOpen(false);
+                            onSelectResume?.(r.id);
+                          }}
+                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between transition cursor-pointer ${
+                            r.id === currentResumeId
+                              ? 'bg-muted text-ink font-semibold'
+                              : 'text-ink/80 hover:bg-muted'
+                          }`}
+                        >
+                          <div className="truncate mr-2">
+                            <span className="block truncate">{r.name}</span>
+                            {r.title && <span className="block text-[11px] text-ink/40 truncate font-normal">{r.title}</span>}
+                          </div>
+                          {r.id === currentResumeId && <CheckCircle2 className="w-3.5 h-3.5 text-brand-600 shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="pt-0.5 border-t border-line">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setResumeMenuOpen(false);
+                          onNewResume?.();
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-brand-600 hover:bg-muted font-medium flex items-center gap-1.5 transition cursor-pointer"
+                      >
+                        <FilePlus2 className="w-3.5 h-3.5" />
+                        <span>New resume</span>
+                      </button>
+                    </div>
+                  </div>,
+                  document.body
+                )}
             </div>
           )}
 
@@ -336,8 +373,9 @@ export const Header: React.FC<HeaderProps> = ({
           {!isHome && (
             <div className="relative" ref={atsRef}>
               <button
+                ref={atsBtnRef}
                 type="button"
-                onClick={() => setAtsPopoverOpen((v) => !v)}
+                onClick={handleToggleAts}
                 className={`hidden sm:inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium transition cursor-pointer ${atsResult.isEmpty ? 'text-ink/40 hover:text-ink/70' : 'text-ink/80 hover:text-ink'}`}
                 title="Toggle ATS evaluation"
               >
@@ -345,103 +383,113 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="tabular-nums">ATS {atsResult.isEmpty ? '--' : atsResult.score}</span>
               </button>
 
-              {atsPopoverOpen && (
-                <div className="absolute top-9 right-0 w-72 card shadow-menu p-3 z-50 border border-line bg-card space-y-2.5">
-                  {/* Header with Profile Selector */}
-                  <div className="pb-2 border-b border-line space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-ink">ATS evaluation</span>
-                      <span className={`text-xs font-medium tabular-nums ${atsResult.isEmpty ? 'text-ink/40' : 'text-brand-600'}`}>
-                        {atsResult.isEmpty ? 'ATS --' : `${atsResult.score}/100`}
-                      </span>
+              {atsPopoverOpen &&
+                createPortal(
+                  <div
+                    ref={atsRef}
+                    style={{
+                      position: 'fixed',
+                      top: atsPos.top,
+                      right: atsPos.right,
+                    }}
+                    className="w-72 card shadow-menu p-3 z-[9999] border border-line bg-card space-y-2.5 animate-in fade-in duration-100"
+                  >
+                    {/* Header with Profile Selector */}
+                    <div className="pb-2 border-b border-line space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-ink">ATS evaluation</span>
+                        <span className={`text-xs font-medium tabular-nums ${atsResult.isEmpty ? 'text-ink/40' : 'text-brand-600'}`}>
+                          {atsResult.isEmpty ? 'ATS --' : `${atsResult.score}/100`}
+                        </span>
+                      </div>
+
+                      {/* Profile selector dropdown */}
+                      {allProfiles.length > 0 && onSelectProfileId && (
+                        <div className="flex items-center gap-1.5 pt-0.5">
+                          <span className="text-[11px] text-ink/50 shrink-0">Profile:</span>
+                          <select
+                            value={activeProfileId}
+                            onChange={(e) => onSelectProfileId(e.target.value)}
+                            className="text-xs bg-muted border border-line rounded px-1.5 py-0.5 text-ink flex-1 focus:outline-none focus:border-brand-600"
+                          >
+                            {allProfiles.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} {p.isCustom ? '(Custom)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Profile selector dropdown */}
-                    {allProfiles.length > 0 && onSelectProfileId && (
-                      <div className="flex items-center gap-1.5 pt-0.5">
-                        <span className="text-[11px] text-ink/50 shrink-0">Profile:</span>
-                        <select
-                          value={activeProfileId}
-                          onChange={(e) => onSelectProfileId(e.target.value)}
-                          className="text-xs bg-muted border border-line rounded px-1.5 py-0.5 text-ink flex-1 focus:outline-none focus:border-brand-600"
-                        >
-                          {allProfiles.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name} {p.isCustom ? '(Custom)' : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Criterion breakdown / Top fixes */}
-                  <div className="space-y-2 text-[11px]">
-                    {atsResult.isEmpty ? (
-                      <p className="text-ink/50 py-1 leading-relaxed">
-                        Add contact information, experience, or skills to compute live ATS scores.
-                      </p>
-                    ) : atsResult.criterionResults && atsResult.criterionResults.length > 0 ? (
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-ink/60">Evaluation breakdown</p>
-                        {atsResult.criterionResults.slice(0, 4).map((cr) => (
-                          <div key={cr.criterion.id} className="p-1.5 bg-muted/50 rounded border border-line flex items-start gap-1.5">
-                            {cr.status === 'pass' ? (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                            ) : cr.status === 'partial' ? (
-                              <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-                            ) : (
-                              <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium text-ink truncate">{cr.criterion.label}</span>
-                                <span className="text-[10px] tabular-nums text-ink/50">
-                                  {cr.scoreEarned}/{cr.maxScore}
-                                </span>
+                    {/* Criterion breakdown / Top fixes */}
+                    <div className="space-y-2 text-[11px]">
+                      {atsResult.isEmpty ? (
+                        <p className="text-ink/50 py-1 leading-relaxed">
+                          Add contact information, experience, or skills to compute live ATS scores.
+                        </p>
+                      ) : atsResult.criterionResults && atsResult.criterionResults.length > 0 ? (
+                        <div className="space-y-1.5">
+                          <p className="text-xs font-medium text-ink/60">Evaluation breakdown</p>
+                          {atsResult.criterionResults.slice(0, 4).map((cr) => (
+                            <div key={cr.criterion.id} className="p-1.5 bg-muted/50 rounded border border-line flex items-start gap-1.5">
+                              {cr.status === 'pass' ? (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                              ) : cr.status === 'partial' ? (
+                                <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                              ) : (
+                                <XCircle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-medium text-ink truncate">{cr.criterion.label}</span>
+                                  <span className="text-[10px] tabular-nums text-ink/50">
+                                    {cr.scoreEarned}/{cr.maxScore}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-ink/60 leading-tight mt-0.5">{cr.fix}</p>
                               </div>
-                              <p className="text-[10px] text-ink/60 leading-tight mt-0.5">{cr.fix}</p>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {atsResult.suggestions.slice(0, 3).map((sug, i) => (
-                          <div key={i} className="flex items-start gap-1.5 text-ink/70">
-                            <span className="text-amber-500 font-bold shrink-0">•</span>
-                            <span>{sug}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {atsResult.suggestions.slice(0, 3).map((sug, i) => (
+                            <div key={i} className="flex items-start gap-1.5 text-ink/70">
+                              <span className="text-amber-500 font-bold shrink-0">•</span>
+                              <span>{sug}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
-                  <div className="pt-1.5 border-t border-line flex flex-col gap-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAtsPopoverOpen(false);
-                        if (onOpenCustomAts) onOpenCustomAts();
-                        else onOpenJobMatcher();
-                      }}
-                      className="w-full py-1 text-center text-[11px] font-bold text-brand-600 hover:bg-brand-50 rounded transition flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <span>+ Add custom ATS format</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAtsPopoverOpen(false);
-                        onOpenJobMatcher();
-                      }}
-                      className="w-full py-0.5 text-center text-[10px] text-ink/60 hover:text-ink transition cursor-pointer"
-                    >
-                      Open Full ATS & Profile Studio →
-                    </button>
-                  </div>
-                </div>
-              )}
+                    <div className="pt-1.5 border-t border-line flex flex-col gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAtsPopoverOpen(false);
+                          if (onOpenCustomAts) onOpenCustomAts();
+                          else onOpenJobMatcher();
+                        }}
+                        className="w-full py-1 text-center text-[11px] font-bold text-brand-600 hover:bg-brand-50 rounded transition flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <span>+ Add custom ATS format</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAtsPopoverOpen(false);
+                          onOpenJobMatcher();
+                        }}
+                        className="w-full py-0.5 text-center text-[10px] text-ink/60 hover:text-ink transition cursor-pointer"
+                      >
+                        Open Full ATS & Profile Studio →
+                      </button>
+                    </div>
+                  </div>,
+                  document.body
+                )}
             </div>
           )}
 
@@ -479,7 +527,6 @@ export const Header: React.FC<HeaderProps> = ({
                 aria-expanded={menuOpen}
                 className="btn-outline hidden sm:inline-flex cursor-pointer"
               >
-                <MoreHorizontal className="w-4 h-4" strokeWidth={1.75} />
                 <span>More</span>
                 <ChevronDown className={`w-3 h-3 transition-transform ${menuOpen ? 'rotate-180' : ''}`} strokeWidth={2} />
               </button>
@@ -493,7 +540,7 @@ export const Header: React.FC<HeaderProps> = ({
                       top: menuPos.top,
                       right: menuPos.right,
                     }}
-                    className="w-48 card shadow-menu py-1 z-40 border border-line bg-card overflow-y-auto animate-in fade-in duration-100 rounded-[6px]"
+                    className="w-48 card shadow-menu py-1 z-[9999] border border-line bg-card overflow-y-auto animate-in fade-in duration-100 rounded-[6px]"
                   >
                     <button
                       onClick={() => {

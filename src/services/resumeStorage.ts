@@ -73,12 +73,10 @@ export const initResumeStorage = (): ResumeIndexEntry[] => {
 
     for (const entry of rawIndex) {
       const data = getResume(entry.id);
-      if (isResumeCompletelyEmpty(data)) {
+      const isActive = getActiveResumeId() === entry.id;
+      if (isResumeCompletelyEmpty(data) && !isActive) {
         localStorage.removeItem(`rc-resume:${entry.id}`);
         modified = true;
-        if (getActiveResumeId() === entry.id) {
-          localStorage.removeItem('rc-active');
-        }
       } else {
         cleanIndex.push(entry);
       }
@@ -100,10 +98,7 @@ export const getResumeIndex = (): ResumeIndexEntry[] => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.filter((item) => {
-          const data = getResume(item.id);
-          return !isResumeCompletelyEmpty(data);
-        });
+        return parsed;
       }
     }
   } catch (err) {

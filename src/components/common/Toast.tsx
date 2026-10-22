@@ -20,7 +20,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const showToast = useCallback((message: string, type: ToastType = 'info') => {
     const id = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => {
+      const next = [...prev, { id, message, type }];
+      return next.slice(-2);
+    });
 
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -34,8 +37,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      {/* Toast viewport */}
-      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none px-4 max-w-md w-full">
+      {/* Toast viewport: bottom-center stack with gap, max 2, z above content */}
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[9999] flex flex-col gap-2 items-center pointer-events-none px-4 max-w-sm w-full">
         {toasts.map((toast) => {
           const Icon =
             toast.type === 'success'
@@ -54,7 +57,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           return (
             <div
               key={toast.id}
-              className="pointer-events-auto flex items-center gap-2.5 px-3.5 py-2.5 rounded-[6px] shadow-menu bg-card text-ink border border-line text-xs font-medium animate-in fade-in slide-in-from-bottom-2 duration-150 transition-all"
+              className="pointer-events-auto w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-[6px] shadow-menu bg-card text-ink border border-line text-xs font-medium animate-in fade-in slide-in-from-bottom-2 duration-150 transition-all shrink-0"
             >
               <Icon className={`w-4 h-4 shrink-0 ${iconColor}`} strokeWidth={1.5} />
               <span className="flex-1 leading-snug">{toast.message}</span>

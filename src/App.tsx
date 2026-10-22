@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import confetti from 'canvas-confetti';
 import {
   User,
@@ -217,6 +218,9 @@ export const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [resumeData, route, atsResult.score]);
 
+  // Track IDs created in this session so we never show "Resume not found"
+  const justCreatedIdsRef = useRef<Set<string>>(new Set());
+
   // Sync hash routing and resume data loading
   useEffect(() => {
     const handleHashChange = () => {
@@ -225,20 +229,18 @@ export const App: React.FC = () => {
 
       if (clean.startsWith('/r/')) {
         const id = clean.slice(3);
-        const index = getResumeIndex();
-        const exists = index.some((item) => item.id === id);
-        if (exists) {
-          const loaded = getResume(id);
-          if (loaded) {
-            setRoute({ type: 'editor', resumeId: id });
-            setResumeData(loaded);
-            setHistory([loaded]);
-            setHistoryIndex(0);
-            setActiveResumeId(id);
-            return;
-          }
+        const loaded = getResume(id);
+        if (loaded) {
+          setRoute({ type: 'editor', resumeId: id });
+          setResumeData(loaded);
+          setHistory([loaded]);
+          setHistoryIndex(0);
+          setActiveResumeId(id);
+          return;
         }
-        showToast('Resume not found', 'error');
+        if (!justCreatedIdsRef.current.has(id)) {
+          showToast('Resume not found', 'error');
+        }
         window.location.hash = '#/';
         setRoute({ type: 'home' });
         return;
@@ -258,19 +260,18 @@ export const App: React.FC = () => {
 
     if (clean.startsWith('/r/')) {
       const id = clean.slice(3);
-      const exists = resumeIndex.some((item) => item.id === id);
-      if (!exists) {
-        showToast('Resume not found', 'error');
+      const loaded = getResume(id);
+      if (!loaded) {
+        if (!justCreatedIdsRef.current.has(id)) {
+          showToast('Resume not found', 'error');
+        }
         window.location.hash = '#/';
         setRoute({ type: 'home' });
       } else {
-        const loaded = getResume(id);
-        if (loaded) {
-          setResumeData(loaded);
-          setHistory([loaded]);
-          setHistoryIndex(0);
-          setActiveResumeId(id);
-        }
+        setResumeData(loaded);
+        setHistory([loaded]);
+        setHistoryIndex(0);
+        setActiveResumeId(id);
       }
     } else if (!hash || hash === '#' || hash === '#/') {
       window.location.hash = '#/';
@@ -394,9 +395,52 @@ export const App: React.FC = () => {
   const [homeSampleMenuOpen, setHomeSampleMenuOpen] = useState(false);
   const [heroSampleMenuOpen, setHeroSampleMenuOpen] = useState(false);
   const [editorSamplesOpen, setEditorSamplesOpen] = useState(false);
+  const [cardMenuPos, setCardMenuPos] = useState({ top: 0, right: 0 });
+  const [homeSampleMenuPos, setHomeSampleMenuPos] = useState({ top: 0, left: 0 });
+  const [heroSampleMenuPos, setHeroSampleMenuPos] = useState({ top: 0, left: 0 });
+  const [editorSamplesPos, setEditorSamplesPos] = useState({ top: 0, left: 0 });
+
+  const homeSampleBtnRef = useRef<HTMLButtonElement>(null);
+  const heroSampleBtnRef = useRef<HTMLButtonElement>(null);
+  const editorSamplesBtnRef = useRef<HTMLButtonElement>(null);
   const homeSampleMenuRef = useRef<HTMLDivElement>(null);
   const heroSampleMenuRef = useRef<HTMLDivElement>(null);
   const editorSamplesRef = useRef<HTMLDivElement>(null);
+
+  const handleToggleCardMenu = (id: string, e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (openCardMenuId === id) {
+      setOpenCardMenuId(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setCardMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+      setOpenCardMenuId(id);
+    }
+  };
+
+  const handleToggleHeroSample = () => {
+    if (!heroSampleMenuOpen && heroSampleBtnRef.current) {
+      const rect = heroSampleBtnRef.current.getBoundingClientRect();
+      setHeroSampleMenuPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setHeroSampleMenuOpen((v) => !v);
+  };
+
+  const handleToggleHomeSample = () => {
+    if (!homeSampleMenuOpen && homeSampleBtnRef.current) {
+      const rect = homeSampleBtnRef.current.getBoundingClientRect();
+      setHomeSampleMenuPos({ top: rect.top - 100, left: rect.left });
+    }
+    setHomeSampleMenuOpen((v) => !v);
+  };
+
+  const handleToggleEditorSamples = () => {
+    if (!editorSamplesOpen && editorSamplesBtnRef.current) {
+      const rect = editorSamplesBtnRef.current.getBoundingClientRect();
+      setEditorSamplesPos({ top: rect.bottom + 4, left: rect.left });
+    }
+    setEditorSamplesOpen((v) => !v);
+  };
 
   // Drop zone states for Home landing
   const homeFileInputRef = useRef<HTMLInputElement>(null);
@@ -426,6 +470,7 @@ export const App: React.FC = () => {
     let targetId = displayResumes[0]?.id;
     if (!targetId || !getResume(targetId)) {
       const newId = createResume(blankResumeData, 'Untitled resume');
+      justCreatedIdsRef.current.add(newId);
       setResumeIndex(getResumeIndex());
       targetId = newId;
     }
@@ -441,13 +486,28 @@ export const App: React.FC = () => {
       if (cardMenuRef.current && !cardMenuRef.current.contains(e.target as Node)) {
         setOpenCardMenuId(null);
       }
-      if (homeSampleMenuRef.current && !homeSampleMenuRef.current.contains(e.target as Node)) {
+      if (
+        homeSampleMenuRef.current &&
+        !homeSampleMenuRef.current.contains(e.target as Node) &&
+        homeSampleBtnRef.current &&
+        !homeSampleBtnRef.current.contains(e.target as Node)
+      ) {
         setHomeSampleMenuOpen(false);
       }
-      if (heroSampleMenuRef.current && !heroSampleMenuRef.current.contains(e.target as Node)) {
+      if (
+        heroSampleMenuRef.current &&
+        !heroSampleMenuRef.current.contains(e.target as Node) &&
+        heroSampleBtnRef.current &&
+        !heroSampleBtnRef.current.contains(e.target as Node)
+      ) {
         setHeroSampleMenuOpen(false);
       }
-      if (editorSamplesRef.current && !editorSamplesRef.current.contains(e.target as Node)) {
+      if (
+        editorSamplesRef.current &&
+        !editorSamplesRef.current.contains(e.target as Node) &&
+        editorSamplesBtnRef.current &&
+        !editorSamplesBtnRef.current.contains(e.target as Node)
+      ) {
         setEditorSamplesOpen(false);
       }
     };
@@ -594,6 +654,7 @@ export const App: React.FC = () => {
   // 1. Create New Blank Resume
   const handleCreateNew = () => {
     const newId = createResume(blankResumeData, 'Untitled resume');
+    justCreatedIdsRef.current.add(newId);
     setResumeIndex(getResumeIndex());
     window.location.hash = `#/r/${newId}`;
     showToast('Created new blank resume', 'info');
@@ -610,6 +671,7 @@ export const App: React.FC = () => {
       };
       const name = sampleNames[key] || 'Sample Resume';
       const newId = createResume(sample, name);
+      justCreatedIdsRef.current.add(newId);
       setResumeIndex(getResumeIndex());
       window.location.hash = `#/r/${newId}`;
       showToast(`Created resume from sample: ${name}`, 'success');
@@ -624,6 +686,7 @@ export const App: React.FC = () => {
       ? fileName.replace(/\.[^/.]+$/, '')
       : importedData.personalInfo?.fullName || 'Imported Resume';
     const newId = createResume(importedData, resolvedName);
+    justCreatedIdsRef.current.add(newId);
     setResumeIndex(getResumeIndex());
     window.location.hash = `#/r/${newId}`;
     showToast('Imported and saved as new resume!', 'success');
@@ -1005,7 +1068,7 @@ export const App: React.FC = () => {
 
       {/* VIEW A: HOME SCREEN ("Your resumes") */}
       {route.type === 'home' && (
-        <div className="flex-1 w-full max-w-6xl mx-auto px-6 py-8 sm:py-10 flex flex-col justify-start min-h-[calc(100vh-3.5rem)] animate-in fade-in duration-150">
+        <div className="flex-1 w-full max-w-5xl mx-auto px-6 py-6 sm:py-8 flex flex-col justify-start min-h-[calc(100vh-3.5rem)] animate-in fade-in duration-150">
           <input
             type="file"
             ref={homeFileInputRef}
@@ -1015,103 +1078,173 @@ export const App: React.FC = () => {
           />
 
           {displayResumes.length === 0 ? (
-            /* Centered Hero when NO resumes exist */
-            <div className="w-full max-w-2xl mx-auto py-16 text-center">
-              <h1 className="text-3xl font-serif font-semibold text-ink tracking-tight mb-6">
-                Start with your resume
-              </h1>
+            /* Two-column hero (max-w-5xl) */
+            <div className="w-full">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center mb-6">
+                {/* Left Column (span 7) */}
+                <div className="lg:col-span-7 flex flex-col">
+                  <h1 className="text-3xl sm:text-4xl font-serif font-semibold text-ink tracking-tight mb-2">
+                    Build an ATS-ready resume
+                  </h1>
+                  <p className="text-xs sm:text-sm text-ink/60 mb-5 leading-relaxed">
+                    Upload your current resume or start fresh. Score it, match it to a job, and export a clean PDF.
+                  </p>
 
-              {/* Large dashed drop zone */}
-              <div
-                onClick={() => homeFileInputRef.current?.click()}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setHomeDragActive(true);
-                }}
-                onDragLeave={() => setHomeDragActive(false)}
-                onDrop={handleHomeDrop}
-                className={`min-h-[220px] w-full border-2 border-dashed rounded-lg bg-card transition flex flex-col items-center justify-center p-8 cursor-pointer group select-none ${
-                  homeDragActive
-                    ? 'border-brand-600 bg-muted/30'
-                    : 'border-line hover:border-brand-600'
-                }`}
-              >
-                <Upload className="w-8 h-8 text-ink/40 group-hover:text-brand-600 transition mb-3" strokeWidth={1.5} />
-                <p className="text-sm font-medium text-ink">
-                  Drag a PDF, Word, JSON or text file here, or click to browse
-                </p>
-                <p className="text-xs text-ink/40 mt-1">
-                  Supports PDF, Word, JSON or text files up to 5MB
-                </p>
+                  {/* Dropzone (min-h-[180px]) */}
+                  <div
+                    onClick={() => homeFileInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setHomeDragActive(true);
+                    }}
+                    onDragLeave={() => setHomeDragActive(false)}
+                    onDrop={handleHomeDrop}
+                    className={`min-h-[180px] w-full border-2 border-dashed rounded-lg bg-card transition flex flex-col items-center justify-center p-6 text-center cursor-pointer group select-none ${
+                      homeDragActive
+                        ? 'border-brand-600 bg-muted/30'
+                        : 'border-line hover:border-brand-600'
+                    }`}
+                  >
+                    <Upload className="w-7 h-7 text-ink/40 group-hover:text-brand-600 transition mb-2" strokeWidth={1.5} />
+                    <p className="text-xs sm:text-sm font-medium text-ink">
+                      Drag a PDF, Word, JSON or text file here, or click to browse
+                    </p>
+                    <p className="text-[11px] text-ink/40 mt-1">
+                      Supports PDF, Word, JSON or text files up to 5MB
+                    </p>
+                  </div>
+
+                  {/* Text links row */}
+                  <div className="mt-3.5 text-xs text-ink/60 flex items-center gap-1.5 flex-wrap">
+                    <span>or</span>
+                    <button
+                      type="button"
+                      onClick={handleCreateNew}
+                      className="text-brand-600 hover:underline cursor-pointer font-medium"
+                    >
+                      start from scratch
+                    </button>
+                    <span>·</span>
+                    <div className="relative inline-block" ref={heroSampleMenuRef}>
+                      <button
+                        ref={heroSampleBtnRef}
+                        type="button"
+                        onClick={handleToggleHeroSample}
+                        className="text-brand-600 hover:underline cursor-pointer font-medium"
+                      >
+                        use a sample
+                      </button>
+
+                      {heroSampleMenuOpen &&
+                        createPortal(
+                          <div
+                            ref={heroSampleMenuRef}
+                            style={{
+                              position: 'fixed',
+                              top: heroSampleMenuPos.top,
+                              left: heroSampleMenuPos.left,
+                            }}
+                            className="w-44 card shadow-menu py-1 z-[9999] border border-line bg-card rounded-[6px] text-left animate-in fade-in duration-100"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setHeroSampleMenuOpen(false);
+                                handleLoadSample('aiEngineer');
+                              }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                            >
+                              AI Engineer
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setHeroSampleMenuOpen(false);
+                                handleLoadSample('fullStack');
+                              }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                            >
+                              Full-Stack Developer
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setHeroSampleMenuOpen(false);
+                                handleLoadSample('fresherStudent');
+                              }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                            >
+                              Graduate
+                            </button>
+                          </div>,
+                          document.body
+                        )}
+                    </div>
+                    <span>·</span>
+                    <button
+                      type="button"
+                      onClick={handleOpenCustomAts}
+                      className="text-brand-600 hover:underline cursor-pointer font-medium"
+                    >
+                      add a custom ATS format
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Column (span 5): static scaled A4 sample resume */}
+                <div className="lg:col-span-5 hidden lg:flex justify-center items-center">
+                  <div className="w-full max-w-[340px] h-[330px] bg-muted/20 rounded-[8px] border border-line overflow-hidden relative flex justify-center items-start pt-2 select-none pointer-events-none">
+                    <div
+                      data-theme="light"
+                      style={{
+                        width: '794px',
+                        minHeight: '1123px',
+                        transform: 'scale(0.38)',
+                        transformOrigin: 'top center',
+                        backgroundColor: '#ffffff',
+                        color: '#16161d',
+                        padding: '12mm 14mm',
+                      }}
+                      className="shadow border border-line text-left shrink-0 font-sans"
+                    >
+                      <ModernTemplate
+                        data={sampleProfiles.aiEngineer}
+                        theme={{
+                          primaryColor: '#b4451f',
+                          fontFamily: 'sans',
+                          spacing: 'normal',
+                          accentColor: '#b4451f',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* Text links row */}
-              <div className="mt-4 text-xs text-ink/60 flex items-center justify-center gap-2 flex-wrap">
-                <span>or</span>
-                <button
-                  type="button"
-                  onClick={handleCreateNew}
-                  className="text-brand-600 hover:underline cursor-pointer font-medium"
-                >
-                  start from scratch
-                </button>
-                <span>·</span>
-                <div className="relative inline-block" ref={heroSampleMenuRef}>
-                  <button
-                    type="button"
-                    onClick={() => setHeroSampleMenuOpen((v) => !v)}
-                    className="text-brand-600 hover:underline cursor-pointer font-medium"
-                  >
-                    use a sample
-                  </button>
-
-                  {heroSampleMenuOpen && (
-                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 w-44 card shadow-menu py-1 z-30 border border-line bg-card rounded-[6px] text-left animate-in fade-in duration-100">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setHeroSampleMenuOpen(false);
-                          handleLoadSample('aiEngineer');
-                        }}
-                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                      >
-                        AI Engineer
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setHeroSampleMenuOpen(false);
-                          handleLoadSample('fullStack');
-                        }}
-                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                      >
-                        Full-Stack Developer
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setHeroSampleMenuOpen(false);
-                          handleLoadSample('fresherStudent');
-                        }}
-                        className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                      >
-                        Graduate
-                      </button>
-                    </div>
-                  )}
+              {/* 3 Plain Feature Columns */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 py-5 border-t border-line">
+                <div>
+                  <h3 className="text-xs font-semibold text-ink">Score against ATS rules</h3>
+                  <p className="text-[11px] text-ink/60 mt-1 leading-relaxed">
+                    Get instant feedback and actionable fixes based on real recruiter parsing rules.
+                  </p>
                 </div>
-                <span>·</span>
-                <button
-                  type="button"
-                  onClick={handleOpenCustomAts}
-                  className="text-brand-600 hover:underline cursor-pointer font-medium"
-                >
-                  add a custom ATS format
-                </button>
+                <div>
+                  <h3 className="text-xs font-semibold text-ink">Match to a job description</h3>
+                  <p className="text-[11px] text-ink/60 mt-1 leading-relaxed">
+                    Compare your resume to any job post to identify missing keywords and skills.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="text-xs font-semibold text-ink">Your data stays in the browser</h3>
+                  <p className="text-[11px] text-ink/60 mt-1 leading-relaxed">
+                    Resumes are stored privately in local storage without accounts or trackers.
+                  </p>
+                </div>
               </div>
 
               {/* Tools grid below the hero */}
-              <div className="mt-14 pt-8 border-t border-line text-left">
+              <div className="pt-6 border-t border-line text-left">
                 <h2 className="text-sm font-semibold text-ink mb-3">Tools</h2>
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
                   {/* Tool 1: Upload */}
@@ -1167,48 +1300,59 @@ export const App: React.FC = () => {
                   {/* Tool 6: Start from a Sample */}
                   <div className="relative" ref={homeSampleMenuRef}>
                     <button
+                      ref={homeSampleBtnRef}
                       type="button"
-                      onClick={() => setHomeSampleMenuOpen((v) => !v)}
+                      onClick={handleToggleHomeSample}
                       className="w-full h-full card border border-line bg-card hover:border-ink/40 transition p-3.5 text-left rounded-[6px] cursor-pointer"
                     >
                       <h3 className="text-sm font-semibold text-ink">Start from a sample</h3>
                       <p className="text-xs text-ink/60 mt-1 truncate">AI engineer, full-stack, graduate</p>
                     </button>
 
-                    {homeSampleMenuOpen && (
-                      <div className="absolute left-0 bottom-full mb-1 w-full card shadow-menu py-1 z-30 border border-line bg-card rounded-[6px] animate-in fade-in duration-100">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setHomeSampleMenuOpen(false);
-                            handleLoadSample('aiEngineer');
+                    {homeSampleMenuOpen &&
+                      createPortal(
+                        <div
+                          ref={homeSampleMenuRef}
+                          style={{
+                            position: 'fixed',
+                            top: homeSampleMenuPos.top,
+                            left: homeSampleMenuPos.left,
                           }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                          className="w-56 card shadow-menu py-1 z-[9999] border border-line bg-card rounded-[6px] animate-in fade-in duration-100"
                         >
-                          AI Engineer
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setHomeSampleMenuOpen(false);
-                            handleLoadSample('fullStack');
-                          }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                        >
-                          Full-Stack Developer
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setHomeSampleMenuOpen(false);
-                            handleLoadSample('fresherStudent');
-                          }}
-                          className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                        >
-                          Graduate
-                        </button>
-                      </div>
-                    )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHomeSampleMenuOpen(false);
+                              handleLoadSample('aiEngineer');
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                          >
+                            AI Engineer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHomeSampleMenuOpen(false);
+                              handleLoadSample('fullStack');
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                          >
+                            Full-Stack Developer
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHomeSampleMenuOpen(false);
+                              handleLoadSample('fresherStudent');
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                          >
+                            Graduate
+                          </button>
+                        </div>,
+                        document.body
+                      )}
                   </div>
                 </div>
               </div>
@@ -1345,82 +1489,86 @@ export const App: React.FC = () => {
                       <div className="absolute top-2.5 right-2.5">
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setOpenCardMenuId((prev) => (prev === entry.id ? null : entry.id));
-                          }}
+                          onClick={(e) => handleToggleCardMenu(entry.id, e)}
                           className="p-1 rounded-[4px] bg-card/90 border border-line text-ink/50 hover:text-ink hover:bg-muted transition cursor-pointer"
                           title="Actions"
                         >
                           <MoreVertical className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Card Dropdown Menu */}
-                        {openCardMenuId === entry.id && (
-                          <div
-                            ref={cardMenuRef}
-                            onClick={(e) => e.stopPropagation()}
-                            className="absolute right-0 top-7 w-40 card shadow-menu py-1 z-20 border border-line bg-card animate-in fade-in duration-100"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOpenCardMenuId(null);
-                                window.location.hash = `#/r/${entry.id}`;
+                        {/* Card Dropdown Menu via Portal */}
+                        {openCardMenuId === entry.id &&
+                          createPortal(
+                            <div
+                              ref={cardMenuRef}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                position: 'fixed',
+                                top: cardMenuPos.top,
+                                right: cardMenuPos.right,
                               }}
-                              className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                              className="w-40 card shadow-menu py-1 z-[9999] border border-line bg-card animate-in fade-in duration-100"
                             >
-                              <FolderOpen className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
-                              <span>Open</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOpenCardMenuId(null);
-                                setRenamingCardId(entry.id);
-                                setCardRenameValue(entry.name);
-                              }}
-                              className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
-                            >
-                              <Edit3 className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
-                              <span>Rename</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOpenCardMenuId(null);
-                                handleDuplicateResume(entry.id);
-                              }}
-                              className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
-                            >
-                              <Copy className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
-                              <span>Duplicate</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOpenCardMenuId(null);
-                                handleExportJson(entry.id);
-                              }}
-                              className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
-                            >
-                              <Download className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
-                              <span>Export JSON</span>
-                            </button>
-                            <div className="my-1 border-t border-line" />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setOpenCardMenuId(null);
-                                handleDeleteResume(entry.id, entry.name);
-                              }}
-                              className="w-full text-left px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2 transition cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
-                              <span>Delete</span>
-                            </button>
-                          </div>
-                        )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenCardMenuId(null);
+                                  window.location.hash = `#/r/${entry.id}`;
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                              >
+                                <FolderOpen className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
+                                <span>Open</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenCardMenuId(null);
+                                  setRenamingCardId(entry.id);
+                                  setCardRenameValue(entry.name);
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
+                                <span>Rename</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenCardMenuId(null);
+                                  handleDuplicateResume(entry.id);
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                              >
+                                <Copy className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
+                                <span>Duplicate</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenCardMenuId(null);
+                                  handleExportJson(entry.id);
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-xs text-ink/80 hover:bg-muted flex items-center gap-2 transition cursor-pointer"
+                              >
+                                <Download className="w-3.5 h-3.5 text-ink/60" strokeWidth={1.5} />
+                                <span>Export JSON</span>
+                              </button>
+                              <div className="my-1 border-t border-line" />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenCardMenuId(null);
+                                  handleDeleteResume(entry.id, entry.name);
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2 transition cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" strokeWidth={1.5} />
+                                <span>Delete</span>
+                              </button>
+                            </div>,
+                            document.body
+                          )}
                       </div>
                     </div>
                   );
@@ -1560,11 +1708,11 @@ export const App: React.FC = () => {
       {route.type === 'editor' && (
         <>
           {/* Slim Tools Bar */}
-          <div className="no-print h-10 border-b border-line bg-card flex items-center gap-1 px-4 overflow-x-auto shrink-0 select-none">
+          <div className="no-print h-9 border-b border-line bg-card flex items-center gap-1 px-4 overflow-x-auto shrink-0 select-none">
             <button
               type="button"
               onClick={() => openModal(setIsJobMatcherOpen)}
-              className="text-[13px] font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
+              className="text-xs font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
             >
               <Target className="w-3.5 h-3.5" strokeWidth={1.5} />
               <span>Match to job</span>
@@ -1573,7 +1721,7 @@ export const App: React.FC = () => {
             <button
               type="button"
               onClick={handleOpenCustomAts}
-              className="text-[13px] font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
+              className="text-xs font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
             >
               <Sliders className="w-3.5 h-3.5" strokeWidth={1.5} />
               <span>Custom ATS</span>
@@ -1582,7 +1730,7 @@ export const App: React.FC = () => {
             <button
               type="button"
               onClick={() => openModal(setIsJobRadarOpen)}
-              className="text-[13px] font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
+              className="text-xs font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
             >
               <Radar className="w-3.5 h-3.5" strokeWidth={1.5} />
               <span>Job feeds</span>
@@ -1591,65 +1739,76 @@ export const App: React.FC = () => {
             <button
               type="button"
               onClick={() => openModal(setIsTrendAdvisorOpen)}
-              className="text-[13px] font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
+              className="text-xs font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
             >
               <TrendingUp className="w-3.5 h-3.5" strokeWidth={1.5} />
               <span>Trends</span>
             </button>
 
-            {/* Samples Dropdown */}
+            {/* Samples Dropdown via Portal */}
             <div className="relative" ref={editorSamplesRef}>
               <button
+                ref={editorSamplesBtnRef}
                 type="button"
-                onClick={() => setEditorSamplesOpen((v) => !v)}
-                className="text-[13px] font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
+                onClick={handleToggleEditorSamples}
+                className="text-xs font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
               >
                 <FolderOpen className="w-3.5 h-3.5" strokeWidth={1.5} />
                 <span>Samples</span>
                 <ChevronDown className={`w-3 h-3 transition-transform ${editorSamplesOpen ? 'rotate-180' : ''}`} strokeWidth={1.75} />
               </button>
 
-              {editorSamplesOpen && (
-                <div className="absolute left-0 top-full mt-1 w-44 card shadow-menu py-1 z-30 border border-line bg-card rounded-[6px] animate-in fade-in duration-100">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditorSamplesOpen(false);
-                      handleLoadSample('aiEngineer');
+              {editorSamplesOpen &&
+                createPortal(
+                  <div
+                    ref={editorSamplesRef}
+                    style={{
+                      position: 'fixed',
+                      top: editorSamplesPos.top,
+                      left: editorSamplesPos.left,
                     }}
-                    className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                    className="w-44 card shadow-menu py-1 z-[9999] border border-line bg-card rounded-[6px] animate-in fade-in duration-100"
                   >
-                    AI Engineer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditorSamplesOpen(false);
-                      handleLoadSample('fullStack');
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                  >
-                    Full-Stack Developer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditorSamplesOpen(false);
-                      handleLoadSample('fresherStudent');
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                  >
-                    Graduate
-                  </button>
-                </div>
-              )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditorSamplesOpen(false);
+                        handleLoadSample('aiEngineer');
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                    >
+                      AI Engineer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditorSamplesOpen(false);
+                        handleLoadSample('fullStack');
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                    >
+                      Full-Stack Developer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditorSamplesOpen(false);
+                        handleLoadSample('fresherStudent');
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
+                    >
+                      Graduate
+                    </button>
+                  </div>,
+                  document.body
+                )}
             </div>
 
             {!isResumeEmpty(resumeData) && (
               <button
                 type="button"
                 onClick={() => openModal(setIsUploadModalOpen)}
-                className="text-[13px] font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
+                className="text-xs font-medium text-ink/70 hover:text-ink hover:bg-muted px-2.5 py-1 rounded flex items-center gap-1.5 transition cursor-pointer shrink-0"
               >
                 <Upload className="w-3.5 h-3.5" strokeWidth={1.5} />
                 <span>Upload</span>
