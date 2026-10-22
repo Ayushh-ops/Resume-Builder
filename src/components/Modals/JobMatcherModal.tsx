@@ -607,6 +607,9 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                                   }`}
                                 />
                                 <span className="font-medium text-ink">{analysisResult.rating} match</span>
+                                <span className="text-[11px] text-ink/50 hidden sm:inline">
+                                  — {analysisResult.score >= 70 ? '70%+ strong match' : analysisResult.score >= 50 ? '50–69% add missing skills' : 'Below 50% missing core keywords'}
+                                </span>
                               </div>
                             </div>
                           </div>
@@ -626,18 +629,6 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                               <span>{isTailoring ? 'AI Tailoring...' : 'Tailor Resume to Job'}</span>
                             </button>
                           </div>
-                        </div>
-
-                        {/* Reading the score explainer */}
-                        <div className="p-3 bg-card border border-line rounded-[6px] text-xs text-ink/75 space-y-1">
-                          <span className="font-semibold text-ink block text-[11px] uppercase tracking-wider">
-                            Reading the score
-                          </span>
-                          <p className="leading-relaxed">
-                            <strong>70%+</strong> indicates strong ATS match and alignment with key requirements. 
-                            <strong> 50–69%</strong> suggests adding missing technical skills. 
-                            <strong> Below 50%</strong> means key qualifications or keywords are absent.
-                          </p>
                         </div>
 
                         {/* Matched Keywords */}

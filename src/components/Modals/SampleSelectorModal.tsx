@@ -1,7 +1,6 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
 import { Modal } from '../common/Modal';
-import { HowToUse } from '../common/HowToUse';
 
 interface SampleSelectorModalProps {
   isOpen: boolean;
@@ -58,9 +57,6 @@ export const SampleSelectorModal: React.FC<SampleSelectorModalProps> = ({
       }
     >
       <div className="space-y-5">
-        {/* HowToUse Panel at top */}
-        <HowToUse toolId="samples" />
-
         <div className="space-y-3">
           <h3 className="text-xs font-semibold text-ink">Choose a sample profile:</h3>
           <div className="space-y-3">

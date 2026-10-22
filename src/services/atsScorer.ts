@@ -426,20 +426,24 @@ export function calculateLiveATSScore(
           const { fullName, email, phone, jobTitle, location, linkedin, github } = resume.personalInfo;
           let count = 0;
           if (fullName?.trim().length > 2) count++;
-          if (jobTitle?.trim().length > 2) count++;
           if (email?.includes('@')) count++;
           if (phone?.trim().length >= 7) count++;
           if (location?.trim().length >= 2) count++;
           if (linkedin?.trim().length >= 5 || github?.trim().length >= 5) count++;
 
-          if (count >= 5) {
+          const hasTitle = Boolean(jobTitle && jobTitle.trim().length >= 2);
+          if (hasTitle) count++;
+
+          if (count >= 5 && hasTitle) {
             earned = weight;
             status = 'pass';
             message = 'Complete contact info and verified links present';
-          } else if (count >= 3) {
-            earned = Math.round(weight * 0.6);
+          } else if (count >= 3 || hasTitle) {
+            earned = Math.round(weight * 0.5);
             status = 'partial';
-            message = 'Partial contact details (missing LinkedIn/GitHub, location, or phone)';
+            message = !hasTitle
+              ? 'Target job title is missing (required for ATS role alignment)'
+              : 'Partial contact details (missing LinkedIn/GitHub, location, or phone)';
           } else {
             earned = 0;
             status = 'fail';

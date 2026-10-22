@@ -56,6 +56,12 @@ export function applyTheme(theme: ThemeId): void {
   document.documentElement.removeAttribute('data-accent');
   localStorage.setItem(RC_THEME_KEY, theme);
 
+  const preset = THEME_PRESETS.find((p) => p.id === theme);
+  if (preset) {
+    localStorage.setItem('rc-accent', preset.accent);
+    document.documentElement.style.setProperty('--app-accent', preset.accent);
+  }
+
   if (isDarkTheme(theme)) {
     localStorage.setItem(LAST_DARK_KEY, theme);
   } else {

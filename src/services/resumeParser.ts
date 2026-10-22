@@ -275,8 +275,58 @@ function normalizeParsedData(parsed: any): Partial<ResumeData> {
   };
 }
 
+export function isSectionHeadingOrKeyword(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return true;
+  // All-caps heading line of 2+ chars
+  if (/^[A-Z\s&:/-]{2,}$/.test(trimmed) && trimmed.replace(/[^A-Z]/g, '').length >= 3) {
+    return true;
+  }
+  const headingKeywords = [
+    'skills?',
+    'technical\\s+skills?',
+    'core\\s+competencies',
+    'experience',
+    'work\\s+experience',
+    'work\\s+history',
+    'employment',
+    'education',
+    'academics?',
+    'academic\\s+background',
+    'projects?',
+    'technical\\s+projects?',
+    'personal\\s+projects?',
+    'summary',
+    'professional\\s+summary',
+    'profile',
+    'about(?:\\s+me)?',
+    'objective',
+    'contact(?:\\s+info(?:rmation)?)?',
+    'certifications?',
+    'licenses?',
+    'awards?',
+    'technologies',
+    'languages',
+  ];
+  const regex = new RegExp(`^(?:${headingKeywords.join('|')})[:\\s]*$`, 'i');
+  if (regex.test(trimmed)) return true;
+
+  const words = trimmed.toLowerCase().split(/\s+/);
+  const reservedWords = new Set([
+    'skills', 'technical', 'experience', 'education', 'projects',
+    'summary', 'contact', 'work', 'history', 'certifications',
+    'awards', 'objective', 'profile', 'curriculum', 'vitae', 'resume',
+  ]);
+  if (words.every((w) => reservedWords.has(w))) return true;
+
+  return false;
+}
+
 function normalizeResumeText(text: string): string {
   let normalized = text;
+
+  // Rejoin words broken with hyphens at line ends (e.g. imple-\nmented -> implemented)
+  normalized = normalized.replace(/([a-zA-Z]+)-\s*\r?\n\s*([a-zA-Z]+)/g, '$1$2');
 
   // Insert newline before known headings (summary, experience, work history, education, skills, projects, certifications, awards) case-insensitive
   const headings = [
@@ -336,37 +386,43 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
   const websiteMatch = normalizedText.match(/(?:https?:\/\/)(?:www\.)?[a-zA-Z0-9-]+\.(?:com|io|dev|org|net|me)/i);
   const website = websiteMatch ? websiteMatch[0] : '';
 
-  // Name: first line with 2-4 alphabetic words, else part of text before email/phone
+  // Name: prefer text before email/phone, must never be a section heading
   let fullName = '';
-  for (const line of lines) {
-    if (/\d|@|https?:\/\/|www\.|\.(com|org|net|edu|io|dev)\b/i.test(line)) {
-      continue;
-    }
-    const words = line.split(/\s+/).filter(Boolean);
-    const isAllAlpha = words.every((w) => /^[a-zA-Z.'-]+$/.test(w));
-    if (words.length >= 2 && words.length <= 4 && isAllAlpha && line.length < 50) {
-      fullName = line;
-      break;
-    }
-  }
+  const contactIndex = normalizedText.search(
+    /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/
+  );
 
-  if (!fullName) {
-    const contactIndex = normalizedText.search(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
-    if (contactIndex > 0) {
-      const textBefore = normalizedText.slice(0, contactIndex).trim();
-      const beforeLines = textBefore.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      for (const bLine of beforeLines) {
-        const words = bLine.split(/\s+/).filter(Boolean);
-        const isAllAlpha = words.every((w) => /^[a-zA-Z.'-]+$/.test(w));
-        if (words.length >= 2 && words.length <= 4 && isAllAlpha && bLine.length < 50) {
-          fullName = bLine;
-          break;
-        }
+  if (contactIndex > 0) {
+    const textBefore = normalizedText.slice(0, contactIndex).trim();
+    const beforeLines = textBefore.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    for (const bLine of beforeLines) {
+      if (/\d|@|https?:\/\/|www\.|\.(com|org|net|edu|io|dev)\b/i.test(bLine)) continue;
+      if (isSectionHeadingOrKeyword(bLine)) continue;
+      const words = bLine.split(/\s+/).filter(Boolean);
+      const isAllAlpha = words.every((w) => /^[a-zA-Z.'-]+$/.test(w));
+      if (words.length >= 2 && words.length <= 4 && isAllAlpha && bLine.length < 50) {
+        fullName = bLine;
+        break;
       }
     }
   }
 
-  const SECTION_HEADING_REGEX = /^(?:professional\s+)?(?:summary|profile|about(?:\s+me)?|objective|work\s+experience|experience|employment|work\s+history|education|academic(?:\s+background)?|academics|projects|personal\s+projects|key\s+projects|skills|technical\s+skills|core\s+competencies|certifications?|licenses?)$/i;
+  if (!fullName) {
+    for (const line of lines) {
+      if (/\d|@|https?:\/\/|www\.|\.(com|org|net|edu|io|dev)\b/i.test(line)) continue;
+      if (isSectionHeadingOrKeyword(line)) continue;
+      const words = line.split(/\s+/).filter(Boolean);
+      const isAllAlpha = words.every((w) => /^[a-zA-Z.'-]+$/.test(w));
+      if (words.length >= 2 && words.length <= 4 && isAllAlpha && line.length < 50) {
+        fullName = line;
+        break;
+      }
+    }
+  }
+
+  if (fullName && isSectionHeadingOrKeyword(fullName)) {
+    fullName = '';
+  }
 
   // Target role: line right after fullName or near header, empty if not found
   let jobTitle = '';
@@ -376,7 +432,7 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
       const candidateLine = lines[nameIdx + 1];
       if (
         !/\d|@|https?:\/\/|www\.|\.(com|org|net|edu|io|dev)\b/i.test(candidateLine) &&
-        !SECTION_HEADING_REGEX.test(candidateLine)
+        !isSectionHeadingOrKeyword(candidateLine)
       ) {
         const words = candidateLine.split(/\s+/).filter(Boolean);
         if (words.length >= 1 && words.length <= 6 && candidateLine.length < 60) {
@@ -430,15 +486,15 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
       const isBullet = /^[•·⁃◦*]\s*|^\-\s+/.test(expLine);
       const hasDateRange = DATE_RANGE_REGEX.test(expLine);
 
-      if (hasDateRange || (!isBullet && (!currentExp || currentExp.highlights.length > 0))) {
+      if (hasDateRange || (!isBullet && !currentExp)) {
         const dateMatch = expLine.match(DATE_RANGE_REGEX);
         const dateStr = dateMatch ? dateMatch[0] : '';
         const titleCandidate = expLine.replace(DATE_RANGE_REGEX, '').replace(/^[|•·⁃◦*-]\s*/, '').trim();
 
         currentExp = {
           id: `exp-${Date.now()}-${experience.length}`,
-          company: titleCandidate || expLine,
-          position: jobTitle || 'Role',
+          company: titleCandidate || '',
+          position: jobTitle || '',
           location: '',
           startDate: dateStr ? dateStr.split(/[-–—to]+/i)[0].trim() : '',
           endDate: dateStr ? (dateStr.split(/[-–—to]+/i)[1] || 'Present').trim() : 'Present',
@@ -446,8 +502,14 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
           highlights: [],
         };
         experience.push(currentExp);
-      } else if (currentExp) {
+      } else if (isBullet && currentExp) {
         currentExp.highlights.push(expLine.replace(/^[•·⁃◦*]\s*|^\-\s+/, '').trim());
+      } else if (currentExp && currentExp.highlights.length > 0) {
+        // Rejoin wrapped bullet lines
+        const lastIdx = currentExp.highlights.length - 1;
+        currentExp.highlights[lastIdx] = (currentExp.highlights[lastIdx] + ' ' + expLine.trim()).trim();
+      } else if (currentExp) {
+        currentExp.highlights.push(expLine.trim());
       }
     }
   }
@@ -466,7 +528,7 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
         const degreeMatch = eduLine.match(DEGREE_KEYWORD_REGEX);
         currentEdu = {
           id: `edu-${Date.now()}-${education.length}`,
-          institution: isSchoolOrCollege ? eduLine : 'Institution',
+          institution: isSchoolOrCollege ? eduLine : '',
           degree: degreeMatch ? degreeMatch[0] : (hasDegree ? eduLine : ''),
           fieldOfStudy: '',
           location: '',
@@ -488,7 +550,7 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
     let currentProj: any = null;
     for (const projLine of sectionBuckets.projects) {
       const isBullet = /^[•·⁃◦*]\s*|^\-\s+/.test(projLine);
-      if (!isBullet && (!currentProj || currentProj.highlights.length > 0)) {
+      if (!isBullet && !currentProj) {
         currentProj = {
           id: `proj-${Date.now()}-${projects.length}`,
           name: projLine.replace(/^[•·⁃◦*]\s*|^\-\s+/, '').trim(),
@@ -497,8 +559,14 @@ function fallbackRegexParser(rawText: string): Partial<ResumeData> {
           highlights: [],
         };
         projects.push(currentProj);
-      } else if (currentProj) {
+      } else if (isBullet && currentProj) {
         currentProj.highlights.push(projLine.replace(/^[•·⁃◦*]\s*|^\-\s+/, '').trim());
+      } else if (currentProj && currentProj.highlights.length > 0) {
+        // Rejoin wrapped bullet lines
+        const lastIdx = currentProj.highlights.length - 1;
+        currentProj.highlights[lastIdx] = (currentProj.highlights[lastIdx] + ' ' + projLine.trim()).trim();
+      } else if (currentProj) {
+        currentProj.highlights.push(projLine.trim());
       }
     }
   }
@@ -555,9 +623,11 @@ function calculateConfidence(data: Partial<ResumeData>): Record<string, number> 
   const confidence: Record<string, number> = {};
 
   // Personal Info = detected fields / 4 (name, email, phone, location)
+  // Name heading = not detected
   const pi = data.personalInfo;
   let piFields = 0;
-  if (pi?.fullName?.trim()) piFields++;
+  const isNameValid = Boolean(pi?.fullName?.trim() && !isSectionHeadingOrKeyword(pi.fullName));
+  if (isNameValid) piFields++;
   if (pi?.email?.trim()) piFields++;
   if (pi?.phone?.trim()) piFields++;
   if (pi?.location?.trim()) piFields++;

@@ -12,18 +12,51 @@
       (function() {
         try {
           var legacy = localStorage.getItem('resumecraft_app_theme');
-          if (legacy) {
-            localStorage.setItem('rc-theme', legacy === 'dark' ? 'dark' : 'light');
+          var legacyAcc = localStorage.getItem('resumecraft_app_accent');
+          if (legacy || legacyAcc) {
+            localStorage.setItem('rc-theme', legacy === 'dark' ? 'navy' : 'light');
+            if (legacyAcc) localStorage.setItem('rc-accent', legacyAcc);
             localStorage.removeItem('resumecraft_app_theme');
             localStorage.removeItem('resumecraft_app_accent');
           }
+          var accents = {
+            light: '180 69 31',
+            navy: '99 102 241',
+            inkblue: '56 189 248',
+            dark: '224 122 79',
+            midnight: '224 122 79',
+            forest: '61 139 104',
+            rose: '171 72 92',
+            slate: '68 81 99'
+          };
+          var hexMap = {
+            light: '#b4451f',
+            navy: '#6366f1',
+            inkblue: '#38bdf8',
+            dark: '#e07a4f',
+            midnight: '#e07a4f',
+            forest: '#3d8b68',
+            rose: '#ab485c',
+            slate: '#445163'
+          };
+          var valid = ['light', 'navy', 'inkblue', 'dark', 'midnight', 'forest', 'rose', 'slate'];
           var saved = localStorage.getItem('rc-theme');
-          var valid = ['light', 'dark', 'midnight', 'forest', 'rose', 'slate'];
           var theme = (saved && valid.indexOf(saved) !== -1)
             ? saved
-            : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'navy' : 'light');
           document.documentElement.setAttribute('data-theme', theme);
           document.documentElement.removeAttribute('data-accent');
+
+          var savedAccent = localStorage.getItem('rc-accent');
+          var rgb = accents[theme] || '180 69 31';
+          var hex = hexMap[theme] || '#b4451f';
+          if (savedAccent && /^#[0-9a-fA-F]{6}$/.test(savedAccent)) {
+            hex = savedAccent;
+            var num = parseInt(savedAccent.slice(1), 16);
+            rgb = (num >> 16) + ' ' + ((num >> 8) & 255) + ' ' + (num & 255);
+          }
+          document.documentElement.style.setProperty('--brand-600', rgb);
+          document.documentElement.style.setProperty('--app-accent', hex);
         } catch (e) {}
       })();
     </script>

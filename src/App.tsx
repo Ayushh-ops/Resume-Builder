@@ -230,6 +230,18 @@ export const App: React.FC = () => {
     return calculateLiveATSScore(resumeData, activeProfileId);
   }, [resumeData, activeProfileId]);
 
+  // Computed live ATS score for built-in sample resume (landing hero)
+  const sampleAtsResult = useMemo(() => {
+    return calculateLiveATSScore(sampleProfiles.aiEngineer);
+  }, []);
+
+  const sampleDisplayCriteria = useMemo(() => {
+    const list = sampleAtsResult.criterionResults || [];
+    const issues = list.filter((c) => c.status !== 'pass');
+    const passes = list.filter((c) => c.status === 'pass');
+    return [...issues, ...passes].slice(0, 3);
+  }, [sampleAtsResult]);
+
   // Debounced Autosave to localStorage (per resume)
   const [savedAt, setSavedAt] = useState<Date | null>(null);
 
@@ -1083,20 +1095,13 @@ export const App: React.FC = () => {
         onClick={() => openModal(setIsUploadModalOpen)}
         className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
       >
-        <div className="space-y-2">
+        <div>
           <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">
-            Upload a resume
+            Import your resume
           </h3>
-          <div className="text-xs space-y-1.5 text-ink/70">
-            <p>
-              <span className="font-medium text-ink">What it does: </span>
-              Extracts text and auto-structures contact info, experience, and skills into editable sections.
-            </p>
-            <p>
-              <span className="font-medium text-ink">Use it when: </span>
-              You have an existing resume in PDF, Word, or text format.
-            </p>
-          </div>
+          <p className="text-xs text-ink/70 mt-1">
+            Fills every section from your file
+          </p>
         </div>
         <div className="pt-3 mt-3 border-t border-line flex items-center justify-between text-xs font-medium text-ink/80 group-hover:text-brand-600 transition-colors">
           <span>Open Upload</span>
@@ -1109,20 +1114,13 @@ export const App: React.FC = () => {
         onClick={() => openToolWithResume(handleOpenCustomAts)}
         className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
       >
-        <div className="space-y-2">
+        <div>
           <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">
-            Custom ATS format
+            Score against your own rules
           </h3>
-          <div className="text-xs space-y-1.5 text-ink/70">
-            <p>
-              <span className="font-medium text-ink">What it does: </span>
-              Audits your resume against specific enterprise scoring rubrics (Standard, Tech, Executive, or custom).
-            </p>
-            <p>
-              <span className="font-medium text-ink">Use it when: </span>
-              Targeting companies with strict automated keyword or formatting rules.
-            </p>
-          </div>
+          <p className="text-xs text-ink/70 mt-1">
+            Paste a rubric, get a fix list
+          </p>
         </div>
         <div className="pt-3 mt-3 border-t border-line flex items-center justify-between text-xs font-medium text-ink/80 group-hover:text-brand-600 transition-colors">
           <span>Open Custom ATS</span>
@@ -1135,20 +1133,13 @@ export const App: React.FC = () => {
         onClick={() => openToolWithResume(() => openModal(setIsJobMatcherOpen))}
         className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
       >
-        <div className="space-y-2">
+        <div>
           <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">
-            Match to a job description
+            Check fit for a job
           </h3>
-          <div className="text-xs space-y-1.5 text-ink/70">
-            <p>
-              <span className="font-medium text-ink">What it does: </span>
-              Compares your resume against a job posting, identifies missing keywords, and suggests bullet improvements.
-            </p>
-            <p>
-              <span className="font-medium text-ink">Use it when: </span>
-              Tailoring your resume for a specific job application.
-            </p>
-          </div>
+          <p className="text-xs text-ink/70 mt-1">
+            Paste a job post, see missing keywords
+          </p>
         </div>
         <div className="pt-3 mt-3 border-t border-line flex items-center justify-between text-xs font-medium text-ink/80 group-hover:text-brand-600 transition-colors">
           <span>Open Matcher</span>
@@ -1161,20 +1152,13 @@ export const App: React.FC = () => {
         onClick={() => openToolWithResume(() => openModal(setIsJobRadarOpen))}
         className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
       >
-        <div className="space-y-2">
+        <div>
           <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">
-            Job search feeds
+            Find fresh roles
           </h3>
-          <div className="text-xs space-y-1.5 text-ink/70">
-            <p>
-              <span className="font-medium text-ink">What it does: </span>
-              Aggregates search links for your role across portals and highlights top required skills.
-            </p>
-            <p>
-              <span className="font-medium text-ink">Use it when: </span>
-              Actively exploring job openings and checking market skill demand.
-            </p>
-          </div>
+          <p className="text-xs text-ink/70 mt-1">
+            Search links built from your title
+          </p>
         </div>
         <div className="pt-3 mt-3 border-t border-line flex items-center justify-between text-xs font-medium text-ink/80 group-hover:text-brand-600 transition-colors">
           <span>Open Job feeds</span>
@@ -1187,20 +1171,13 @@ export const App: React.FC = () => {
         onClick={() => openToolWithResume(() => openModal(setIsTrendAdvisorOpen))}
         className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
       >
-        <div className="space-y-2">
+        <div>
           <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">
-            Industry trends
+            Audit your resume
           </h3>
-          <div className="text-xs space-y-1.5 text-ink/70">
-            <p>
-              <span className="font-medium text-ink">What it does: </span>
-              Analyzes bullet metrics, action verbs, role skills coverage, and format quality.
-            </p>
-            <p>
-              <span className="font-medium text-ink">Use it when: </span>
-              Auditing resume strength before submitting to recruiters.
-            </p>
-          </div>
+          <p className="text-xs text-ink/70 mt-1">
+            Checks metrics, verbs and skills in your resume
+          </p>
         </div>
         <div className="pt-3 mt-3 border-t border-line flex items-center justify-between text-xs font-medium text-ink/80 group-hover:text-brand-600 transition-colors">
           <span>Open Trends</span>
@@ -1213,20 +1190,13 @@ export const App: React.FC = () => {
         onClick={() => openModal(setIsSampleModalOpen)}
         className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
       >
-        <div className="space-y-2">
+        <div>
           <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">
-            Start from a sample
+            Start from an example
           </h3>
-          <div className="text-xs space-y-1.5 text-ink/70">
-            <p>
-              <span className="font-medium text-ink">What it does: </span>
-              Pre-populates an industry-standard template with realistic accomplishments and metrics.
-            </p>
-            <p>
-              <span className="font-medium text-ink">Use it when: </span>
-              Starting from scratch or needing inspiration from vetted profiles.
-            </p>
-          </div>
+          <p className="text-xs text-ink/70 mt-1">
+            Edit a finished resume into yours
+          </p>
         </div>
         <div className="pt-3 mt-3 border-t border-line flex items-center justify-between text-xs font-medium text-ink/80 group-hover:text-brand-600 transition-colors">
           <span>Open Samples</span>
@@ -1353,41 +1323,41 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Right Column (span 5): static ATS check card */}
+                {/* Right Column (span 5): Sample check card */}
                 <div className="lg:col-span-5 hidden lg:flex flex-col items-center justify-center">
                   <div className="card border border-line bg-card p-5 max-w-sm w-full rounded-[6px] shadow-sm select-none">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-medium text-ink/50 uppercase tracking-wider">
+                        Sample resume
+                      </span>
+                      <span className="text-xs font-medium text-ink/70">Sample check</span>
+                    </div>
                     <div className="flex items-baseline justify-between mb-2">
                       <span className="text-xs font-medium text-ink/70">ATS score</span>
-                      <span className="font-serif text-3xl font-semibold text-ink leading-none">92</span>
+                      <span className="font-serif text-3xl font-semibold text-ink leading-none">
+                        {sampleAtsResult.score}
+                      </span>
                     </div>
                     <div className="w-full h-1 bg-muted rounded-full overflow-hidden mb-4">
-                      <div className="h-full bg-ink rounded-full w-[92%]" />
+                      <div
+                        className="h-full bg-ink rounded-full transition-all"
+                        style={{ width: `${Math.min(100, Math.max(0, sampleAtsResult.score))}%` }}
+                      />
                     </div>
                     <div className="space-y-2.5">
-                      <div className="flex items-center gap-2 text-xs text-ink/80">
-                        <Check className="w-3.5 h-3.5 text-ink/60 shrink-0" strokeWidth={1.5} />
-                        <span>Contact info found</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-ink/80">
-                        <Check className="w-3.5 h-3.5 text-ink/60 shrink-0" strokeWidth={1.5} />
-                        <span>Standard section headings</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-ink/80">
-                        <Check className="w-3.5 h-3.5 text-ink/60 shrink-0" strokeWidth={1.5} />
-                        <span>Keywords matched 14/18</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-ink/80">
-                        <Check className="w-3.5 h-3.5 text-ink/60 shrink-0" strokeWidth={1.5} />
-                        <span>Dates formatted consistently</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-ink/80">
-                        <Check className="w-3.5 h-3.5 text-ink/60 shrink-0" strokeWidth={1.5} />
-                        <span>One column, no tables</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-ink/50 pt-1.5 border-t border-line">
-                        <AlertCircle className="w-3.5 h-3.5 text-ink/40 shrink-0" strokeWidth={1.5} />
-                        <span>Add metrics to 2 bullets</span>
-                      </div>
+                      {sampleDisplayCriteria.map((item, idx) => (
+                        <div key={item.criterion.id || idx} className="flex items-start gap-2 text-xs text-ink/80">
+                          {item.status === 'pass' ? (
+                            <Check className="w-3.5 h-3.5 text-ink/60 shrink-0 mt-0.5" strokeWidth={1.5} />
+                          ) : (
+                            <AlertCircle className="w-3.5 h-3.5 text-ink/40 shrink-0 mt-0.5" strokeWidth={1.5} />
+                          )}
+                          <span className="leading-snug">{item.message || item.criterion.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-line text-[11px] text-ink/50 text-center">
+                      Upload yours to see your own score
                     </div>
                   </div>
                 </div>

@@ -11,7 +11,6 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { Modal } from '../common/Modal';
-import { HowToUse } from '../common/HowToUse';
 import type { ResumeData } from '../../types/resume';
 import { parseAndStructureResume, type ParsedResumeResult } from '../../services/resumeParser';
 
@@ -314,7 +313,6 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
       }
     >
       <div className="space-y-6">
-        <HowToUse toolId="upload" />
         {/* STEP 1: UPLOAD */}
         {step === 'upload' && (
           <div className="space-y-4">
