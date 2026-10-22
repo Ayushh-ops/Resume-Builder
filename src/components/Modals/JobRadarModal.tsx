@@ -1,20 +1,39 @@
 import React, { useMemo } from 'react';
-import { Radar, ExternalLink } from 'lucide-react';
+import { Radar, ExternalLink, Check, ArrowRight, Plus } from 'lucide-react';
 import { Modal } from '../common/Modal';
+import { HowToUse } from '../common/HowToUse';
+import { getCoreSkillsForRole } from '../../lib/guidance';
 import type { ResumeData } from '../../types/resume';
 
 interface JobRadarModalProps {
   isOpen: boolean;
   onClose: () => void;
   resumeData: ResumeData;
+  onGoToSection?: (sectionId: string, bulletRef?: string) => void;
+  onAddSkill?: (skill: string) => void;
 }
 
-export const JobRadarModal: React.FC<JobRadarModalProps> = ({ isOpen, onClose, resumeData }) => {
+export const JobRadarModal: React.FC<JobRadarModalProps> = ({
+  isOpen,
+  onClose,
+  resumeData,
+  onGoToSection,
+  onAddSkill,
+}) => {
   if (!isOpen) return null;
 
   const userTitle = resumeData.personalInfo.jobTitle?.trim() || '';
   const userLocation = resumeData.personalInfo.location?.trim() || 'Remote';
   const skills = resumeData.skills.flatMap((s) => s.skills);
+
+  const coreSkills = useMemo(() => {
+    if (!userTitle) return [];
+    return getCoreSkillsForRole(userTitle).slice(0, 5);
+  }, [userTitle]);
+
+  const existingSkillsLower = useMemo(() => {
+    return new Set(skills.map((s) => s.toLowerCase().trim()));
+  }, [skills]);
 
   const suggestedTitles = useMemo(() => {
     if (!userTitle) return [];
@@ -91,6 +110,8 @@ export const JobRadarModal: React.FC<JobRadarModalProps> = ({ isOpen, onClose, r
       }
     >
       <div className="space-y-6">
+        <HowToUse toolId="job_radar" />
+
         {!userTitle ? (
           <div className="p-4 bg-muted border border-line rounded-[6px] text-xs text-ink/60">
             Add a target job title to get suggestions
@@ -122,6 +143,68 @@ export const JobRadarModal: React.FC<JobRadarModalProps> = ({ isOpen, onClose, r
                     <ExternalLink className="w-3.5 h-3.5 text-ink/40 group-hover:text-brand-600 transition shrink-0" strokeWidth={1.5} />
                   </a>
                 ))}
+              </div>
+            </div>
+
+            {/* Highlight for <title> */}
+            <div className="space-y-3 pt-2 border-t border-line">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[12.5px] font-medium text-ink/60">
+                  Highlight for {userTitle}
+                </h3>
+                {onGoToSection && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onGoToSection('skills');
+                    }}
+                    className="text-xs text-ink/70 hover:text-ink inline-flex items-center gap-1 cursor-pointer transition font-medium"
+                  >
+                    <span>Go to Skills</span>
+                    <ArrowRight className="w-3 h-3 text-ink/50" />
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-ink/60">
+                Top 5 skills employers expect for this role, compared against your current resume:
+              </p>
+              <div className="space-y-2">
+                {coreSkills.map((skill, idx) => {
+                  const isPresent =
+                    existingSkillsLower.has(skill.toLowerCase().trim()) ||
+                    skills.some((s) => s.toLowerCase().includes(skill.toLowerCase().trim()));
+                  return (
+                    <div
+                      key={idx}
+                      className="p-2.5 bg-card border border-line rounded-[6px] flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {isPresent ? (
+                          <Check className="w-3.5 h-3.5 text-ink/60 shrink-0" strokeWidth={1.5} />
+                        ) : (
+                          <span className="w-1.5 h-1.5 rounded-full bg-ink/30 shrink-0 ml-1 mr-1" />
+                        )}
+                        <span className="font-semibold text-ink truncate">{skill}</span>
+                        <span className="text-[11px] text-ink/50">
+                          {isPresent ? '· In resume' : '· Missing'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {!isPresent && onAddSkill && (
+                          <button
+                            type="button"
+                            onClick={() => onAddSkill(skill)}
+                            className="btn-outline h-6 px-2 text-[11px] inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3 text-ink/50" />
+                            <span>Add</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

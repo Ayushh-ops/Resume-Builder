@@ -222,6 +222,7 @@ export const ExperienceForm: React.FC<ExperienceFormProps> = ({ experience, onCh
                 <div className="flex items-start gap-2 group">
                   <span className="text-ink/40 mt-2 text-xs">•</span>
                   <textarea
+                    id={`exp-${expIndex}-bullet-${bulletIndex}`}
                     ref={(el) => { if (el) { el.style.height='auto'; el.style.height=el.scrollHeight+'px'; } }}
                     onInput={(e) => { const t=e.currentTarget; t.style.height='auto'; t.style.height=t.scrollHeight+'px'; }}
                     value={bullet}

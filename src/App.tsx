@@ -74,6 +74,7 @@ import { TrendAdvisorModal } from './components/Modals/TrendAdvisorModal';
 import { JobMatcherModal } from './components/Modals/JobMatcherModal';
 import { ApiKeyModal } from './components/Modals/ApiKeyModal';
 import { ResumeUploadModal } from './components/Modals/ResumeUploadModal';
+import { SampleSelectorModal } from './components/Modals/SampleSelectorModal';
 import { Modal } from './components/common/Modal';
 import { CommandPalette } from './components/CommandPalette';
 import { useToast } from './components/common/Toast';
@@ -385,6 +386,7 @@ export const App: React.FC = () => {
   const [isJobMatcherOpen, setIsJobMatcherOpen] = useState(false);
   const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isSampleModalOpen, setIsSampleModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
@@ -420,18 +422,7 @@ export const App: React.FC = () => {
   const [renamingCardId, setRenamingCardId] = useState<string | null>(null);
   const [cardRenameValue, setCardRenameValue] = useState('');
   const cardMenuRef = useRef<HTMLDivElement>(null);
-
-  // Sample menus (Home and Hero)
-  const [homeSampleMenuOpen, setHomeSampleMenuOpen] = useState(false);
-  const [heroSampleMenuOpen, setHeroSampleMenuOpen] = useState(false);
   const [cardMenuPos, setCardMenuPos] = useState({ top: 0, right: 0 });
-  const [homeSampleMenuPos, setHomeSampleMenuPos] = useState({ top: 0, left: 0 });
-  const [heroSampleMenuPos, setHeroSampleMenuPos] = useState({ top: 0, left: 0 });
-
-  const homeSampleBtnRef = useRef<HTMLButtonElement>(null);
-  const heroSampleBtnRef = useRef<HTMLButtonElement>(null);
-  const homeSampleMenuRef = useRef<HTMLDivElement>(null);
-  const heroSampleMenuRef = useRef<HTMLDivElement>(null);
 
   const handleToggleCardMenu = (id: string, e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
@@ -448,34 +439,6 @@ export const App: React.FC = () => {
       setCardMenuPos({ top, right });
       setOpenCardMenuId(id);
     }
-  };
-
-  const handleToggleHeroSample = () => {
-    if (!heroSampleMenuOpen && heroSampleBtnRef.current) {
-      const rect = heroSampleBtnRef.current.getBoundingClientRect();
-      const menuHeight = 120;
-      const menuWidth = 176;
-      const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
-      const idealTop = fitsBelow ? rect.bottom + 4 : rect.top - menuHeight - 4;
-      const top = Math.max(8, Math.min(window.innerHeight - menuHeight - 8, idealTop));
-      const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.left));
-      setHeroSampleMenuPos({ top, left });
-    }
-    setHeroSampleMenuOpen((v) => !v);
-  };
-
-  const handleToggleHomeSample = () => {
-    if (!homeSampleMenuOpen && homeSampleBtnRef.current) {
-      const rect = homeSampleBtnRef.current.getBoundingClientRect();
-      const menuHeight = 120;
-      const menuWidth = 224;
-      const fitsBelow = rect.bottom + menuHeight + 8 <= window.innerHeight;
-      const idealTop = fitsBelow ? rect.bottom + 4 : rect.top - menuHeight - 4;
-      const top = Math.max(8, Math.min(window.innerHeight - menuHeight - 8, idealTop));
-      const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.left));
-      setHomeSampleMenuPos({ top, left });
-    }
-    setHomeSampleMenuOpen((v) => !v);
   };
 
   // Drop zone states for Home landing
@@ -517,37 +480,22 @@ export const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!openCardMenuId && !homeSampleMenuOpen && !heroSampleMenuOpen) return;
+    if (!openCardMenuId) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (cardMenuRef.current && !cardMenuRef.current.contains(e.target as Node)) {
         setOpenCardMenuId(null);
       }
-      if (
-        homeSampleMenuRef.current &&
-        !homeSampleMenuRef.current.contains(e.target as Node) &&
-        homeSampleBtnRef.current &&
-        !homeSampleBtnRef.current.contains(e.target as Node)
-      ) {
-        setHomeSampleMenuOpen(false);
-      }
-      if (
-        heroSampleMenuRef.current &&
-        !heroSampleMenuRef.current.contains(e.target as Node) &&
-        heroSampleBtnRef.current &&
-        !heroSampleBtnRef.current.contains(e.target as Node)
-      ) {
-        setHeroSampleMenuOpen(false);
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [openCardMenuId, homeSampleMenuOpen, heroSampleMenuOpen]);
+  }, [openCardMenuId]);
 
   // Modal History Stack helper (Modals pushState({modal: true}), Back closes topmost modal)
   const isClosingViaCodeRef = useRef(false);
   const openModalsRef = useRef({
     confirmAction: false,
     isUploadModalOpen: false,
+    isSampleModalOpen: false,
     isJobMatcherOpen: false,
     isJobRadarOpen: false,
     isTrendAdvisorOpen: false,
@@ -559,6 +507,7 @@ export const App: React.FC = () => {
     openModalsRef.current = {
       confirmAction: !!confirmAction,
       isUploadModalOpen,
+      isSampleModalOpen,
       isJobMatcherOpen,
       isJobRadarOpen,
       isTrendAdvisorOpen,
@@ -568,6 +517,7 @@ export const App: React.FC = () => {
   }, [
     confirmAction,
     isUploadModalOpen,
+    isSampleModalOpen,
     isJobMatcherOpen,
     isJobRadarOpen,
     isTrendAdvisorOpen,
@@ -619,6 +569,10 @@ export const App: React.FC = () => {
       }
       if (cur.isUploadModalOpen) {
         setIsUploadModalOpen(false);
+        return;
+      }
+      if (cur.isSampleModalOpen) {
+        setIsSampleModalOpen(false);
         return;
       }
       if (cur.isJobMatcherOpen) {
@@ -675,6 +629,74 @@ export const App: React.FC = () => {
   const handleOpenCustomAts = () => {
     setJobMatcherInitialTab('create_profile');
     openModal(setIsJobMatcherOpen);
+  };
+
+  const handleGoToSection = (sectionId: string, bulletRef?: string) => {
+    setIsJobMatcherOpen(false);
+    setIsTrendAdvisorOpen(false);
+    setIsJobRadarOpen(false);
+    setIsUploadModalOpen(false);
+    setIsSampleModalOpen(false);
+
+    if (route.type !== 'editor') {
+      const targetId = resumeIndex[0]?.id;
+      if (targetId) {
+        navigate(`/editor/${targetId}`);
+      } else {
+        const newId = createResume(sampleProfiles.aiEngineer, 'AI Engineer Resume');
+        justCreatedIdsRef.current.add(newId);
+        setResumeIndex(getResumeIndex());
+        navigate(`/editor/${newId}`);
+      }
+    }
+
+    handleOpenSection(sectionId);
+
+    setTimeout(() => {
+      if (bulletRef) {
+        const bulletEl = document.getElementById(bulletRef);
+        if (bulletEl) {
+          bulletEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          bulletEl.focus();
+          return;
+        }
+      }
+      const secEl = document.getElementById(sectionId);
+      if (secEl) {
+        secEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const firstInput = secEl.querySelector('input, textarea') as HTMLElement | null;
+        if (firstInput) firstInput.focus();
+      }
+    }, 150);
+  };
+
+  const handleAddSkill = (skillName: string) => {
+    const clean = skillName.trim();
+    if (!clean) return;
+    setResumeData((prev) => {
+      const existing = prev.skills.some((c) =>
+        c.skills.some((s) => s.toLowerCase() === clean.toLowerCase())
+      );
+      if (existing) {
+        showToast(`"${clean}" is already in your skills`, 'info');
+        return prev;
+      }
+      const nextSkills = [...prev.skills];
+      if (nextSkills.length === 0) {
+        nextSkills.push({
+          id: 'skills-' + Date.now(),
+          name: 'Technical Skills',
+          skills: [clean],
+        });
+      } else {
+        nextSkills[0] = {
+          ...nextSkills[0],
+          skills: [...nextSkills[0].skills, clean],
+        };
+      }
+      showToast(`Added "${clean}" to skills`, 'success');
+      return { ...prev, skills: nextSkills };
+    });
   };
 
   // --- RESUME CRUD & LIBRARY HANDLERS ---
@@ -1054,6 +1076,166 @@ export const App: React.FC = () => {
     }
   };
 
+  const renderToolCards = () => (
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
+      {/* Tool 1: Upload */}
+      <div
+        onClick={() => openModal(setIsUploadModalOpen)}
+        className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
+      >
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">
+            Upload a resume
+          </h3>
+          <div className="text-xs space-y-1.5 text-ink/70">
+            <p>
+              <span className="font-medium text-ink">What it does: </span>
+              Extracts text and auto-structures contact info, experience, and skills into editable sections.
+            </p>
+            <p>
+              <span className="font-medium text-ink">Use it when: </span>
+              You have an existing resume in PDF, Word, or text format.
+            </p>
+          </div>
+        </div>
+        <div className="pt-3 mt-3 border-t border-line flex items-center justify-between text-xs font-medium text-ink/80 group-hover:text-brand-600 transition-colors">
+          <span>Open Upload</span>
+          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" strokeWidth={1.5} />
+        </div>
+      </div>
+
+      {/* Tool 2: Custom ATS */}
+      <div
+        onClick={() => openToolWithResume(handleOpenCustomAts)}
+        className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
+      >
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">
+            Custom ATS format
+          </h3>
+          <div className="text-xs space-y-1.5 text-ink/70">
+            <p>
+              <span className="font-medium text-ink">What it does: </span>
+              Audits your resume against specific enterprise scoring rubrics (Standard, Tech, Executive, or custom).
+            </p>
+            <p>
+              <span className="font-medium text-ink">Use it when: </span>
+              Targeting companies with strict automated keyword or formatting rules.
+            </p>
+          </div>
+        </div>
+        <div className="pt-3 mt-3 border-t border-line flex items-center justify-between text-xs font-medium text-ink/80 group-hover:text-brand-600 transition-colors">
+          <span>Open Custom ATS</span>
+          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" strokeWidth={1.5} />
+        </div>
+      </div>
+
+      {/* Tool 3: Match to JD */}
+      <div
+        onClick={() => openToolWithResume(() => openModal(setIsJobMatcherOpen))}
+        className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
+      >
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">
+            Match to a job description
+          </h3>
+          <div className="text-xs space-y-1.5 text-ink/70">
+            <p>
+              <span className="font-medium text-ink">What it does: </span>
+              Compares your resume against a job posting, identifies missing keywords, and suggests bullet improvements.
+            </p>
+            <p>
+              <span className="font-medium text-ink">Use it when: </span>
+              Tailoring your resume for a specific job application.
+            </p>
+          </div>
+        </div>
+        <div className="pt-3 mt-3 border-t border-line flex items-center justify-between text-xs font-medium text-ink/80 group-hover:text-brand-600 transition-colors">
+          <span>Open Matcher</span>
+          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" strokeWidth={1.5} />
+        </div>
+      </div>
+
+      {/* Tool 4: Job Feeds */}
+      <div
+        onClick={() => openToolWithResume(() => openModal(setIsJobRadarOpen))}
+        className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
+      >
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">
+            Job search feeds
+          </h3>
+          <div className="text-xs space-y-1.5 text-ink/70">
+            <p>
+              <span className="font-medium text-ink">What it does: </span>
+              Aggregates search links for your role across portals and highlights top required skills.
+            </p>
+            <p>
+              <span className="font-medium text-ink">Use it when: </span>
+              Actively exploring job openings and checking market skill demand.
+            </p>
+          </div>
+        </div>
+        <div className="pt-3 mt-3 border-t border-line flex items-center justify-between text-xs font-medium text-ink/80 group-hover:text-brand-600 transition-colors">
+          <span>Open Job feeds</span>
+          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" strokeWidth={1.5} />
+        </div>
+      </div>
+
+      {/* Tool 5: Industry Trends */}
+      <div
+        onClick={() => openToolWithResume(() => openModal(setIsTrendAdvisorOpen))}
+        className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
+      >
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">
+            Industry trends
+          </h3>
+          <div className="text-xs space-y-1.5 text-ink/70">
+            <p>
+              <span className="font-medium text-ink">What it does: </span>
+              Analyzes bullet metrics, action verbs, role skills coverage, and format quality.
+            </p>
+            <p>
+              <span className="font-medium text-ink">Use it when: </span>
+              Auditing resume strength before submitting to recruiters.
+            </p>
+          </div>
+        </div>
+        <div className="pt-3 mt-3 border-t border-line flex items-center justify-between text-xs font-medium text-ink/80 group-hover:text-brand-600 transition-colors">
+          <span>Open Trends</span>
+          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" strokeWidth={1.5} />
+        </div>
+      </div>
+
+      {/* Tool 6: Start from a Sample */}
+      <div
+        onClick={() => openModal(setIsSampleModalOpen)}
+        className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
+      >
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">
+            Start from a sample
+          </h3>
+          <div className="text-xs space-y-1.5 text-ink/70">
+            <p>
+              <span className="font-medium text-ink">What it does: </span>
+              Pre-populates an industry-standard template with realistic accomplishments and metrics.
+            </p>
+            <p>
+              <span className="font-medium text-ink">Use it when: </span>
+              Starting from scratch or needing inspiration from vetted profiles.
+            </p>
+          </div>
+        </div>
+        <div className="pt-3 mt-3 border-t border-line flex items-center justify-between text-xs font-medium text-ink/80 group-hover:text-brand-600 transition-colors">
+          <span>Open Samples</span>
+          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" strokeWidth={1.5} />
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen flex flex-col bg-canvas font-sans">
       {/* Top Navbar */}
@@ -1153,61 +1335,13 @@ export const App: React.FC = () => {
                       start from scratch
                     </button>
                     <span>·</span>
-                    <div className="relative inline-block" ref={heroSampleMenuRef}>
-                      <button
-                        ref={heroSampleBtnRef}
-                        type="button"
-                        onClick={handleToggleHeroSample}
-                        className="text-brand-600 hover:underline cursor-pointer font-medium"
-                      >
-                        use a sample
-                      </button>
-
-                      {heroSampleMenuOpen &&
-                        createPortal(
-                          <div
-                            ref={heroSampleMenuRef}
-                            style={{
-                              position: 'fixed',
-                              top: heroSampleMenuPos.top,
-                              left: heroSampleMenuPos.left,
-                            }}
-                            className="w-44 card shadow-menu py-1 z-[60] border border-line bg-card rounded-[6px] text-left animate-in fade-in duration-100"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setHeroSampleMenuOpen(false);
-                                handleLoadSample('aiEngineer');
-                              }}
-                              className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                            >
-                              AI Engineer
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setHeroSampleMenuOpen(false);
-                                handleLoadSample('fullStack');
-                              }}
-                              className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                            >
-                              Full-Stack Developer
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setHeroSampleMenuOpen(false);
-                                handleLoadSample('fresherStudent');
-                              }}
-                              className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                            >
-                              Graduate
-                            </button>
-                          </div>,
-                          document.body
-                        )}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openModal(setIsSampleModalOpen)}
+                      className="text-brand-600 hover:underline cursor-pointer font-medium"
+                    >
+                      use a sample
+                    </button>
                     <span>·</span>
                     <button
                       type="button"
@@ -1287,133 +1421,7 @@ export const App: React.FC = () => {
               {/* Tools grid below the hero */}
               <div className="pt-6 border-t border-line text-left">
                 <h2 className="text-sm font-semibold text-ink mb-3">Tools</h2>
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
-                  {/* Tool 1: Upload */}
-                  <button
-                    type="button"
-                    onClick={() => openModal(setIsUploadModalOpen)}
-                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
-                  >
-                    <div>
-                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Upload a resume</h3>
-                      <p className="text-xs text-ink/60 mt-1 truncate">Import PDF, Word, JSON or text</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
-                  </button>
-
-                  {/* Tool 2: Custom ATS */}
-                  <button
-                    type="button"
-                    onClick={() => openToolWithResume(handleOpenCustomAts)}
-                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
-                  >
-                    <div>
-                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Custom ATS format</h3>
-                      <p className="text-xs text-ink/60 mt-1 truncate">Paste or upload your own scoring rubric</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
-                  </button>
-
-                  {/* Tool 3: Match to JD */}
-                  <button
-                    type="button"
-                    onClick={() => openToolWithResume(() => openModal(setIsJobMatcherOpen))}
-                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
-                  >
-                    <div>
-                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Match to a job description</h3>
-                      <p className="text-xs text-ink/60 mt-1 truncate">See missing keywords, tailor your bullets</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
-                  </button>
-
-                  {/* Tool 4: Job Feeds */}
-                  <button
-                    type="button"
-                    onClick={() => openToolWithResume(() => openModal(setIsJobRadarOpen))}
-                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
-                  >
-                    <div>
-                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Job search feeds</h3>
-                      <p className="text-xs text-ink/60 mt-1 truncate">Fresh listings for your role</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
-                  </button>
-
-                  {/* Tool 5: Industry Trends */}
-                  <button
-                    type="button"
-                    onClick={() => openToolWithResume(() => openModal(setIsTrendAdvisorOpen))}
-                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
-                  >
-                    <div>
-                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Industry trends</h3>
-                      <p className="text-xs text-ink/60 mt-1 truncate">Skills and upgrades for your profile</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
-                  </button>
-
-                  {/* Tool 6: Start from a Sample */}
-                  <div className="relative" ref={homeSampleMenuRef}>
-                    <button
-                      ref={homeSampleBtnRef}
-                      type="button"
-                      onClick={handleToggleHomeSample}
-                      className="group w-full h-full card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
-                    >
-                      <div>
-                        <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Start from a sample</h3>
-                        <p className="text-xs text-ink/60 mt-1 truncate">AI engineer, full-stack, graduate</p>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
-                    </button>
-
-                    {homeSampleMenuOpen &&
-                      createPortal(
-                        <div
-                          ref={homeSampleMenuRef}
-                          style={{
-                            position: 'fixed',
-                            top: homeSampleMenuPos.top,
-                            left: homeSampleMenuPos.left,
-                          }}
-                          className="w-56 card shadow-menu py-1 z-[60] border border-line bg-card rounded-[6px] animate-in fade-in duration-100"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setHomeSampleMenuOpen(false);
-                              handleLoadSample('aiEngineer');
-                            }}
-                            className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                          >
-                            AI Engineer
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setHomeSampleMenuOpen(false);
-                              handleLoadSample('fullStack');
-                            }}
-                            className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                          >
-                            Full-Stack Developer
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setHomeSampleMenuOpen(false);
-                              handleLoadSample('fresherStudent');
-                            }}
-                            className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                          >
-                            Graduate
-                          </button>
-                        </div>,
-                        document.body
-                      )}
-                  </div>
-                </div>
+                {renderToolCards()}
               </div>
             </div>
           ) : (
@@ -1659,133 +1667,7 @@ export const App: React.FC = () => {
               {/* Tools Section */}
               <div className="mt-8 pt-6 border-t border-line">
                 <h2 className="text-sm font-semibold text-ink mb-3">Tools</h2>
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
-                  {/* Tool 1: Upload */}
-                  <button
-                    type="button"
-                    onClick={() => openModal(setIsUploadModalOpen)}
-                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
-                  >
-                    <div>
-                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Upload a resume</h3>
-                      <p className="text-xs text-ink/60 mt-1 truncate">Import PDF, Word, JSON or text</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
-                  </button>
-
-                  {/* Tool 2: Custom ATS */}
-                  <button
-                    type="button"
-                    onClick={() => openToolWithResume(handleOpenCustomAts)}
-                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
-                  >
-                    <div>
-                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Custom ATS format</h3>
-                      <p className="text-xs text-ink/60 mt-1 truncate">Paste or upload your own scoring rubric</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
-                  </button>
-
-                  {/* Tool 3: Match to JD */}
-                  <button
-                    type="button"
-                    onClick={() => openToolWithResume(() => openModal(setIsJobMatcherOpen))}
-                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
-                  >
-                    <div>
-                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Match to a job description</h3>
-                      <p className="text-xs text-ink/60 mt-1 truncate">See missing keywords, tailor your bullets</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
-                  </button>
-
-                  {/* Tool 4: Job Feeds */}
-                  <button
-                    type="button"
-                    onClick={() => openToolWithResume(() => openModal(setIsJobRadarOpen))}
-                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
-                  >
-                    <div>
-                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Job search feeds</h3>
-                      <p className="text-xs text-ink/60 mt-1 truncate">Fresh listings for your role</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
-                  </button>
-
-                  {/* Tool 5: Industry Trends */}
-                  <button
-                    type="button"
-                    onClick={() => openToolWithResume(() => openModal(setIsTrendAdvisorOpen))}
-                    className="group card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
-                  >
-                    <div>
-                      <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Industry trends</h3>
-                      <p className="text-xs text-ink/60 mt-1 truncate">Skills and upgrades for your profile</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
-                  </button>
-
-                  {/* Tool 6: Start from a Sample */}
-                  <div className="relative" ref={homeSampleMenuRef}>
-                    <button
-                      ref={homeSampleBtnRef}
-                      type="button"
-                      onClick={handleToggleHomeSample}
-                      className="group w-full h-full card border border-line bg-card hover:border-accent transition p-3.5 text-left rounded-[6px] cursor-pointer flex items-start justify-between"
-                    >
-                      <div>
-                        <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">Start from a sample</h3>
-                        <p className="text-xs text-ink/60 mt-1 truncate">AI engineer, full-stack, graduate</p>
-                      </div>
-                      <ArrowRight className="w-4 h-4 text-ink/30 group-hover:text-brand-600 group-hover:translate-x-0.5 transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-2 mt-0.5" strokeWidth={1.5} />
-                    </button>
-
-                    {homeSampleMenuOpen &&
-                      createPortal(
-                        <div
-                          ref={homeSampleMenuRef}
-                          style={{
-                            position: 'fixed',
-                            top: homeSampleMenuPos.top,
-                            left: homeSampleMenuPos.left,
-                          }}
-                          className="w-56 card shadow-menu py-1 z-[60] border border-line bg-card rounded-[6px] animate-in fade-in duration-100"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setHomeSampleMenuOpen(false);
-                              handleLoadSample('aiEngineer');
-                            }}
-                            className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                          >
-                            AI Engineer
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setHomeSampleMenuOpen(false);
-                              handleLoadSample('fullStack');
-                            }}
-                            className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                          >
-                            Full-Stack Developer
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setHomeSampleMenuOpen(false);
-                              handleLoadSample('fresherStudent');
-                            }}
-                            className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-muted transition cursor-pointer"
-                          >
-                            Graduate
-                          </button>
-                        </div>,
-                        document.body
-                      )}
-                  </div>
-                </div>
+                {renderToolCards()}
               </div>
             </>
           )}
@@ -1918,12 +1800,16 @@ export const App: React.FC = () => {
         isOpen={isJobRadarOpen}
         onClose={() => closeModal(setIsJobRadarOpen)}
         resumeData={resumeData}
+        onGoToSection={handleGoToSection}
+        onAddSkill={handleAddSkill}
       />
 
       <TrendAdvisorModal
         isOpen={isTrendAdvisorOpen}
         onClose={() => closeModal(setIsTrendAdvisorOpen)}
         resumeData={resumeData}
+        onGoToSection={handleGoToSection}
+        onAddSkill={handleAddSkill}
       />
 
       <JobMatcherModal
@@ -1937,6 +1823,8 @@ export const App: React.FC = () => {
           setActiveProfileIdState(id);
           setAllProfiles(getAllATSProfiles());
         }}
+        onGoToSection={handleGoToSection}
+        onAddSkill={handleAddSkill}
       />
 
       <ApiKeyModal
@@ -1956,6 +1844,13 @@ export const App: React.FC = () => {
         onReplaceCurrent={handleUploadReplaceCurrent}
         canReplace={route.type === 'editor'}
         initialFile={uploadedFileForModal}
+        onGoToSection={handleGoToSection}
+      />
+
+      <SampleSelectorModal
+        isOpen={isSampleModalOpen}
+        onClose={() => closeModal(setIsSampleModalOpen)}
+        onSelectSample={handleLoadSample}
       />
 
       <CommandPalette

@@ -8,8 +8,10 @@ import {
   FileCode,
   FileCheck,
   Sparkles,
+  ArrowRight,
 } from 'lucide-react';
 import { Modal } from '../common/Modal';
+import { HowToUse } from '../common/HowToUse';
 import type { ResumeData } from '../../types/resume';
 import { parseAndStructureResume, type ParsedResumeResult } from '../../services/resumeParser';
 
@@ -20,9 +22,77 @@ interface ResumeUploadModalProps {
   onReplaceCurrent?: (data: Partial<ResumeData>) => void;
   canReplace?: boolean;
   initialFile?: File | null;
+  onGoToSection?: (sectionId: string, bulletRef?: string) => void;
 }
 
 type UploadStep = 'upload' | 'parsing' | 'review' | 'error';
+
+const getChecklistItems = (data: Partial<ResumeData>) => {
+  const items: { label: string; hint: string; section: string }[] = [];
+  if (!data.personalInfo?.fullName?.trim()) {
+    items.push({
+      label: 'Name missing',
+      hint: 'Candidate name was not detected in the file',
+      section: 'personal',
+    });
+  }
+  if (!data.personalInfo?.jobTitle?.trim()) {
+    items.push({
+      label: 'Target role missing',
+      hint: 'Target title is required for ATS matching and keyword suggestions',
+      section: 'personal',
+    });
+  }
+  if (!data.personalInfo?.email?.trim()) {
+    items.push({
+      label: 'Email address missing',
+      hint: 'ATS parsers require at least one valid contact email',
+      section: 'personal',
+    });
+  }
+  if (!data.summary?.trim()) {
+    items.push({
+      label: 'Empty summary',
+      hint: 'A 2-4 sentence executive overview improves profile visibility',
+      section: 'summary',
+    });
+  }
+  if (!data.experience || data.experience.length === 0) {
+    items.push({
+      label: 'No experience entries',
+      hint: 'Add your work history and achievements',
+      section: 'experience',
+    });
+  } else {
+    const missingDates = data.experience.some((e) => !e.startDate && !e.endDate);
+    if (missingDates) {
+      items.push({
+        label: 'No dates in experience',
+        hint: 'One or more roles are missing start or end dates',
+        section: 'experience',
+      });
+    }
+  }
+  if (!data.projects || data.projects.length === 0) {
+    items.push({
+      label: '0 projects detected',
+      hint: 'Add technical projects to showcase hands-on work',
+      section: 'projects',
+    });
+  }
+  if (
+    !data.skills ||
+    data.skills.length === 0 ||
+    data.skills.every((s) => !s.skills || s.skills.length === 0)
+  ) {
+    items.push({
+      label: 'No skills found',
+      hint: 'List your core technical and professional skills',
+      section: 'skills',
+    });
+  }
+  return items;
+};
 
 export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
   isOpen,
@@ -31,6 +101,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
   onReplaceCurrent,
   canReplace = false,
   initialFile = null,
+  onGoToSection,
 }) => {
   const [step, setStep] = useState<UploadStep>('upload');
   const [dragActive, setDragActive] = useState(false);
@@ -243,6 +314,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
       }
     >
       <div className="space-y-6">
+        <HowToUse toolId="upload" />
         {/* STEP 1: UPLOAD */}
         {step === 'upload' && (
           <div className="space-y-4">
@@ -349,32 +421,86 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
         )}
 
         {/* STEP 3: REVIEW */}
-        {step === 'review' && parsedResult && (
-          <div className="space-y-4">
-            {parsedResult.fallbackNotice ? (
-              <div className="p-3 bg-muted border border-line rounded-[6px] flex items-center gap-2.5 text-xs text-ink/80">
-                <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                <div className="flex-1">
-                  <span className="font-semibold text-ink">{parsedResult.fallbackNotice}</span>
-                  <p className="text-[11px] text-ink/60 mt-0.5">
-                    Review detected fields below and refine them in the editor.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="p-3 bg-muted border border-line rounded-[6px] flex items-center gap-2.5 text-xs text-ink">
-                <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                <div className="flex-1">
-                  <span className="font-semibold">Resume parsed successfully</span>
-                  <p className="text-[11px] text-ink/60 mt-0.5">
-                    Review detected fields and extraction confidence before importing.
-                  </p>
-                </div>
-              </div>
-            )}
+        {step === 'review' && parsedResult && (() => {
+          const checkItems = getChecklistItems(parsedResult.data);
+          const hasMissing = checkItems.length > 0;
 
-            {/* 2-column layout: Left = Detected fields, Right = Confidence tags */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          const handleFixInEditor = (sec: string) => {
+            onSaveAsNew(parsedResult.data, fileName);
+            if (onGoToSection) {
+              setTimeout(() => {
+                onGoToSection(sec);
+              }, 150);
+            }
+          };
+
+          return (
+            <div className="space-y-4">
+              {parsedResult.fallbackNotice ? (
+                <div className="p-3 bg-muted border border-line rounded-[6px] flex items-center gap-2.5 text-xs text-ink/80">
+                  <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                  <div className="flex-1">
+                    <span className="font-semibold text-ink">{parsedResult.fallbackNotice}</span>
+                    <p className="text-[11px] text-ink/60 mt-0.5">
+                      Review detected fields below and refine them in the editor.
+                    </p>
+                  </div>
+                </div>
+              ) : hasMissing ? (
+                <div className="p-3 bg-muted border border-line rounded-[6px] flex items-center gap-2.5 text-xs text-ink">
+                  <AlertCircle className="w-4 h-4 text-ink/50 shrink-0" />
+                  <div className="flex-1">
+                    <span className="font-semibold">Review parsed fields</span>
+                    <p className="text-[11px] text-ink/60 mt-0.5">
+                      {checkItems.length} {checkItems.length === 1 ? 'section needs' : 'sections need'} attention. Complete them using the checklist below.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-muted border border-line rounded-[6px] flex items-center gap-2.5 text-xs text-ink">
+                  <FileCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <div className="flex-1">
+                    <span className="font-semibold">Resume parsed successfully</span>
+                    <p className="text-[11px] text-ink/60 mt-0.5">
+                      Review detected fields and extraction confidence before importing.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Check these checklist */}
+              {checkItems.length > 0 && (
+                <div className="p-3.5 bg-card border border-line rounded-[6px] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-ink">Check these ({checkItems.length})</span>
+                    <span className="text-[11px] text-ink/50">Missing or incomplete fields</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {checkItems.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between gap-3 p-2.5 bg-muted/30 rounded-[6px] border border-line text-xs"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-semibold text-ink block">{item.label}</span>
+                          <span className="text-[11px] text-ink/60 truncate block mt-0.5">{item.hint}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleFixInEditor(item.section)}
+                          className="btn-outline h-6 px-2 text-[11px] inline-flex items-center gap-1 cursor-pointer shrink-0"
+                        >
+                          <span>Fix in editor</span>
+                          <ArrowRight className="w-3 h-3 text-ink/50" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 2-column layout: Left = Detected fields, Right = Confidence tags */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Left Column: Detected Content */}
               <div className="card p-4 space-y-3 bg-card border border-line">
                 <h4 className="text-[12.5px] font-medium text-ink/60">
@@ -462,7 +588,8 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
               </div>
             </div>
           </div>
-        )}
+        );
+      })()}
 
         {/* STEP 4: ERROR */}
         {step === 'error' && (
