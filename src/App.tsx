@@ -19,12 +19,10 @@ import {
   Copy,
   Trash2,
   FolderOpen,
-  Check,
   CheckCircle2,
   Target,
   ShieldCheck,
   ArrowRight,
-  AlertCircle,
 } from 'lucide-react';
 import type { ResumeData, ResumeTheme, TemplateType, ATSProfile } from './types/resume';
 import { sampleProfiles } from './data/sampleData';
@@ -35,6 +33,7 @@ import {
   getActiveProfileId,
   setActiveProfileId,
 } from './services/atsScorer';
+import { BulletCheck } from './components/BulletCheck';
 import { ModernTemplate } from './components/Preview/templates/ModernTemplate';
 import {
   getInitialTheme,
@@ -229,18 +228,6 @@ export const App: React.FC = () => {
   const atsResult = useMemo(() => {
     return calculateLiveATSScore(resumeData, activeProfileId);
   }, [resumeData, activeProfileId]);
-
-  // Computed live ATS score for built-in sample resume (landing hero)
-  const sampleAtsResult = useMemo(() => {
-    return calculateLiveATSScore(sampleProfiles.aiEngineer);
-  }, []);
-
-  const sampleDisplayCriteria = useMemo(() => {
-    const list = sampleAtsResult.criterionResults || [];
-    const issues = list.filter((c) => c.status !== 'pass');
-    const passes = list.filter((c) => c.status === 'pass');
-    return [...issues, ...passes].slice(0, 3);
-  }, [sampleAtsResult]);
 
   // Debounced Autosave to localStorage (per resume)
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -1323,43 +1310,12 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Right Column (span 5): Sample check card */}
+                {/* Right Column (span 5): Bullet check card */}
                 <div className="lg:col-span-5 hidden lg:flex flex-col items-center justify-center">
-                  <div className="card border border-line bg-card p-5 max-w-sm w-full rounded-[6px] shadow-sm select-none">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-medium text-ink/50 uppercase tracking-wider">
-                        Sample resume
-                      </span>
-                      <span className="text-xs font-medium text-ink/70">Sample check</span>
-                    </div>
-                    <div className="flex items-baseline justify-between mb-2">
-                      <span className="text-xs font-medium text-ink/70">ATS score</span>
-                      <span className="font-serif text-3xl font-semibold text-ink leading-none">
-                        {sampleAtsResult.score}
-                      </span>
-                    </div>
-                    <div className="w-full h-1 bg-muted rounded-full overflow-hidden mb-4">
-                      <div
-                        className="h-full bg-ink rounded-full transition-all"
-                        style={{ width: `${Math.min(100, Math.max(0, sampleAtsResult.score))}%` }}
-                      />
-                    </div>
-                    <div className="space-y-2.5">
-                      {sampleDisplayCriteria.map((item, idx) => (
-                        <div key={item.criterion.id || idx} className="flex items-start gap-2 text-xs text-ink/80">
-                          {item.status === 'pass' ? (
-                            <Check className="w-3.5 h-3.5 text-ink/60 shrink-0 mt-0.5" strokeWidth={1.5} />
-                          ) : (
-                            <AlertCircle className="w-3.5 h-3.5 text-ink/40 shrink-0 mt-0.5" strokeWidth={1.5} />
-                          )}
-                          <span className="leading-snug">{item.message || item.criterion.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-4 pt-3 border-t border-line text-[11px] text-ink/50 text-center">
-                      Upload yours to see your own score
-                    </div>
-                  </div>
+                  <BulletCheck
+                    onCheckWholeResume={() => openModal(setIsUploadModalOpen)}
+                    onStartFromScratch={handleCreateNew}
+                  />
                 </div>
               </div>
 

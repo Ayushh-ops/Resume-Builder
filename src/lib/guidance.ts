@@ -30,6 +30,65 @@ export const ROLE_SKILLS_MAP: Record<string, string[]> = {
   'software engineer': ['TypeScript', 'Python', 'Data Structures', 'System Design', 'Git', 'RESTful APIs', 'Docker', 'Unit Testing'],
 };
 
+export const WEAK_OPENERS = [
+  { pattern: /^responsible for\s+/i, verb: 'Engineered', name: 'responsible for' },
+  { pattern: /^worked on\s+/i, verb: 'Architected', name: 'worked on' },
+  { pattern: /^helped (?:with|to)?\s+/i, verb: 'Accelerated', name: 'helped' },
+  { pattern: /^did\s+/i, verb: 'Executed', name: 'did' },
+  { pattern: /^involved in\s+/i, verb: 'Led', name: 'involved in' },
+  { pattern: /^assisted (?:in|with)?\s+/i, verb: 'Orchestrated', name: 'assisted' },
+  { pattern: /^handled\s+/i, verb: 'Spearheaded', name: 'handled' },
+  { pattern: /^tasked with\s+/i, verb: 'Delivered', name: 'tasked with' },
+  { pattern: /^participated in\s+/i, verb: 'Collaborated to build', name: 'participated in' },
+];
+
+export function hasMetric(text: string): boolean {
+  return /(?:\d|%|\$)/.test(text || '');
+}
+
+export function startsWeak(text: string): boolean {
+  const clean = (text || '').replace(/^[•·⁃◦*-]\s*/, '').trim();
+  if (!clean) return false;
+  return WEAK_OPENERS.some((wo) => wo.pattern.test(clean));
+}
+
+export function wordCount(text: string): number {
+  const clean = (text || '').trim();
+  if (!clean) return 0;
+  return clean.split(/\s+/).filter(Boolean).length;
+}
+
+export function buildSuggestedShape(text: string): string {
+  const clean = (text || '').replace(/^[•·⁃◦*-]\s*/, '').replace(/[.]+$/, '').trim();
+  if (!clean) return '';
+
+  let verb = '';
+  let body = clean;
+
+  const matchedWo = WEAK_OPENERS.find((wo) => wo.pattern.test(clean));
+  if (matchedWo) {
+    verb = matchedWo.verb;
+    body = clean.replace(matchedWo.pattern, '').trim();
+  } else {
+    const firstWordMatch = clean.match(/^([A-Za-z]+)\b/);
+    if (firstWordMatch) {
+      verb = firstWordMatch[1];
+      body = clean.slice(verb.length).trim();
+    } else {
+      verb = '[Strong verb]';
+    }
+  }
+
+  if (verb && !verb.startsWith('[')) {
+    verb = verb.charAt(0).toUpperCase() + verb.slice(1);
+  }
+
+  if (hasMetric(clean)) {
+    return `${verb} ${body}`.trim();
+  }
+  return `${verb} ${body}, improving [metric] by [X%]`.trim();
+}
+
 export function getCoreSkillsForRole(title: string): string[] {
   const lower = (title || '').toLowerCase().trim();
   if (!lower) {
@@ -114,24 +173,13 @@ export function getResumeGuidance(resumeData: ResumeData): GuidanceItem[] {
   }
 
   // 2. ACTION VERBS CHECK
-  const weakOpeners = [
-    { pattern: /^responsible for\s+/i, verb: 'Engineered', name: 'responsible for' },
-    { pattern: /^worked on\s+/i, verb: 'Architected', name: 'worked on' },
-    { pattern: /^helped (?:with|to)?\s+/i, verb: 'Accelerated', name: 'helped' },
-    { pattern: /^did\s+/i, verb: 'Executed', name: 'did' },
-    { pattern: /^assisted (?:in|with)?\s+/i, verb: 'Orchestrated', name: 'assisted' },
-    { pattern: /^handled\s+/i, verb: 'Spearheaded', name: 'handled' },
-    { pattern: /^tasked with\s+/i, verb: 'Delivered', name: 'tasked with' },
-    { pattern: /^participated in\s+/i, verb: 'Collaborated to build', name: 'participated in' },
-  ];
-
   const bulletsWithWeakOpener = allBullets.filter((b) =>
-    weakOpeners.some((wo) => wo.pattern.test(b.text))
+    WEAK_OPENERS.some((wo) => wo.pattern.test(b.text))
   );
 
   if (bulletsWithWeakOpener.length > 0) {
     const firstWeak = bulletsWithWeakOpener[0];
-    const matchedWo = weakOpeners.find((wo) => wo.pattern.test(firstWeak.text));
+    const matchedWo = WEAK_OPENERS.find((wo) => wo.pattern.test(firstWeak.text));
     const replacementVerb = matchedWo ? matchedWo.verb : 'Spearheaded';
     const rewritten = matchedWo
       ? firstWeak.text.replace(matchedWo.pattern, `${replacementVerb} `)
