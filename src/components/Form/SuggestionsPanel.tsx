@@ -12,7 +12,8 @@ import {
 } from 'lucide-react';
 import type { ResumeData } from '../../types/resume';
 import { getResumeGuidance, type GuidanceItem } from '../../lib/guidance';
-import { generate, getKey } from '../../lib/gemini';
+import { getKey } from '../../lib/gemini';
+import { reviewResumeWithAI, type AIReviewSuggestion } from '../../services/aiReview';
 
 interface SuggestionsPanelProps {
   resumeData: ResumeData;
@@ -31,15 +32,7 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
-  const [aiSuggestion, setAiSuggestion] = useState<{
-    id: string;
-    title: string;
-    before: string;
-    after: string;
-    targetType: 'bullet' | 'summary';
-    expIdx?: number;
-    bulletIdx?: number;
-  } | null>(null);
+  const [aiReviewSuggestions, setAiReviewSuggestions] = useState<AIReviewSuggestion[]>([]);
 
   const hasTargetTitle = Boolean(resumeData.personalInfo?.jobTitle?.trim());
 
@@ -57,6 +50,10 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
       return Boolean(item.before || item.after || item.missingSkills?.length);
     });
   }, [guidanceItems, dismissedIds, hasTargetTitle]);
+
+  const activeAiSuggestions = useMemo(() => {
+    return aiReviewSuggestions.filter((s) => !dismissedIds.has(s.id));
+  }, [aiReviewSuggestions, dismissedIds]);
 
   const handleDismiss = (id: string) => {
     setDismissedIds((prev) => {
@@ -118,30 +115,63 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
     handleDismiss(item.id);
   };
 
-  const handleImproveWithAi = async () => {
+  const handleApplyAiSuggestion = (suggestion: AIReviewSuggestion) => {
+    const updated: ResumeData = JSON.parse(JSON.stringify(resumeData));
+
+    if (suggestion.targetType === 'summary') {
+      updated.summary = suggestion.after;
+    } else if (suggestion.targetType === 'skill') {
+      const skillName = suggestion.skillName || suggestion.after;
+      if (updated.skills && updated.skills.length > 0) {
+        if (!updated.skills[0].skills.includes(skillName)) {
+          updated.skills[0].skills.push(skillName);
+        }
+      } else {
+        updated.skills = [
+          {
+            id: 'skill-cat-ai',
+            name: 'Technical Skills',
+            skills: [skillName],
+          },
+        ];
+      }
+    } else {
+      // Bullet point
+      let replaced = false;
+      if (typeof suggestion.expIdx === 'number' && typeof suggestion.bulletIdx === 'number') {
+        if (updated.experience?.[suggestion.expIdx]?.highlights?.[suggestion.bulletIdx]) {
+          updated.experience[suggestion.expIdx].highlights[suggestion.bulletIdx] = suggestion.after;
+          replaced = true;
+        }
+      }
+      if (!replaced && suggestion.before) {
+        for (const exp of updated.experience || []) {
+          if (!exp.highlights) continue;
+          for (let b = 0; b < exp.highlights.length; b++) {
+            if (exp.highlights[b].trim() === suggestion.before.trim()) {
+              exp.highlights[b] = suggestion.after;
+              replaced = true;
+              break;
+            }
+          }
+          if (replaced) break;
+        }
+      }
+      if (!replaced && updated.experience?.[0]?.highlights?.length) {
+        updated.experience[0].highlights[0] = suggestion.after;
+      }
+    }
+
+    onApplyChange(updated);
+    handleDismiss(suggestion.id);
+  };
+
+  const handleReviewWithAi = async () => {
     setAiError(null);
-    setAiSuggestion(null);
 
     const apiKey = getKey();
     if (!apiKey) {
       setAiError('No API key set. Please set your Gemini API key in Settings.');
-      return;
-    }
-
-    let targetText = '';
-    let targetType: 'bullet' | 'summary' = 'bullet';
-    let expIdx = 0;
-    let bulletIdx = 0;
-
-    const firstExp = resumeData.experience?.[0];
-    if (firstExp?.highlights?.length) {
-      targetText = firstExp.highlights[0];
-      targetType = 'bullet';
-    } else if (resumeData.summary?.trim()) {
-      targetText = resumeData.summary.trim();
-      targetType = 'summary';
-    } else {
-      setAiError('No experience bullet or summary found to improve.');
       return;
     }
 
@@ -153,61 +183,28 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
     }, 40000); // 40-second timeout
 
     try {
-      const prompt = `Rewrite the following resume ${targetType} to make it more impactful, metric-driven, and active. Return ONLY the rewritten text, nothing else.
-
-Current text:
-"${targetText}"`;
-
-      const res = await generate(prompt, { signal: controller.signal });
+      const result = await reviewResumeWithAI(resumeData, controller.signal);
       clearTimeout(timeoutId);
 
-      if (res.ok && res.text?.trim()) {
-        const proposed = res.text.replace(/^["']|["']$/g, '').trim();
-        setAiSuggestion({
-          id: `ai-${Date.now()}`,
-          title: `AI Polish: ${targetType === 'bullet' ? 'Experience Bullet' : 'Summary'}`,
-          before: targetText,
-          after: proposed,
-          targetType,
-          expIdx,
-          bulletIdx,
-        });
+      if (result.accepted.length > 0) {
+        setAiReviewSuggestions((prev) => [...prev, ...result.accepted]);
       } else {
-        setAiError(res.message || 'AI suggestion request failed or returned empty.');
+        const firstReason = result.rejected[0]?.reason;
+        setAiError(firstReason ? `AI review suggestions rejected by validator: ${firstReason}` : 'No valid improvements generated.');
       }
     } catch (err: any) {
       clearTimeout(timeoutId);
       if (err.name === 'AbortError') {
-        setAiError('AI request timed out after 40 seconds.');
+        setAiError('AI review timed out after 40 seconds.');
       } else {
-        setAiError(err.message || 'AI request failed.');
+        setAiError(err.message || 'AI review failed.');
       }
     } finally {
       setAiLoading(false);
     }
   };
 
-  const handleAcceptAiSuggestion = () => {
-    if (!aiSuggestion) return;
-    const updated: ResumeData = JSON.parse(JSON.stringify(resumeData));
-
-    if (aiSuggestion.targetType === 'bullet') {
-      if (updated.experience?.[aiSuggestion.expIdx || 0]?.highlights) {
-        updated.experience[aiSuggestion.expIdx || 0].highlights[aiSuggestion.bulletIdx || 0] = aiSuggestion.after;
-      }
-    } else {
-      updated.summary = aiSuggestion.after;
-    }
-
-    onApplyChange(updated);
-    setAiSuggestion(null);
-  };
-
-  const handleRejectAiSuggestion = () => {
-    setAiSuggestion(null);
-  };
-
-  const totalCount = actionableSuggestions.length + (aiSuggestion ? 1 : 0);
+  const totalCount = actionableSuggestions.length + activeAiSuggestions.length;
 
   return (
     <div className="card border border-line bg-card shadow-xs rounded-[10px] overflow-hidden">
@@ -243,55 +240,64 @@ Current text:
             </p>
           )}
 
-          {/* AI Suggestion Card if available (Neutral styling only) */}
-          {aiSuggestion && (
-            <div className="p-3 bg-muted/20 rounded-[8px] border border-line space-y-2 text-xs">
+          {/* AI Review Suggestions if available (Neutral styling only) */}
+          {activeAiSuggestions.map((suggestion) => (
+            <div
+              key={suggestion.id}
+              className="p-3 bg-muted/20 rounded-[8px] border border-line space-y-2 text-xs"
+            >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-ink flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                  {aiSuggestion.title}
+                  <Sparkles className="w-3.5 h-3.5 text-brand-600" />
+                  {suggestion.title}
                 </span>
-                <span className="text-[10px] font-medium text-ink/60 border border-line px-1.5 py-0.5 rounded bg-muted/40">
-                  AI Generated
+                <span className="text-[10px] font-medium text-ink/60 border border-line px-1.5 py-0.5 rounded bg-muted/40 capitalize">
+                  {suggestion.section}
                 </span>
               </div>
 
+              {suggestion.explanation && (
+                <p className="text-[11px] text-ink/70 leading-relaxed">{suggestion.explanation}</p>
+              )}
+
               <div className="space-y-1.5 text-xs">
-                <div className="p-2.5 rounded-[6px] border border-line bg-muted/20 text-xs">
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-ink/50 block mb-1">
-                    Current
-                  </span>
-                  <p className="text-ink/80 text-xs leading-relaxed">{aiSuggestion.before}</p>
-                </div>
+                {suggestion.before && (
+                  <div className="p-2.5 rounded-[6px] border border-line bg-muted/20 text-xs">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-ink/50 block mb-1">
+                      Current
+                    </span>
+                    <p className="text-ink/80 text-xs leading-relaxed">{suggestion.before}</p>
+                  </div>
+                )}
 
                 <div className="p-2.5 rounded-[6px] border border-line border-l-2 border-l-brand-600 bg-muted/20 text-xs pl-3">
                   <span className="text-[10px] font-medium uppercase tracking-wider text-brand-600 dark:text-brand-400 block mb-1">
                     Proposed
                   </span>
-                  <p className="text-ink font-medium text-xs leading-relaxed">{aiSuggestion.after}</p>
+                  <p className="text-ink font-medium text-xs leading-relaxed">{suggestion.after}</p>
                 </div>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={handleRejectAiSuggestion}
+                  onClick={() => handleDismiss(suggestion.id)}
                   className="px-2.5 py-1 text-xs font-medium text-ink/70 hover:bg-muted rounded-[6px] transition cursor-pointer flex items-center gap-1"
                 >
                   <X className="w-3 h-3" />
-                  <span>Reject</span>
+                  <span>Dismiss</span>
                 </button>
                 <button
                   type="button"
-                  onClick={handleAcceptAiSuggestion}
+                  onClick={() => handleApplyAiSuggestion(suggestion)}
                   className="btn-primary h-7 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>Accept (Undoable)</span>
+                  <span>Apply</span>
                 </button>
               </div>
             </div>
-          )}
+          ))}
 
           {/* Actionable Suggestions from Guidance (Neutral styling only) */}
           {actionableSuggestions.map((item) => {
@@ -432,24 +438,24 @@ Current text:
             </div>
           )}
 
-          {/* Improve with AI on-demand button */}
+          {/* Review resume with AI on-demand button */}
           <div className="pt-1 flex items-center justify-between border-t border-line/60">
-            <span className="text-[11px] text-ink/50">Run AI analysis on click (40s timeout)</span>
+            <span className="text-[11px] text-ink/50">Run AI review on click (40s timeout)</span>
             <button
               type="button"
               disabled={aiLoading}
-              onClick={handleImproveWithAi}
+              onClick={handleReviewWithAi}
               className="btn-outline h-7 px-2.5 text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               {aiLoading ? (
                 <>
                   <RefreshCw className="w-3 h-3 text-brand-600 animate-spin" />
-                  <span>Improving (up to 40s)...</span>
+                  <span>Reviewing (up to 40s)...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-3 h-3 text-amber-500" />
-                  <span>Improve with AI</span>
+                  <Sparkles className="w-3 h-3 text-brand-600" />
+                  <span>Review resume with AI</span>
                 </>
               )}
             </button>

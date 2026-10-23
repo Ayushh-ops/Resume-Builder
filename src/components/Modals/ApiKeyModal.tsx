@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Settings, ExternalLink, Check, Palette } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Settings, ExternalLink, Check, Palette, RefreshCw } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import {
   getGeminiKey,
@@ -7,6 +7,10 @@ import {
   getStoredModel,
   setStoredModel,
   testGeminiKey,
+  listModels,
+  getKeySource,
+  clearSavedKey,
+  FALLBACK_MODELS,
 } from '../../services/geminiService';
 import {
   THEME_PRESETS,
@@ -29,9 +33,38 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 }) => {
   const [apiKey, setKey] = useState(getGeminiKey());
   const [model, setModel] = useState(getStoredModel());
+  const [availableModels, setAvailableModels] = useState<string[]>([...FALLBACK_MODELS]);
   const [keySaved, setKeySaved] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string; modelUsed?: string } | null>(null);
+  const [keySource, setKeySource] = useState<'Settings' | '.env' | 'none'>(getKeySource());
+
+  // Refresh live model list and key source whenever Settings opens
+  useEffect(() => {
+    if (isOpen) {
+      setKey(getGeminiKey());
+      setModel(getStoredModel());
+      setKeySource(getKeySource());
+
+      const activeKey = getGeminiKey();
+      if (activeKey) {
+        setIsLoadingModels(true);
+        listModels(activeKey, true)
+          .then((models) => {
+            if (models && models.length > 0) {
+              setAvailableModels(models);
+            }
+          })
+          .catch(() => {
+            setAvailableModels([...FALLBACK_MODELS]);
+          })
+          .finally(() => {
+            setIsLoadingModels(false);
+          });
+      }
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -46,7 +79,9 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   };
 
   const handleApiKeyBlur = () => {
-    setStoredApiKey(apiKey.trim());
+    const trimmed = apiKey.trim();
+    setStoredApiKey(trimmed);
+    setKeySource(getKeySource());
     setKeySaved(true);
     setTimeout(() => {
       setKeySaved(false);
@@ -59,6 +94,10 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
     try {
       const res = await testGeminiKey(apiKey, model);
       setTestResult(res);
+      if (res.modelUsed) {
+        setModel(res.modelUsed);
+        setStoredModel(res.modelUsed);
+      }
     } catch (err: any) {
       setTestResult({ success: false, message: err?.message || 'Error testing key' });
     } finally {
@@ -66,9 +105,11 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
     }
   };
 
-  const handleClear = () => {
-    setKey('');
-    setStoredApiKey('');
+  const handleClearSavedKey = () => {
+    clearSavedKey();
+    const updatedKey = getGeminiKey();
+    setKey(updatedKey);
+    setKeySource(getKeySource());
     setTestResult(null);
     setKeySaved(true);
     setTimeout(() => {
@@ -121,7 +162,6 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
                       : 'border-line bg-card hover:border-ink/30 hover:bg-muted'
                   }`}
                 >
-                  {/* Swatch mini preview with 1px border so Forest/Dark/Midnight are visible */}
                   <div
                     className="w-full h-6 rounded border border-line flex items-center justify-between px-2 overflow-hidden"
                     style={{ backgroundColor: preset.canvas }}
@@ -147,57 +187,63 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
           </div>
         </div>
 
-        {/* Gemini Model Selector — Applies Instantly */}
+        {/* Gemini Model Selector — Live Filtered List */}
         <div className="space-y-1.5">
-          <label className="label">Model</label>
-          <div className="grid grid-cols-1 gap-2">
-            {[
-              {
-                id: 'gemini-2.5-flash',
-                name: 'Gemini 2.5 Flash',
-                desc: 'Default fast multimodal model for parsing and content drafting',
-              },
-              {
-                id: 'gemini-2.0-flash',
-                name: 'Gemini 2.0 Flash',
-                desc: 'Fast fallback model for parsing and drafting',
-              },
-              {
-                id: 'gemini-flash-latest',
-                name: 'Gemini Flash Latest',
-                desc: 'Always points to the latest Flash version',
-              },
-              {
-                id: 'gemini-1.5-flash',
-                name: 'Gemini 1.5 Flash',
-                desc: 'Proven stable fallback for high-throughput tasks',
-              },
-            ].map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => handleSelectModel(m.id)}
-                className={`p-2.5 rounded-[6px] border text-left transition-colors cursor-pointer flex items-center justify-between ${
-                  model === m.id
-                    ? 'border-brand-600 bg-muted/40 font-medium'
-                    : 'border-line bg-card hover:border-ink/30'
-                }`}
-              >
-                <div>
-                  <div className="font-semibold text-ink text-xs mb-0.5">{m.name}</div>
-                  <p className="text-[11px] text-ink/60 leading-tight">{m.desc}</p>
-                </div>
-                {model === m.id && <Check className="w-3.5 h-3.5 text-brand-600 shrink-0 ml-2" />}
-              </button>
-            ))}
+          <div className="flex items-center justify-between">
+            <label className="label mb-0">Model (Live Discovery)</label>
+            {isLoadingModels && (
+              <span className="text-[11px] text-ink/50 flex items-center gap-1">
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                <span>Refreshing...</span>
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-0.5">
+            {availableModels.map((m) => {
+              const isSelected = model === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => handleSelectModel(m)}
+                  className={`p-2.5 rounded-[6px] border text-left transition-colors cursor-pointer flex items-center justify-between ${
+                    isSelected
+                      ? 'border-brand-600 bg-muted/40 font-medium'
+                      : 'border-line bg-card hover:border-ink/30'
+                  }`}
+                >
+                  <div>
+                    <div className="font-semibold text-ink text-xs mb-0.5 font-mono">{m}</div>
+                    <p className="text-[11px] text-ink/60 leading-tight">
+                      {m.includes('lite') ? 'High-efficiency lightweight model' : 'Fast production multimodal model'}
+                    </p>
+                  </div>
+                  {isSelected && <Check className="w-3.5 h-3.5 text-brand-600 shrink-0 ml-2" />}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* API Key Input */}
+        {/* API Key Input with Source Indicator & Clear Saved Key */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="label mb-0">Google Gemini API key</label>
-            <span className="text-[11px] text-ink/40">Stored locally</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted border border-line font-medium text-ink/70">
+                Source: {keySource}
+              </span>
+              {keySource === 'Settings' && (
+                <button
+                  type="button"
+                  onClick={handleClearSavedKey}
+                  className="text-[10px] text-rose-600 hover:underline cursor-pointer"
+                  title="Remove saved key from localStorage to allow .env fallback"
+                >
+                  Clear saved key
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex gap-2">
             <input
@@ -227,7 +273,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               </span>
             ) : (
               <span className="text-ink/50">
-                {apiKey.trim() ? 'AI is active' : 'AI is off, add a key to enable'}
+                {apiKey.trim() ? `Active model: ${model}` : 'AI is off, add a key to enable'}
               </span>
             )}
             {keySaved && <span className="text-emerald-600 font-medium">Saved</span>}
@@ -246,11 +292,11 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             <ExternalLink className="w-3 h-3" />
           </a>
 
-          {apiKey && (
+          {keySource === 'Settings' && apiKey && (
             <button
               type="button"
-              onClick={handleClear}
-              className="text-[11px] text-rose-600 hover:underline"
+              onClick={handleClearSavedKey}
+              className="text-[11px] text-rose-600 hover:underline cursor-pointer"
             >
               Clear Key
             </button>

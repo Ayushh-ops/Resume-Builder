@@ -2,17 +2,20 @@ import type { ResumeData, TrendUpgradeTip, ATSCheckResult, ATSProfile } from '..
 import {
   getKey,
   setKey,
+  getKeySource,
+  clearSavedKey,
   getSelectedModel,
   setSelectedModel,
   listModels,
   pickModel,
+  probeModel,
   generate,
   formatGeminiError,
   CANDIDATE_MODELS,
+  FALLBACK_MODELS,
 } from '../lib/gemini';
 
-export { CANDIDATE_MODELS, pickModel };
-export const FALLBACK_MODELS = CANDIDATE_MODELS;
+export { CANDIDATE_MODELS, FALLBACK_MODELS, pickModel, probeModel, listModels, getKeySource, clearSavedKey };
 
 export const getGeminiKey = getKey;
 export const getStoredApiKey = getKey;
@@ -39,16 +42,19 @@ export async function testGeminiKey(
   }
 
   try {
-    await listModels(key);
-    const res = await generate('ok', {
-      apiKey: key,
-      preferredModel: modelToTest,
-      responseMimeType: '',
-    });
-    if (res.ok) {
-      return { success: true, message: `Works with ${res.modelUsed}`, modelUsed: res.modelUsed };
+    const targetModel = modelToTest || (await pickModel(key, true)).picked;
+    const probe = await probeModel(targetModel, key);
+    if (probe.ok) {
+      setSelectedModel(targetModel);
+      return {
+        success: true,
+        message: `Works with ${targetModel} (${probe.elapsedMs}ms)`,
+        modelUsed: targetModel,
+      };
     }
-    return { success: false, message: res.message || 'Key test failed', modelUsed: res.modelUsed };
+    const errMsg = probe.errorMsg || 'Key test failed';
+    const statusPrefix = probe.status ? `${probe.status}: ` : '';
+    return { success: false, message: `${statusPrefix}${errMsg}`, modelUsed: targetModel };
   } catch (err: any) {
     const status = Number(err?.status || 0);
     const msg = err?.message || String(err);
@@ -62,7 +68,7 @@ export async function generateGeminiText(
 ): Promise<string> {
   const res = await generate(prompt, {
     signal: options?.signal,
-    responseMimeType: options?.responseMimeType || '',
+    responseMimeType: options?.responseMimeType?.trim() ? options.responseMimeType.trim() : undefined,
   });
   if (!res.ok) {
     throw new Error(res.message || 'AI request failed');

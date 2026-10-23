@@ -1,16 +1,36 @@
 // Plain fetch REST client for Google Gemini API (no SDK)
 
-export const CANDIDATE_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-flash-latest',
+export const FALLBACK_MODELS = [
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.8-flash',
 ] as const;
 
+export const CANDIDATE_MODELS = FALLBACK_MODELS;
 export type CandidateModel = (typeof CANDIDATE_MODELS)[number];
 
 const LOCAL_STORAGE_KEY = 'resumecraft_gemini_api_key';
 const LOCAL_STORAGE_MODEL_KEY = 'resumecraft_gemini_model';
-const SESSION_CACHE_KEY = 'rc_gemini_models_v1';
+const CACHE_KEY = 'resumecraft_gemini_models_cache';
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+export const EXCLUDED_KEYWORDS = [
+  'tts',
+  'image',
+  'audio',
+  'transcribe',
+  'robotics',
+  'computer-use',
+  'deep-research',
+  'antigravity',
+  'omni',
+  'latest',
+  'preview',
+  'customtools',
+  'nano',
+  'lyria',
+  'pro',
+] as const;
 
 export function getKey(): string {
   let key = '';
@@ -20,7 +40,29 @@ export function getKey(): string {
   if (!key && typeof import.meta !== 'undefined' && import.meta.env) {
     key = import.meta.env.VITE_GEMINI_API_KEY || '';
   }
+  if (!key) {
+    const proc = (globalThis as any).process;
+    if (proc && proc.env) {
+      key = proc.env.VITE_GEMINI_API_KEY || '';
+    }
+  }
   return (key || '').trim().replace(/^["']|["']$/g, '').trim();
+}
+
+export function getKeySource(): 'Settings' | '.env' | 'none' {
+  let localKey = '';
+  try {
+    localKey = localStorage.getItem(LOCAL_STORAGE_KEY) || '';
+  } catch {}
+  if (localKey.trim()) return 'Settings';
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY?.trim()) {
+    return '.env';
+  }
+  const proc = (globalThis as any).process;
+  if (proc?.env?.VITE_GEMINI_API_KEY?.trim()) {
+    return '.env';
+  }
+  return 'none';
 }
 
 export function setKey(key: string): void {
@@ -32,16 +74,56 @@ export function setKey(key: string): void {
   }
 }
 
+export function clearSavedKey(): void {
+  try {
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+  } catch {}
+}
+
 export function getSelectedModel(): string {
-  const saved = localStorage.getItem(LOCAL_STORAGE_MODEL_KEY);
-  if (saved && (CANDIDATE_MODELS as readonly string[]).includes(saved)) {
-    return saved;
-  }
-  return CANDIDATE_MODELS[0];
+  try {
+    const saved = localStorage.getItem(LOCAL_STORAGE_MODEL_KEY);
+    if (saved) return saved;
+  } catch {}
+  return FALLBACK_MODELS[0];
 }
 
 export function setSelectedModel(model: string): void {
-  localStorage.setItem(LOCAL_STORAGE_MODEL_KEY, model.replace(/^models\//, ''));
+  try {
+    localStorage.setItem(LOCAL_STORAGE_MODEL_KEY, model.replace(/^models\//, ''));
+  } catch {}
+}
+
+export function clearSelectedModel(): void {
+  try {
+    localStorage.removeItem(LOCAL_STORAGE_MODEL_KEY);
+  } catch {}
+}
+
+export function getCachedModels(): string[] | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.models) && typeof parsed.timestamp === 'number') {
+      if (Date.now() - parsed.timestamp < CACHE_TTL_MS && parsed.models.length > 0) {
+        return parsed.models;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+export function setCachedModels(models: string[]): void {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), models }));
+  } catch {}
+}
+
+export function clearCachedModels(): void {
+  try {
+    localStorage.removeItem(CACHE_KEY);
+  } catch {}
 }
 
 export interface GeminiModelInfo {
@@ -51,25 +133,76 @@ export interface GeminiModelInfo {
   supportedGenerationMethods?: string[];
 }
 
-export async function listModels(apiKey?: string): Promise<GeminiModelInfo[]> {
-  const key = apiKey || getKey();
-  if (!key) {
-    throw new Error('No API key set');
+/**
+ * Filters and sorts raw API models:
+ * - Must support generateContent.
+ * - Matches /^gemini-\d+(\.\d+)?-flash(-lite)?$/
+ * - Excludes tts, image, audio, transcribe, robotics, computer-use, deep-research, antigravity, omni, latest, preview, customtools, nano, lyria, pro.
+ * - Sorts by version number descending, "flash" before "flash-lite".
+ */
+export function filterAndSortModels(
+  rawModels: Array<{ name: string; supportedGenerationMethods?: string[] }>
+): string[] {
+  const matched: { name: string; version: number; isLite: boolean }[] = [];
+
+  for (const m of rawModels) {
+    if (
+      !m ||
+      !Array.isArray(m.supportedGenerationMethods) ||
+      !m.supportedGenerationMethods.includes('generateContent')
+    ) {
+      continue;
+    }
+
+    const clean = (m.name || '').replace(/^models\//, '').trim();
+    const lower = clean.toLowerCase();
+
+    if (EXCLUDED_KEYWORDS.some((kw) => lower.includes(kw))) {
+      continue;
+    }
+
+    const match = clean.match(/^gemini-(\d+(?:\.\d+)?)-flash(-lite)?$/);
+    if (!match) {
+      continue;
+    }
+
+    const version = parseFloat(match[1]);
+    const isLite = Boolean(match[2]);
+    matched.push({ name: clean, version, isLite });
   }
 
-  const cacheKey = `${SESSION_CACHE_KEY}_${key.slice(-6)}`;
-  try {
-    const cached = sessionStorage.getItem(cacheKey);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
+  matched.sort((a, b) => {
+    if (b.version !== a.version) {
+      return b.version - a.version;
     }
-  } catch {}
+    return (a.isLite ? 1 : 0) - (b.isLite ? 1 : 0);
+  });
+
+  return matched.map((m) => m.name);
+}
+
+/**
+ * Fetches models from Google API with 24h caching in localStorage.
+ * Force-refresh when requested (e.g. on Settings open or after 404).
+ */
+export async function listModels(
+  apiKey?: string,
+  forceRefresh: boolean = false
+): Promise<string[]> {
+  const key = apiKey || getKey();
+  if (!key) {
+    return [...FALLBACK_MODELS];
+  }
+
+  if (!forceRefresh) {
+    const cached = getCachedModels();
+    if (cached && cached.length > 0) {
+      return cached;
+    }
+  }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}&pageSize=100`;
@@ -77,80 +210,113 @@ export async function listModels(apiKey?: string): Promise<GeminiModelInfo[]> {
     clearTimeout(timeoutId);
 
     if (!res.ok) {
-      const status = res.status;
-      let errMsg = res.statusText;
-      try {
-        const errJson = await res.json();
-        errMsg = errJson?.error?.message || errMsg;
-      } catch {}
-      const err: any = new Error(errMsg);
-      err.status = status;
-      throw err;
+      console.warn(`[Gemini REST] listModels failed with status ${res.status}`);
+      return [...FALLBACK_MODELS];
     }
 
     const data = await res.json();
     const modelsList: any[] = data?.models || [];
-    const contentModels = modelsList
-      .filter((m) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
-      .map((m) => ({
-        name: m.name,
-        cleanName: (m.name || '').replace(/^models\//, ''),
-        displayName: m.displayName || m.name,
-        supportedGenerationMethods: m.supportedGenerationMethods,
-      }));
+    const filtered = filterAndSortModels(modelsList);
 
-    try {
-      sessionStorage.setItem(cacheKey, JSON.stringify(contentModels));
-    } catch {}
-
-    return contentModels;
+    if (filtered.length > 0) {
+      setCachedModels(filtered);
+      return filtered;
+    }
+    return [...FALLBACK_MODELS];
   } catch (err: any) {
     clearTimeout(timeoutId);
-    if (err?.name === 'AbortError') {
-      const timeoutErr: any = new Error('listModels timed out (5s)');
-      timeoutErr.status = 408;
-      throw timeoutErr;
-    }
-    throw err;
+    console.warn('[Gemini REST] listModels exception, falling back:', err?.message || err);
+    return [...FALLBACK_MODELS];
   }
 }
 
-export async function pickModel(apiKey?: string, preferredModel?: string): Promise<{ picked: string; fallbackList: string[] }> {
-  let liveModels: GeminiModelInfo[] = [];
+/**
+ * Probes a candidate model with a 1-token request (8s timeout).
+ */
+export async function probeModel(
+  modelName: string,
+  apiKey?: string
+): Promise<{ ok: boolean; status: number; elapsedMs: number; errorMsg?: string }> {
+  const key = apiKey || getKey();
+  if (!key) {
+    return { ok: false, status: 0, elapsedMs: 0, errorMsg: 'No API key set' };
+  }
+
+  const cleanName = modelName.replace(/^models\//, '');
+  const startTime = Date.now();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
   try {
-    liveModels = await listModels(apiKey);
-  } catch (err) {
-    console.warn('Could not list models via REST, using default candidate list:', err);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${key}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: 'ok' }] }] }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const elapsedMs = Date.now() - startTime;
+
+    if (res.ok) {
+      return { ok: true, status: res.status, elapsedMs };
+    }
+
+    let errorMsg = res.statusText;
+    try {
+      const errJson = await res.json();
+      errorMsg = errJson?.error?.message || errorMsg;
+    } catch {}
+    return { ok: false, status: res.status, elapsedMs, errorMsg };
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    const elapsedMs = Date.now() - startTime;
+    const isTimeout = err?.name === 'AbortError';
     return {
-      picked: preferredModel || CANDIDATE_MODELS[0],
-      fallbackList: [...CANDIDATE_MODELS],
+      ok: false,
+      status: isTimeout ? 408 : Number(err?.status || 0),
+      elapsedMs,
+      errorMsg: isTimeout ? 'Probe timed out (8s)' : err?.message || String(err),
     };
   }
+}
 
-  const liveCleanNames = liveModels.map((m) => m.cleanName);
-  const candidateOrder: string[] = [];
+/**
+ * Pick the model:
+ * - User's saved choice if it is still in the candidate list and not excluded.
+ * - Else probe candidates in order with a 1-token request (8s timeout each)
+ *   and use the first that returns 200; save it as the working model.
+ */
+export async function pickModel(
+  apiKey?: string,
+  forceRefresh: boolean = false,
+  excludeModel?: string
+): Promise<{ picked: string; fallbackList: string[] }> {
+  let candidates = await listModels(apiKey, forceRefresh);
+  if (excludeModel) {
+    candidates = candidates.filter((c) => c !== excludeModel);
+  }
 
-  for (const c of CANDIDATE_MODELS) {
-    if (liveCleanNames.some((l) => l === c || l.endsWith(c)) && !candidateOrder.includes(c)) {
-      candidateOrder.push(c);
+  const saved = getSelectedModel();
+  if (saved && saved !== excludeModel && candidates.includes(saved)) {
+    return { picked: saved, fallbackList: candidates };
+  }
+
+  // Probe candidates in order
+  for (const candidate of candidates) {
+    const probe = await probeModel(candidate, apiKey);
+    if (probe.ok) {
+      setSelectedModel(candidate);
+      return { picked: candidate, fallbackList: candidates };
     }
   }
 
-  if (candidateOrder.length === 0) {
-    const flashFallback = liveCleanNames.find((name) => name.toLowerCase().includes('flash'));
-    if (flashFallback) {
-      candidateOrder.push(flashFallback);
-    }
-  }
-
-  if (candidateOrder.length === 0) {
-    throw new Error('No usable model for this key');
-  }
-
-  return {
-    picked: candidateOrder[0],
-    fallbackList: candidateOrder,
-  };
+  // Fallback to first available candidate
+  const fallback =
+    candidates[0] ||
+    (excludeModel === FALLBACK_MODELS[0] ? FALLBACK_MODELS[1] : FALLBACK_MODELS[0]);
+  setSelectedModel(fallback);
+  return { picked: fallback, fallbackList: candidates };
 }
 
 export interface GenerateResult {
@@ -172,22 +338,35 @@ export function formatGeminiError(
   if (
     status === 403 ||
     status === 401 ||
-    (status === 400 && (msg.includes('api_key_invalid') || msg.includes('key not valid') || msg.includes('api key not valid'))) ||
+    (status === 400 &&
+      (msg.includes('api_key_invalid') ||
+        msg.includes('key not valid') ||
+        msg.includes('api key not valid'))) ||
     msg.includes('403') ||
     msg.includes('permission_denied')
   ) {
     return 'Key rejected (403)';
   }
 
-  if (status === 404 || msg.includes('404') || msg.includes('not found')) {
-    return `Model not found (404)${triedStr}`;
+  if (status === 404 || status === 410 || msg.includes('404') || msg.includes('not found')) {
+    return `Model not found (${status || 404})${triedStr}`;
   }
 
-  if (status === 429 || msg.includes('429') || msg.includes('quota') || msg.includes('resource_exhausted')) {
+  if (
+    status === 429 ||
+    msg.includes('429') ||
+    msg.includes('quota') ||
+    msg.includes('resource_exhausted')
+  ) {
     return 'Rate limited (429)';
   }
 
-  if (status === 408 || msg.includes('timeout') || msg.includes('timed out') || msg.includes('40s')) {
+  if (
+    status === 408 ||
+    msg.includes('timeout') ||
+    msg.includes('timed out') ||
+    msg.includes('40s')
+  ) {
     return 'AI timed out, used basic parsing';
   }
 
@@ -301,11 +480,11 @@ export const RESUME_DATA_RESPONSE_SCHEMA = {
 
 /**
  * Executes generateContent using plain REST fetch:
- * - Uses the model selected in Settings first.
- * - Call listModels only if the first generate returns 404, then pick first available of gemini-2.5-flash, gemini-2.0-flash, gemini-flash-latest.
- * - generationConfig: responseMimeType: "application/json", responseSchema, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 }.
- * - Timeout 40s for generate, 5s for listModels.
- * - Logs request size, status, elapsed ms, first 300 chars of response/error body.
+ * - Dynamically determines model; re-picks and retries if 404/410.
+ * - Omits responseMimeType when empty/undefined; for JSON calls uses application/json with responseSchema.
+ * - Keeps thinkingConfig { thinkingBudget: 0 } but retries once without it on HTTP 400.
+ * - Timeout 40s.
+ * - Logs request status, elapsed ms, first 300 chars of any error.
  */
 export async function generate(
   prompt: string,
@@ -323,11 +502,17 @@ export async function generate(
     return { ok: false, status: 0, message: 'No API key set' };
   }
 
-  const initialModel = (options?.preferredModel || getSelectedModel() || CANDIDATE_MODELS[0]).replace(/^models\//, '');
-  const triedModels: string[] = [initialModel];
+  let currentModel = (
+    options?.preferredModel ||
+    getSelectedModel() ||
+    FALLBACK_MODELS[0]
+  ).replace(/^models\//, '');
 
-  const executeGenerate = async (
-    modelName: string
+  const triedModels: string[] = [];
+
+  const executeOnce = async (
+    modelName: string,
+    useThinkingConfig: boolean
   ): Promise<{ ok: boolean; status: number; text?: string; errorMsg?: string; isTimeout?: boolean }> => {
     const controller = new AbortController();
     let isTimedOut = false;
@@ -355,22 +540,29 @@ export async function generate(
             parts: [{ text: prompt }],
           },
         ],
-        generationConfig: {
-          responseMimeType: options?.responseMimeType !== undefined ? options.responseMimeType : 'application/json',
-          temperature: 0.1,
-          thinkingConfig: {
-            thinkingBudget: 0,
-          },
-        },
       };
 
-      if (options?.responseSchema) {
-        payload.generationConfig.responseSchema = options.responseSchema;
+      const genConfig: any = {
+        temperature: 0.1,
+      };
+
+      if (useThinkingConfig) {
+        genConfig.thinkingConfig = {
+          thinkingBudget: 0,
+        };
       }
 
-      const bodyString = JSON.stringify(payload);
-      const requestSize = new Blob([bodyString]).size;
+      if (options?.responseMimeType && options.responseMimeType.trim()) {
+        genConfig.responseMimeType = options.responseMimeType.trim();
+      }
 
+      if (options?.responseSchema) {
+        genConfig.responseSchema = options.responseSchema;
+      }
+
+      payload.generationConfig = genConfig;
+
+      const bodyString = JSON.stringify(payload);
       const res = await fetch(url, {
         method: 'POST',
         headers: {
@@ -389,9 +581,10 @@ export async function generate(
       const resText = await res.text();
       const first300 = resText.slice(0, 300);
 
-      console.log(`[Gemini REST] model=${modelName} reqSize=${requestSize}b status=${res.status} elapsed=${elapsedMs}ms bodySnippet="${first300.replace(/\s+/g, ' ')}"`);
-
       if (!res.ok) {
+        console.warn(
+          `[Gemini REST] model=${modelName} status=${res.status} elapsed=${elapsedMs}ms error="${first300.replace(/\s+/g, ' ')}"`
+        );
         let errorMsg = res.statusText;
         try {
           const errData = JSON.parse(resText);
@@ -399,6 +592,10 @@ export async function generate(
         } catch {}
         return { ok: false, status: res.status, errorMsg };
       }
+
+      console.log(
+        `[Gemini REST] model=${modelName} status=${res.status} elapsed=${elapsedMs}ms bodySnippet="${first300.replace(/\s+/g, ' ')}"`
+      );
 
       let parsed: any;
       try {
@@ -429,65 +626,61 @@ export async function generate(
     }
   };
 
-  // 1. Try initial model from settings
-  const firstAttempt = await executeGenerate(initialModel);
-  if (firstAttempt.ok && firstAttempt.text) {
+  const attemptWithThinkingRetry = async (
+    modelName: string
+  ): Promise<{ ok: boolean; status: number; text?: string; errorMsg?: string; isTimeout?: boolean }> => {
+    triedModels.push(modelName);
+    // 1. Try with thinkingBudget: 0
+    let attempt = await executeOnce(modelName, true);
+    // 2. Retry once without thinkingConfig on HTTP 400
+    if (!attempt.ok && attempt.status === 400) {
+      console.log(`[Gemini REST] HTTP 400 on model=${modelName}, retrying without thinkingConfig...`);
+      attempt = await executeOnce(modelName, false);
+    }
+    return attempt;
+  };
+
+  // First attempt with current working model
+  let result = await attemptWithThinkingRetry(currentModel);
+  if (result.ok && result.text) {
     return {
       ok: true,
-      text: firstAttempt.text,
-      modelUsed: initialModel,
+      status: 200,
+      text: result.text,
+      modelUsed: currentModel,
     };
   }
 
-  if (firstAttempt.isTimeout || firstAttempt.status === 408) {
-    return {
-      ok: false,
-      status: 408,
-      message: 'AI timed out, used basic parsing',
-      modelUsed: initialModel,
-    };
-  }
+  // If 404, 410, or 503 (high demand): drop model from cache, re-pick automatically, then retry once
+  if (result.status === 404 || result.status === 410 || result.status === 503) {
+    console.warn(`[Gemini REST] model ${currentModel} returned ${result.status}, re-picking dynamically...`);
+    clearCachedModels();
+    clearSelectedModel();
 
-  // 2. Call listModels ONLY after a 404, and pick first available of gemini-2.5-flash, gemini-2.0-flash, gemini-flash-latest
-  if (firstAttempt.status === 404) {
     try {
-      const pickedInfo = await pickModel(key, initialModel);
-      const fallbackCandidates = pickedInfo.fallbackList.filter((m) => m !== initialModel);
-      if (fallbackCandidates.length > 0) {
-        const nextModel = fallbackCandidates[0];
-        triedModels.push(nextModel);
-        const secondAttempt = await executeGenerate(nextModel);
-        if (secondAttempt.ok && secondAttempt.text) {
+      const pickedInfo = await pickModel(key, true, currentModel);
+      const nextModel = pickedInfo.picked;
+      if (nextModel && nextModel !== currentModel) {
+        currentModel = nextModel;
+        result = await attemptWithThinkingRetry(currentModel);
+        if (result.ok && result.text) {
           return {
             ok: true,
-            text: secondAttempt.text,
-            modelUsed: nextModel,
+            status: 200,
+            text: result.text,
+            modelUsed: currentModel,
           };
         }
-        if (secondAttempt.isTimeout || secondAttempt.status === 408) {
-          return {
-            ok: false,
-            status: 408,
-            message: 'AI timed out, used basic parsing',
-            modelUsed: nextModel,
-          };
-        }
-        return {
-          ok: false,
-          status: secondAttempt.status,
-          message: formatGeminiError(secondAttempt.status, secondAttempt.errorMsg || '', triedModels),
-          modelUsed: nextModel,
-        };
       }
-    } catch (listErr: any) {
-      console.error('Gemini listModels fallback failed after 404:', listErr);
+    } catch (rePickErr) {
+      console.error('[Gemini REST] re-picking model failed:', rePickErr);
     }
   }
 
   return {
     ok: false,
-    status: firstAttempt.status,
-    message: formatGeminiError(firstAttempt.status, firstAttempt.errorMsg || '', triedModels),
-    modelUsed: initialModel,
+    status: result.status,
+    message: formatGeminiError(result.status, result.errorMsg || '', triedModels),
+    modelUsed: currentModel,
   };
 }
