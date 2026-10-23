@@ -474,31 +474,42 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
           return (
             <div className="space-y-4">
               {parsedResult.fallbackNotice ? (
-                <div className="p-3 bg-muted border border-line rounded-[6px] flex items-center gap-2.5 text-xs text-ink/80">
-                  <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                  <div className="flex-1">
-                    <span className="font-semibold text-ink">{parsedResult.fallbackNotice}</span>
-                    <p className="text-[11px] text-ink/60 mt-0.5">
-                      {parsedResult.fallbackNotice === 'No API key set' ? (
-                        <>
-                          Add a Gemini key in{' '}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onClose();
-                              onOpenSettings?.();
-                            }}
-                            className="text-brand-600 underline font-medium hover:text-brand-700 cursor-pointer"
-                          >
-                            Settings
-                          </button>{' '}
-                          for AI parsing.
-                        </>
-                      ) : (
-                        'Review detected fields below and refine them in the editor.'
-                      )}
-                    </p>
+                <div className="p-3 bg-muted border border-line rounded-[6px] flex items-center justify-between gap-2.5 text-xs text-ink/80">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                    <div className="min-w-0">
+                      <span className="font-semibold text-ink block">{parsedResult.fallbackNotice}</span>
+                      <p className="text-[11px] text-ink/60 mt-0.5">
+                        {parsedResult.fallbackNotice === 'No API key set' ? (
+                          <>
+                            Add a Gemini key in{' '}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onClose();
+                                onOpenSettings?.();
+                              }}
+                              className="text-brand-600 underline font-medium hover:text-brand-700 cursor-pointer"
+                            >
+                              Settings
+                            </button>{' '}
+                            for AI parsing.
+                          </>
+                        ) : (
+                          'Review detected fields below and refine them in the editor.'
+                        )}
+                      </p>
+                    </div>
                   </div>
+                  {currentFile && (
+                    <button
+                      type="button"
+                      onClick={() => handleFileProcess(currentFile)}
+                      className="btn-outline h-7 px-2.5 text-[11px] font-medium shrink-0 cursor-pointer"
+                    >
+                      Retry
+                    </button>
+                  )}
                 </div>
               ) : hasMissing ? (
                 <div className="p-3 bg-muted border border-line rounded-[6px] flex items-center gap-2.5 text-xs text-ink">

@@ -33,7 +33,7 @@ import {
   getActiveProfileId,
   setActiveProfileId,
 } from './services/atsScorer';
-import { BulletBuilder } from './components/BulletBuilder';
+import { InstantCheck } from './components/InstantCheck';
 import { getChecklistItems } from './components/Modals/ResumeUploadModal';
 import { ModernTemplate } from './components/Preview/templates/ModernTemplate';
 import {
@@ -55,6 +55,7 @@ import {
   setActiveResumeId,
   blankResumeData,
   isResumeCompletelyEmpty,
+  humanizeFileName,
   type ResumeIndexEntry,
 } from './services/resumeStorage';
 import { Header } from './components/Header';
@@ -730,67 +731,105 @@ export const App: React.FC = () => {
   };
 
   // 3. Upload handlers
-  const handleUploadSaveAsNew = (importedData: Partial<ResumeData>, fileName?: string) => {
-    // 1. ALWAYS save the new resume to storage first
-    const resolvedName = fileName
-      ? fileName.replace(/\.[^/.]+$/, '')
-      : importedData.personalInfo?.fullName || 'Imported Resume';
-    const newId = createResume(importedData, resolvedName);
-    justCreatedIdsRef.current.add(newId);
-    setResumeIndex(getResumeIndex());
+  const handleUploadSaveAsNew = (
+    importedData: Partial<ResumeData>,
+    fileName?: string,
+    firstProblemField?: string
+  ) => {
+    try {
+      // Resume title = parsed name, fallback humanized file name (underscores to spaces, drop "resume/cv"), never raw file name
+      const resolvedName =
+        importedData.personalInfo?.fullName?.trim() ||
+        humanizeFileName(fileName) ||
+        'Untitled resume';
 
-    // 2. Close modal
-    closeModal(setIsUploadModalOpen);
+      const fullData: ResumeData = {
+        ...blankResumeData,
+        ...importedData,
+        personalInfo: {
+          ...blankResumeData.personalInfo,
+          ...(importedData.personalInfo || {}),
+        },
+        experience: importedData.experience || [],
+        education: importedData.education || [],
+        projects: importedData.projects || [],
+        skills: importedData.skills || [],
+        certifications: importedData.certifications || [],
+        customSections: importedData.customSections || [],
+      };
 
-    // 3. Navigate to editor
-    navigate(`/editor/${newId}`);
-    showToast('Imported and saved as new resume!', 'success');
-    confetti({ particleCount: 70, spread: 80 });
+      // Compute and store the ATS score on save so Home card never shows "ATS --"
+      const score = calculateLiveATSScore(fullData).score;
+      const newId = createResume(fullData, resolvedName, score);
+      justCreatedIdsRef.current.add(newId);
+      setResumeIndex(getResumeIndex());
 
-    // 4. If Check list has items, keep accessible: open section and focus problem field
-    const checkItems = getChecklistItems(importedData);
-    if (checkItems.length > 0) {
-      const firstProblem = checkItems[0];
-      handleOpenSection(firstProblem.section);
-      setTimeout(() => {
-        if (firstProblem.fieldId) {
-          const el = document.getElementById(firstProblem.fieldId);
-          if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            el.focus();
-            return;
+      closeModal(setIsUploadModalOpen);
+
+      const path = `/editor/${newId}`;
+      console.log(path);
+      navigate(path);
+      showToast('Imported and saved as new resume!', 'success');
+      confetti({ particleCount: 70, spread: 80 });
+
+      // Focus problem field if any checklist item exists
+      const checkItems = getChecklistItems(importedData);
+      if (checkItems.length > 0 || firstProblemField) {
+        const targetField = firstProblemField || checkItems[0]?.fieldId || checkItems[0]?.section;
+        const targetSection = checkItems[0]?.section || 'personal';
+        handleOpenSection(targetSection);
+        setTimeout(() => {
+          if (targetField) {
+            const el = document.getElementById(targetField);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              el.focus();
+              return;
+            }
           }
-        }
-        const secEl = document.getElementById(firstProblem.section);
-        if (secEl) {
-          secEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 300);
+          const secEl = document.getElementById(targetSection);
+          if (secEl) {
+            secEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 300);
+      }
+    } catch (err) {
+      console.error('Failed to save imported resume:', err);
+      showToast('Failed to save resume', 'error');
     }
   };
 
-  const handleStartResumeWithBullet = (bullet: string) => {
-    const initialData: Partial<ResumeData> = {
-      ...blankResumeData,
-      experience: [
-        {
-          id: 'exp_' + Date.now(),
-          company: '',
-          position: '',
-          location: '',
-          startDate: '',
-          endDate: '',
-          current: false,
-          highlights: [bullet],
+  const handleInstantCheckOpenInEditor = (parsedData: Partial<ResumeData>) => {
+    try {
+      const resolvedName = parsedData.personalInfo?.fullName?.trim() || 'Sample Resume';
+      const fullData: ResumeData = {
+        ...blankResumeData,
+        ...parsedData,
+        personalInfo: {
+          ...blankResumeData.personalInfo,
+          ...(parsedData.personalInfo || {}),
         },
-      ],
-    };
-    const newId = createResume(initialData, 'New Resume');
-    justCreatedIdsRef.current.add(newId);
-    setResumeIndex(getResumeIndex());
-    navigate(`/editor/${newId}`);
-    showToast('Started new resume with your bullet point!', 'success');
-    handleOpenSection('experience');
+        experience: parsedData.experience || [],
+        education: parsedData.education || [],
+        projects: parsedData.projects || [],
+        skills: parsedData.skills || [],
+        certifications: parsedData.certifications || [],
+        customSections: parsedData.customSections || [],
+      };
+      const score = calculateLiveATSScore(fullData).score;
+      const newId = createResume(fullData, resolvedName, score);
+      justCreatedIdsRef.current.add(newId);
+      setResumeIndex(getResumeIndex());
+
+      const path = `/editor/${newId}`;
+      console.log(path);
+      navigate(path);
+      showToast('Opened in editor!', 'success');
+      confetti({ particleCount: 60, spread: 70 });
+    } catch (err) {
+      console.error('Failed to open instant check in editor:', err);
+      showToast('Failed to open resume', 'error');
+    }
   };
 
   const handleUploadReplaceCurrent = (importedData: Partial<ResumeData>) => {
@@ -1128,26 +1167,7 @@ export const App: React.FC = () => {
 
   const renderToolCards = () => (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
-      {/* Tool 1: Upload */}
-      <div
-        onClick={() => openModal(setIsUploadModalOpen)}
-        className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
-      >
-        <div>
-          <h3 className="text-sm font-semibold text-ink group-hover:text-brand-600 transition-colors">
-            Import your resume
-          </h3>
-          <p className="text-xs text-ink/70 mt-1">
-            Fills every section from your file
-          </p>
-        </div>
-        <div className="pt-3 mt-3 border-t border-line flex items-center justify-between text-xs font-medium text-ink/80 group-hover:text-brand-600 transition-colors">
-          <span>Open Upload</span>
-          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" strokeWidth={1.5} />
-        </div>
-      </div>
-
-      {/* Tool 2: Custom ATS */}
+      {/* Tool 1: Custom ATS */}
       <div
         onClick={() => openToolWithResume(handleOpenCustomAts)}
         className="group card border border-line bg-card hover:border-accent transition p-4 text-left rounded-[6px] cursor-pointer flex flex-col justify-between"
@@ -1286,7 +1306,15 @@ export const App: React.FC = () => {
 
       {/* VIEW A: HOME SCREEN ("Your resumes") */}
       {route.type === 'home' && (
-        <div className={`flex-1 w-full max-w-5xl mx-auto px-6 ${displayResumes.length === 0 ? 'py-12' : 'py-6 sm:py-8'} flex flex-col justify-start min-h-[calc(100vh-3.5rem)] animate-in fade-in duration-150`}>
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setHomeDragActive(true);
+          }}
+          onDragLeave={() => setHomeDragActive(false)}
+          onDrop={handleHomeDrop}
+          className={`flex-1 w-full max-w-5xl mx-auto px-6 ${displayResumes.length === 0 ? 'py-12' : 'py-6 sm:py-8'} flex flex-col justify-start min-h-[calc(100vh-3.5rem)] animate-in fade-in duration-150`}
+        >
           <input
             type="file"
             ref={homeFileInputRef}
@@ -1342,28 +1370,33 @@ export const App: React.FC = () => {
                     >
                       start from scratch
                     </button>
-                    <span>·</span>
-                    <button
-                      type="button"
-                      onClick={() => openModal(setIsSampleModalOpen)}
-                      className="text-brand-600 hover:underline cursor-pointer font-medium"
-                    >
-                      use a sample
-                    </button>
-                    <span>·</span>
-                    <button
-                      type="button"
-                      onClick={handleOpenCustomAts}
-                      className="text-brand-600 hover:underline cursor-pointer font-medium"
-                    >
-                      add a custom ATS format
-                    </button>
                   </div>
                 </div>
 
-                {/* Right Column (span 5): Bullet builder card */}
+                {/* Right Column (span 5): Instant check card */}
                 <div className="lg:col-span-5 hidden lg:flex flex-col items-center justify-center">
-                  <BulletBuilder onStartResumeWithBullet={handleStartResumeWithBullet} />
+                  <InstantCheck
+                    onCheckMyOwnResume={() => homeFileInputRef.current?.click()}
+                    onOpenInEditor={handleInstantCheckOpenInEditor}
+                  />
+                </div>
+              </div>
+
+              {/* 3-step strip: Upload -> See score and fixes -> Download PDF (plain text, numbers, no pills) */}
+              <div className="py-3.5 px-4 my-6 border-y border-line text-xs text-ink/70 flex items-center justify-center gap-4 sm:gap-8 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-ink">1.</span>
+                  <span>Upload</span>
+                </div>
+                <span className="text-ink/30">→</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-ink">2.</span>
+                  <span>See score and fixes</span>
+                </div>
+                <span className="text-ink/30">→</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-ink">3.</span>
+                  <span>Download PDF</span>
                 </div>
               </div>
 
@@ -1614,28 +1647,6 @@ export const App: React.FC = () => {
                     </div>
                   );
                 })}
-              </div>
-
-              {/* Compact "Import a resume" drop zone (h-24) */}
-              <div
-                onClick={() => homeFileInputRef.current?.click()}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setHomeDragActive(true);
-                }}
-                onDragLeave={() => setHomeDragActive(false)}
-                onDrop={handleHomeDrop}
-                className={`mt-6 w-full h-24 border-2 border-dashed rounded-lg bg-card transition flex items-center justify-center gap-3 cursor-pointer group px-4 select-none ${
-                  homeDragActive
-                    ? 'border-brand-600 bg-muted/30'
-                    : 'border-line hover:border-brand-600'
-                }`}
-              >
-                <Upload className="w-5 h-5 text-ink/40 group-hover:text-brand-600 transition shrink-0" strokeWidth={1.5} />
-                <div className="text-left">
-                  <span className="text-xs font-medium text-ink block">Import a resume</span>
-                  <span className="text-[11px] text-ink/50 block">Drag PDF, Word, JSON, or text here, or click to browse</span>
-                </div>
               </div>
 
               {/* Tools Section */}

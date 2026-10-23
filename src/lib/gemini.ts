@@ -52,6 +52,9 @@ export interface GeminiModelInfo {
   supportedGenerationMethods?: string[];
 }
 
+/**
+ * Lists models using plain fetch with a dedicated 5s AbortController.
+ */
 export async function listModels(apiKey?: string): Promise<GeminiModelInfo[]> {
   const key = apiKey || getKey();
   if (!key) {
@@ -69,38 +72,56 @@ export async function listModels(apiKey?: string): Promise<GeminiModelInfo[]> {
     }
   } catch {}
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}&pageSize=100`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    const status = res.status;
-    let errMsg = res.statusText;
-    try {
-      const errJson = await res.json();
-      errMsg = errJson?.error?.message || errMsg;
-    } catch {}
-    const err: any = new Error(errMsg);
-    err.status = status;
-    throw err;
-  }
-
-  const data = await res.json();
-  const modelsList: any[] = data?.models || [];
-  const contentModels = modelsList
-    .filter((m) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
-    .map((m) => ({
-      name: m.name,
-      cleanName: (m.name || '').replace(/^models\//, ''),
-      displayName: m.displayName || m.name,
-      supportedGenerationMethods: m.supportedGenerationMethods,
-    }));
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
 
   try {
-    sessionStorage.setItem(cacheKey, JSON.stringify(contentModels));
-  } catch {}
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}&pageSize=100`;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
 
-  return contentModels;
+    if (!res.ok) {
+      const status = res.status;
+      let errMsg = res.statusText;
+      try {
+        const errJson = await res.json();
+        errMsg = errJson?.error?.message || errMsg;
+      } catch {}
+      const err: any = new Error(errMsg);
+      err.status = status;
+      throw err;
+    }
+
+    const data = await res.json();
+    const modelsList: any[] = data?.models || [];
+    const contentModels = modelsList
+      .filter((m) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+      .map((m) => ({
+        name: m.name,
+        cleanName: (m.name || '').replace(/^models\//, ''),
+        displayName: m.displayName || m.name,
+        supportedGenerationMethods: m.supportedGenerationMethods,
+      }));
+
+    try {
+      sessionStorage.setItem(cacheKey, JSON.stringify(contentModels));
+    } catch {}
+
+    return contentModels;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err?.name === 'AbortError') {
+      const timeoutErr: any = new Error('listModels timed out (5s)');
+      timeoutErr.status = 408;
+      throw timeoutErr;
+    }
+    throw err;
+  }
 }
 
+/**
+ * From the live list choose first existing of CANDIDATE_MODELS.
+ */
 export async function pickModel(apiKey?: string, preferredModel?: string): Promise<{ picked: string; fallbackList: string[] }> {
   let liveModels: GeminiModelInfo[] = [];
   try {
@@ -114,13 +135,7 @@ export async function pickModel(apiKey?: string, preferredModel?: string): Promi
   }
 
   const liveCleanNames = liveModels.map((m) => m.cleanName);
-
-  // If user preferred model exists in live list, prioritize it
-  const pref = (preferredModel || getSelectedModel()).replace(/^models\//, '');
   const candidateOrder: string[] = [];
-  if (pref && liveCleanNames.includes(pref)) {
-    candidateOrder.push(pref);
-  }
 
   for (const c of CANDIDATE_MODELS) {
     if (liveCleanNames.some((l) => l === c || l.endsWith(c)) && !candidateOrder.includes(c)) {
@@ -129,7 +144,6 @@ export async function pickModel(apiKey?: string, preferredModel?: string): Promi
   }
 
   if (candidateOrder.length === 0) {
-    // take the first listed model whose name contains "flash"
     const flashFallback = liveCleanNames.find((name) => name.toLowerCase().includes('flash'));
     if (flashFallback) {
       candidateOrder.push(flashFallback);
@@ -160,6 +174,7 @@ export function formatGeminiError(
   triedModels: string[] = []
 ): string {
   const msg = (rawMessage || '').toLowerCase();
+  const triedStr = triedModels.length > 0 ? `: tried ${triedModels.join(', ')}` : '';
 
   if (
     status === 403 ||
@@ -172,32 +187,34 @@ export function formatGeminiError(
   }
 
   if (status === 404 || msg.includes('404') || msg.includes('not found')) {
-    const tried = triedModels.length > 0 ? `, tried ${triedModels.join(', ')}` : '';
-    return `Model not found (404${tried})`;
+    return `Model not found (404)${triedStr}`;
   }
 
   if (status === 429 || msg.includes('429') || msg.includes('quota') || msg.includes('resource_exhausted')) {
     return 'Rate limited (429)';
   }
 
-  if (status === 408 || msg.includes('timeout') || msg.includes('timed out') || msg.includes('20s')) {
-    return 'Timed out (20s)';
-  }
-
-  if (msg.includes('invalid response') || msg.includes('unexpected token') || msg.includes('json')) {
-    return 'Invalid response';
+  if (status === 408 || msg.includes('timeout') || msg.includes('timed out') || msg.includes('40s')) {
+    return 'AI timed out, used basic parsing';
   }
 
   if (msg.includes('no api key set')) {
     return 'No API key set';
   }
 
+  if (msg.includes('invalid response') || msg.includes('unexpected token') || msg.includes('json')) {
+    return 'Invalid response';
+  }
+
   return rawMessage || 'AI unavailable';
 }
 
 /**
- * Executes generateContent using plain REST fetch with 20s AbortController.
- * On 404 retry once with the next candidate.
+ * Executes generateContent using plain REST fetch:
+ * - Uses the model selected in Settings first.
+ * - Call listModels only if the first generate returns 404, then pick first available of candidate list.
+ * - generationConfig: responseMimeType: "application/json", temperature: 0.1, thinkingConfig: { thinkingBudget: 0 }.
+ * - Timeout 40s for generate, 5s for listModels, separate controllers.
  */
 export async function generate(
   prompt: string,
@@ -209,35 +226,19 @@ export async function generate(
     return { ok: false, status: 0, message: 'No API key set' };
   }
 
-  let candidates: string[] = [];
-  try {
-    const pickedInfo = await pickModel(key, options?.preferredModel);
-    candidates = pickedInfo.fallbackList;
-  } catch (err: any) {
-    console.error('Gemini generate pickModel failed:', err);
-    return {
-      ok: false,
-      status: Number(err?.status || 0),
-      message: err?.message || 'No usable model for this key',
-    };
-  }
+  // 1. Initial model from settings or preferred option
+  const initialModel = (options?.preferredModel || getSelectedModel() || CANDIDATE_MODELS[0]).replace(/^models\//, '');
+  const triedModels: string[] = [initialModel];
 
-  const triedModels: string[] = [];
-  // Try up to 2 candidates (the picked one and a retry on 404)
-  const modelsToAttempt = candidates.slice(0, 2);
-
-  for (let i = 0; i < modelsToAttempt.length; i++) {
-    const model = modelsToAttempt[i];
-    triedModels.push(model);
-
+  // Helper to execute single generate call with 40s timeout
+  const executeGenerate = async (modelName: string): Promise<{ ok: boolean; status: number; text?: string; errorMsg?: string; isTimeout?: boolean }> => {
     const controller = new AbortController();
     let isTimedOut = false;
     const timeoutId = setTimeout(() => {
       isTimedOut = true;
       controller.abort();
-    }, 20000);
+    }, 40000);
 
-    // Forward external abort if present
     const externalSignal = options?.signal;
     const abortListener = () => controller.abort();
     if (externalSignal) {
@@ -249,20 +250,21 @@ export async function generate(
     }
 
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`;
       const payload: any = {
         contents: [
           {
             parts: [{ text: prompt }],
           },
         ],
+        generationConfig: {
+          responseMimeType: options?.responseMimeType !== undefined ? options.responseMimeType : 'application/json',
+          temperature: 0.1,
+          thinkingConfig: {
+            thinkingBudget: 0,
+          },
+        },
       };
-
-      // Default responseMimeType is application/json as specified in instructions
-      const mimeType = options?.responseMimeType !== undefined ? options.responseMimeType : 'application/json';
-      if (mimeType) {
-        payload.generationConfig = { responseMimeType: mimeType };
-      }
 
       const res = await fetch(url, {
         method: 'POST',
@@ -284,69 +286,91 @@ export async function generate(
           const errData = await res.json();
           errorMsg = errData?.error?.message || errorMsg;
         } catch {}
-
-        console.error(`Gemini REST error (${res.status}) on model ${model}:`, errorMsg);
-
-        // On 404 retry once with the next candidate
-        if (res.status === 404 && i === 0 && modelsToAttempt.length > 1) {
-          continue;
-        }
-
-        const formatted = formatGeminiError(res.status, errorMsg, triedModels);
-        return {
-          ok: false,
-          status: res.status,
-          message: formatted,
-          modelUsed: model,
-        };
+        console.error(`Gemini REST error (${res.status}) on model ${modelName}:`, errorMsg);
+        return { ok: false, status: res.status, errorMsg };
       }
 
       const data = await res.json();
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (typeof text !== 'string') {
-        return {
-          ok: false,
-          status: 200,
-          message: 'Invalid response',
-          modelUsed: model,
-        };
+        return { ok: false, status: 200, errorMsg: 'Invalid response' };
       }
 
-      return {
-        ok: true,
-        text,
-        modelUsed: model,
-      };
+      return { ok: true, status: 200, text };
     } catch (err: any) {
       clearTimeout(timeoutId);
       if (externalSignal) {
         externalSignal.removeEventListener('abort', abortListener);
       }
-
-      console.error(`Gemini generate exception on model ${model}:`, err);
+      console.error(`Gemini generate exception on model ${modelName}:`, err);
       if (isTimedOut || err?.name === 'AbortError') {
-        return {
-          ok: false,
-          status: 408,
-          message: 'Timed out (20s)',
-          modelUsed: model,
-        };
+        return { ok: false, status: 408, isTimeout: true, errorMsg: 'AI timed out, used basic parsing' };
       }
-
       const status = Number(err?.status || 0);
       const msg = err?.message || String(err);
-      return {
-        ok: false,
-        status,
-        message: formatGeminiError(status, msg, triedModels),
-        modelUsed: model,
-      };
+      return { ok: false, status, errorMsg: msg };
+    }
+  };
+
+  // Attempt with selected model first
+  const firstAttempt = await executeGenerate(initialModel);
+  if (firstAttempt.ok && firstAttempt.text) {
+    return {
+      ok: true,
+      text: firstAttempt.text,
+      modelUsed: initialModel,
+    };
+  }
+
+  if (firstAttempt.isTimeout || firstAttempt.status === 408) {
+    return {
+      ok: false,
+      status: 408,
+      message: 'AI timed out, used basic parsing',
+      modelUsed: initialModel,
+    };
+  }
+
+  // If first attempt returned 404, call listModels and try first candidate available
+  if (firstAttempt.status === 404) {
+    try {
+      const pickedInfo = await pickModel(key, initialModel);
+      const fallbackCandidates = pickedInfo.fallbackList.filter((m) => m !== initialModel);
+      if (fallbackCandidates.length > 0) {
+        const nextModel = fallbackCandidates[0];
+        triedModels.push(nextModel);
+        const secondAttempt = await executeGenerate(nextModel);
+        if (secondAttempt.ok && secondAttempt.text) {
+          return {
+            ok: true,
+            text: secondAttempt.text,
+            modelUsed: nextModel,
+          };
+        }
+        if (secondAttempt.isTimeout || secondAttempt.status === 408) {
+          return {
+            ok: false,
+            status: 408,
+            message: 'AI timed out, used basic parsing',
+            modelUsed: nextModel,
+          };
+        }
+        return {
+          ok: false,
+          status: secondAttempt.status,
+          message: formatGeminiError(secondAttempt.status, secondAttempt.errorMsg || '', triedModels),
+          modelUsed: nextModel,
+        };
+      }
+    } catch (listErr: any) {
+      console.error('Gemini listModels fallback failed after 404:', listErr);
     }
   }
 
   return {
     ok: false,
-    status: 404,
-    message: formatGeminiError(404, 'Model not found', triedModels),
+    status: firstAttempt.status,
+    message: formatGeminiError(firstAttempt.status, firstAttempt.errorMsg || '', triedModels),
+    modelUsed: initialModel,
   };
 }

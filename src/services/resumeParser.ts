@@ -2,6 +2,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
 import type { ResumeData } from '../types/resume';
 import { generate } from '../lib/gemini';
+import { humanizeFileName } from './resumeStorage';
 
 // Set up pdf.js worker URL for browser environments
 if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
@@ -14,10 +15,21 @@ if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
 
 export type ParseMethod = 'pdf' | 'docx' | 'json' | 'txt';
 
+export interface ExtractedPdfLine {
+  text: string;
+  leftText: string;
+  rightText: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  page: number;
+}
+
 export interface ParseResult {
   rawText: string;
   method: ParseMethod;
   jsonData?: Partial<ResumeData>;
+  extractedLines?: ExtractedPdfLine[];
 }
 
 export interface ParsedResumeResult {
@@ -36,13 +48,18 @@ export interface StructureResult {
 }
 
 /**
- * Extracts raw text from PDF grouping items into lines by y (tolerance ~2px),
- * sorting by x, joining with space only when gap > ~1px, and merging wrapped lines.
+ * Extracts raw text and structured line layout from PDF:
+ * - Group items into lines by y (+-2px).
+ * - Split each line into left/right segments where x-gap > 40px (left = content, right = date/location).
+ * - Record max font size per line.
+ * - Merge wrapped lines: remove a char ONLY if line ends with "-" AND next line starts lowercase.
+ * - Preserves words without truncation (Remote, real time, consumption, running, (IBM)).
+ * - If localStorage["rc-debug"]=="1", console.table extracted PDF lines (text, x, y, fontSize).
  */
-async function extractTextFromPdf(arrayBuffer: ArrayBuffer): Promise<string> {
+async function extractTextFromPdf(arrayBuffer: ArrayBuffer): Promise<{ rawText: string; lines: ExtractedPdfLine[] }> {
   const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
   const pdf = await loadingTask.promise;
-  const pageLines: string[] = [];
+  const allExtractedLines: ExtractedPdfLine[] = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
@@ -53,22 +70,27 @@ async function extractTextFromPdf(arrayBuffer: ArrayBuffer): Promise<string> {
       x: number;
       y: number;
       width: number;
+      fontSize: number;
     }
     const rawItems: PosItem[] = [];
     for (const item of textContent.items) {
       if ('str' in item && typeof item.str === 'string' && item.str.length > 0) {
         const x = Array.isArray(item.transform) ? item.transform[4] : 0;
         const y = Array.isArray(item.transform) ? item.transform[5] : 0;
+        const fontSize = Array.isArray(item.transform)
+          ? Math.round(Math.hypot(item.transform[0], item.transform[1])) || Math.round(Math.abs(item.transform[0])) || 12
+          : 12;
         rawItems.push({
           str: item.str,
           x,
           y,
           width: item.width || 0,
+          fontSize,
         });
       }
     }
 
-    // Group items into lines by y (tolerance ~2px)
+    // Group items into lines by y (+-2px)
     // Sort descending by y first (top of page has higher y in PDF coords)
     rawItems.sort((a, b) => b.y - a.y);
 
@@ -86,64 +108,124 @@ async function extractTextFromPdf(arrayBuffer: ArrayBuffer): Promise<string> {
       }
     }
 
-    // Process each line: sort by x, join with space only when gap > ~1px
-    const processedLines: string[] = [];
+    // Process each line: sort by x, split into left/right segments where x-gap > 40px
+    const pageLines: ExtractedPdfLine[] = [];
     for (const line of lines) {
       line.items.sort((a, b) => a.x - b.x);
-      let lineStr = '';
-      let prevEnd = -9999;
-      for (const it of line.items) {
-        if (lineStr === '') {
-          lineStr = it.str;
-        } else {
-          const gap = it.x - prevEnd;
-          if (gap > 1) {
-            // gap > ~1px: insert space if needed
-            if (!lineStr.endsWith(' ') && !it.str.startsWith(' ')) {
-              lineStr += ' ' + it.str;
-            } else {
-              lineStr += it.str;
-            }
-          } else {
-            // gap <= ~1px: keep whole, no extra space (e.g. "Re" + "mote" -> "Remote")
-            lineStr += it.str;
-          }
+
+      let splitIdx = -1;
+      let maxGap = 0;
+      for (let k = 0; k < line.items.length - 1; k++) {
+        const endK = line.items[k].x + (line.items[k].width || 0);
+        const gap = line.items[k + 1].x - endK;
+        if (gap > 40 && gap > maxGap) {
+          maxGap = gap;
+          splitIdx = k + 1;
         }
-        prevEnd = Math.max(prevEnd, it.x + (it.width || 0));
       }
 
-      const trimmed = lineStr.trim();
-      if (trimmed) {
-        processedLines.push(trimmed);
+      const leftItems = splitIdx > 0 ? line.items.slice(0, splitIdx) : line.items;
+      const rightItems = splitIdx > 0 ? line.items.slice(splitIdx) : [];
+
+      const buildSegment = (items: PosItem[]): string => {
+        let segStr = '';
+        let prevEnd = -9999;
+        for (const it of items) {
+          if (segStr === '') {
+            segStr = it.str;
+          } else {
+            const gap = it.x - prevEnd;
+            if (gap > 1) {
+              if (!segStr.endsWith(' ') && !it.str.startsWith(' ')) {
+                segStr += ' ' + it.str;
+              } else {
+                segStr += it.str;
+              }
+            } else {
+              segStr += it.str;
+            }
+          }
+          prevEnd = Math.max(prevEnd, it.x + (it.width || 0));
+        }
+        return segStr.trim();
+      };
+
+      const leftText = buildSegment(leftItems);
+      const rightText = buildSegment(rightItems);
+      const fullLineText = rightText ? `${leftText}   ${rightText}` : leftText;
+      const maxFont = Math.max(...line.items.map((it) => it.fontSize));
+      const minX = line.items[0].x;
+
+      if (leftText || rightText) {
+        pageLines.push({
+          text: fullLineText,
+          leftText,
+          rightText,
+          x: minX,
+          y: line.y,
+          fontSize: maxFont,
+          page: i,
+        });
       }
     }
 
-    // Merge wrapped lines (line not ending . : ; and next line starts lowercase or is a bullet continuation)
-    const mergedLines: string[] = [];
-    for (let j = 0; j < processedLines.length; j++) {
-      const cur = processedLines[j];
-      if (mergedLines.length === 0) {
-        mergedLines.push(cur);
+    // Merge wrapped lines: remove a char ONLY if line ends with "-" AND next line starts lowercase
+    const mergedPageLines: ExtractedPdfLine[] = [];
+    for (let j = 0; j < pageLines.length; j++) {
+      const cur = pageLines[j];
+      if (mergedPageLines.length === 0) {
+        mergedPageLines.push(cur);
         continue;
       }
 
-      const prevIdx = mergedLines.length - 1;
-      const prev = mergedLines[prevIdx];
-      const prevEndsPunct = /[.:;]$/.test(prev.trim());
-      const nextStartsLower = /^[a-z]/.test(cur);
-      const isBulletContinuation = !/^[•·⁃◦*]\s*|^-\s+/.test(cur) && /^[•·⁃◦*]\s*|^-\s+/.test(prev) && !prevEndsPunct;
+      const prevIdx = mergedPageLines.length - 1;
+      const prev = mergedPageLines[prevIdx];
+      const prevText = prev.text.trim();
+      const prevEndsPunct = /[.:;]$/.test(prevText);
+      const prevEndsHyphen = prevText.endsWith('-');
+      const nextStartsLower = /^[a-z]/.test(cur.text.trim());
+      const isBulletContinuation = !/^[•·⁃◦*]\s*|^-\s+/.test(cur.text.trim()) && /^[•·⁃◦*]\s*|^-\s+/.test(prevText) && !prevEndsPunct;
 
-      if (!prevEndsPunct && (nextStartsLower || isBulletContinuation)) {
-        mergedLines[prevIdx] = prev + ' ' + cur;
+      if (prevEndsHyphen && nextStartsLower) {
+        mergedPageLines[prevIdx] = {
+          ...prev,
+          text: prev.text.trim().slice(0, -1) + cur.text.trim(),
+          leftText: prev.leftText.endsWith('-') ? prev.leftText.slice(0, -1) + cur.leftText : prev.leftText + ' ' + cur.leftText,
+          rightText: cur.rightText || prev.rightText,
+        };
+      } else if (!prevEndsPunct && (nextStartsLower || isBulletContinuation)) {
+        mergedPageLines[prevIdx] = {
+          ...prev,
+          text: prev.text.trim() + ' ' + cur.text.trim(),
+          leftText: prev.leftText.trim() + ' ' + cur.leftText.trim(),
+          rightText: cur.rightText || prev.rightText,
+        };
       } else {
-        mergedLines.push(cur);
+        mergedPageLines.push(cur);
       }
     }
 
-    pageLines.push(...mergedLines);
+    allExtractedLines.push(...mergedPageLines);
   }
 
-  return pageLines.join('\n').trim();
+  // Debug output if requested
+  if (typeof localStorage !== 'undefined' && localStorage.getItem('rc-debug') === '1') {
+    try {
+      console.table(
+        allExtractedLines.map((l) => ({
+          text: l.text,
+          x: Math.round(l.x),
+          y: Math.round(l.y),
+          fontSize: Math.round(l.fontSize),
+        }))
+      );
+    } catch (e) {
+      console.error('Failed to log rc-debug table:', e);
+    }
+  }
+
+  const rawText = allExtractedLines.map((l) => l.text).join('\n').trim();
+  return { rawText, lines: allExtractedLines };
 }
 
 /**
@@ -168,8 +250,8 @@ export async function parseResumeFile(file: File): Promise<ParseResult> {
   if (extension === 'pdf' || file.type === 'application/pdf') {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const extractedText = await extractTextFromPdf(arrayBuffer);
-      return { rawText: extractedText, method: 'pdf' };
+      const { rawText, lines } = await extractTextFromPdf(arrayBuffer);
+      return { rawText, method: 'pdf', extractedLines: lines };
     } catch (err) {
       console.error('Failed to extract text from PDF via pdfjs-dist:', err);
       throw new Error('Could not parse PDF content. Please ensure the file is not password-protected.');
@@ -195,15 +277,50 @@ export async function parseResumeFile(file: File): Promise<ParseResult> {
   return { rawText: text.trim(), method: 'txt' };
 }
 
+function mergeParsedData(ai: Partial<ResumeData>, offline: Partial<ResumeData>): Partial<ResumeData> {
+  const mergedPi: any = {
+    ...offline.personalInfo,
+  };
+  if (ai.personalInfo) {
+    for (const [key, val] of Object.entries(ai.personalInfo)) {
+      if (val && typeof val === 'string' && val.trim()) {
+        mergedPi[key] = val.trim();
+      }
+    }
+  }
+
+  const mergedSummary = ai.summary?.trim() ? ai.summary.trim() : offline.summary || '';
+  const mergedExp = ai.experience && ai.experience.length > 0 ? ai.experience : offline.experience || [];
+  const mergedEdu = ai.education && ai.education.length > 0 ? ai.education : offline.education || [];
+  const mergedSkills = ai.skills && ai.skills.length > 0 ? ai.skills : offline.skills || [];
+  const mergedProjects = ai.projects && ai.projects.length > 0 ? ai.projects : offline.projects || [];
+  const mergedCertifications = ai.certifications && ai.certifications.length > 0 ? ai.certifications : offline.certifications || [];
+
+  return {
+    personalInfo: mergedPi,
+    summary: mergedSummary,
+    experience: mergedExp,
+    education: mergedEdu,
+    skills: mergedSkills,
+    projects: mergedProjects,
+    certifications: mergedCertifications,
+    customSections: ai.customSections || offline.customSections || [],
+  };
+}
+
 /**
- * Structures raw resume text into ResumeData schema using Gemini REST client,
- * with a local regex fallback.
+ * Structures raw resume text into ResumeData schema using Gemini REST client:
+ * - Plain extracted text only.
+ * - AI wins per field, offline parser fills empty fields.
  */
 export async function structureResumeWithGemini(
   rawText: string,
   externalSignal?: AbortSignal,
-  fileName?: string
+  fileName?: string,
+  extractedLines?: ExtractedPdfLine[]
 ): Promise<StructureResult> {
+  const offlineData = fallbackRegexParser(rawText, fileName, extractedLines);
+
   const prompt = `You are a professional resume parser. Parse the following raw resume text and extract all information into a structured JSON matching the ResumeData schema.
 
 ResumeData schema fields:
@@ -230,8 +347,10 @@ Return strictly a valid JSON object matching this schema. No markdown formatting
       const cleanJson = res.text.replace(/```json/g, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(cleanJson);
       if (parsed && (parsed.personalInfo || parsed.experience || parsed.education || parsed.skills)) {
+        const aiData = normalizeParsedData(parsed);
+        const mergedData = mergeParsedData(aiData, offlineData);
         return {
-          data: normalizeParsedData(parsed),
+          data: mergedData,
           isAiFallback: false,
         };
       }
@@ -240,10 +359,9 @@ Return strictly a valid JSON object matching this schema. No markdown formatting
     }
   }
 
-  const fallbackNotice = res.ok ? 'Invalid response' : (res.message || 'AI unavailable');
-  const fallbackData = fallbackRegexParser(rawText, fileName);
+  const fallbackNotice = res.message || 'AI unavailable';
   return {
-    data: fallbackData,
+    data: offlineData,
     fallbackNotice,
     isAiFallback: true,
   };
@@ -366,7 +484,7 @@ export function isSectionHeadingOrKeyword(line: string): boolean {
 
 function normalizeResumeText(text: string): string {
   let normalized = text;
-  normalized = normalized.replace(/([a-zA-Z]+)-\s*\r?\n\s*([a-zA-Z]+)/g, '$1$2');
+  normalized = normalized.replace(/([a-zA-Z]+)-\s*\r?\n\s*([a-z]+)/g, '$1$2');
 
   const headings = [
     'work\\s+experience',
@@ -391,24 +509,62 @@ function normalizeResumeText(text: string): string {
 
 const INSTITUTION_REG = /\b(?:university|college|institute|abes|iit|nit|iiit|bits|school|academy|polytechnic|engineering|technology)\b/i;
 
-function cleanNameCandidate(raw: string): string {
-  let cleaned = raw.replace(/\b(?:university|college|institute|abes|iit|nit|iiit|bits|school|academy|polytechnic)\b.*$/i, '').trim();
-  cleaned = cleaned.replace(/[,|\-–—]/g, ' ').replace(/\s+/g, ' ').trim();
-  return cleaned;
+const LONE_SKILL_WORDS = new Set([
+  'python', 'java', 'c++', 'c#', 'javascript', 'typescript', 'sql', 'html', 'css',
+  'react', 'angular', 'vue', 'node', 'nodejs', 'aws', 'gcp', 'azure', 'docker',
+  'kubernetes', 'git', 'linux', 'c', 'php', 'ruby', 'rust', 'go', 'golang', 'r',
+  'swift', 'kotlin', 'dart', 'scala', 'perl', 'bash', 'matlab'
+]);
+
+function isLoneSkill(str: string): boolean {
+  const clean = str.trim().toLowerCase();
+  return LONE_SKILL_WORDS.has(clean) || (clean.split(/\s+/).length === 1 && LONE_SKILL_WORDS.has(clean));
 }
 
+function isValidNameCandidate(text: string): { valid: boolean; name: string } {
+  const trimmed = text.trim();
+  if (!trimmed) return { valid: false, name: '' };
+  if (/\d|@|https?:\/\/|www\.|\.(com|org|net|edu|io|dev)\b/i.test(trimmed)) return { valid: false, name: '' };
+  if (isSectionHeadingOrKeyword(trimmed)) return { valid: false, name: '' };
+  // Never a location (state/country/comma pattern)
+  if (/^[A-Za-z\s.-]+,\s*(?:[A-Z]{2}|[A-Za-z\s.-]+)$/.test(trimmed)) return { valid: false, name: '' };
+  if (/\b(?:california|new\s+york|texas|florida|washington|india|usa|united\s+states|canada|germany|uk|united\s+kingdom)\b/i.test(trimmed)) return { valid: false, name: '' };
+
+  // Strip institution tokens
+  let cand = trimmed.replace(/\b(?:university|college|institute|abes|iit|nit|iiit|bits|school|academy|polytechnic)\b.*$/i, '').trim();
+  cand = cand.replace(/[,|\-–—]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!cand || INSTITUTION_REG.test(cand)) return { valid: false, name: '' };
+
+  const words = cand.split(/\s+/).filter(Boolean);
+  const isAllAlpha = words.every((w) => /^[a-zA-Z.'-]+$/.test(w));
+  if (words.length >= 2 && words.length <= 4 && isAllAlpha) {
+    return { valid: true, name: cand };
+  }
+  return { valid: false, name: '' };
+}
+
+const MONTHS_STR = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
+const YEAR_STR = '(?:19|20)?\\d{2}';
+const DATE_POINT_STR = `(?:(?:${MONTHS_STR})\\.?\\s*)?${YEAR_STR}|present|current`;
+const DATE_SEP_STR = '[-–—~]|\\bto\\b';
+const DATE_RANGE_REGEX = new RegExp(
+  `\\b((?:(?:${MONTHS_STR})\\.?\\s*)?${YEAR_STR})\\s*(?:${DATE_SEP_STR})\\s*(${DATE_POINT_STR})\\b`,
+  'i'
+);
+
+const ROLE_WORDS = /\b(?:engineer|developer|intern|lead|manager|specialist|analyst|consultant|designer|architect|officer|director|associate|scientist|fellow|head|programmer|coder|devops|full\s*stack|frontend|backend)\b/i;
+
+/**
+ * Parses all experience entries:
+ * - Anchors on lines whose right segment or text contains a date range.
+ * - Left segment + next line = title and company.
+ * - Line containing Intern/Engineer/Analyst/Developer/Manager/Lead is the title.
+ * - Title/company lines never become bullets.
+ * - Keeps start AND end date. Parses ALL entries. Never defaults to "Role".
+ */
 export function parseExperienceEntries(expLines: string[]): any[] {
   const experiences: any[] = [];
   if (!expLines || expLines.length === 0) return experiences;
-
-  const MONTHS_STR = 'jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?';
-  const YEAR_STR = '(?:19|20)?\\d{2}';
-  const DATE_POINT_STR = `(?:(?:${MONTHS_STR})\\.?\\s*)?${YEAR_STR}|present|current`;
-  const DATE_SEP_STR = '[-–—~]|\\bto\\b';
-  const DATE_RANGE_REGEX = new RegExp(
-    `\\b((?:(?:${MONTHS_STR})\\.?\\s*)?${YEAR_STR})\\s*(?:${DATE_SEP_STR})\\s*(${DATE_POINT_STR})\\b`,
-    'i'
-  );
 
   const anchorIndices: number[] = [];
   for (let i = 0; i < expLines.length; i++) {
@@ -416,8 +572,6 @@ export function parseExperienceEntries(expLines: string[]): any[] {
       anchorIndices.push(i);
     }
   }
-
-  const ROLE_WORDS = /\b(?:engineer|developer|intern|lead|manager|specialist|analyst|consultant|designer|architect|officer|director|associate|scientist|fellow|head|programmer|coder|devops|full\s*stack|frontend|backend)\b/i;
 
   const splitTitleAndCompany = (text: string): { position: string; company: string } => {
     const clean = text.replace(/^[|•·⁃◦*-]\s*|[|•·⁃◦*-]\s*$/g, '').trim();
@@ -475,56 +629,68 @@ export function parseExperienceEntries(expLines: string[]): any[] {
     const isCurrent = /present|current/i.test(rawEndDate);
     const endDate = isCurrent ? 'Present' : rawEndDate;
 
-    const beside = anchorLine.replace(DATE_RANGE_REGEX, '').replace(/^[|•·⁃◦*-]\s*|[|•·⁃◦*-]\s*$/g, '').trim();
+    const leftContent = anchorLine.replace(DATE_RANGE_REGEX, '').replace(/^[|•·⁃◦*-]\s*|[|•·⁃◦*-]\s*$/g, '').trim();
     let position = '';
     let company = '';
+    let consumedNextLine = false;
 
-    if (beside) {
-      const res = splitTitleAndCompany(beside);
-      position = res.position;
-      company = res.company;
-    }
-
-    const prevAnchor = a > 0 ? anchorIndices[a - 1] : -1;
-    const line1Above = anchorIdx - 1 > prevAnchor ? expLines[anchorIdx - 1] : '';
-    const line2Above = anchorIdx - 2 > prevAnchor ? expLines[anchorIdx - 2] : '';
-
-    if (!position || !company) {
-      if (line1Above && !/^[•·⁃◦*]\s*|^\-\s+/.test(line1Above)) {
-        const res1 = splitTitleAndCompany(line1Above);
-        if (res1.position && res1.company) {
-          position = position || res1.position;
-          company = company || res1.company;
-        } else if (res1.position && !position) {
-          position = res1.position;
-        } else if (res1.company && !company) {
-          company = res1.company;
-        }
-
-        if ((!position || !company) && line2Above && !/^[•·⁃◦*]\s*|^\-\s+/.test(line2Above)) {
-          const res2 = splitTitleAndCompany(line2Above);
-          if (res2.position && !position) position = res2.position;
-          if (res2.company && !company) company = res2.company;
-        }
+    // Check if left content has both title and company
+    if (leftContent) {
+      const res = splitTitleAndCompany(leftContent);
+      if (res.position && res.company) {
+        position = res.position;
+        company = res.company;
+      } else if (res.position) {
+        position = res.position;
+      } else if (res.company) {
+        company = res.company;
       }
     }
 
+    // Check next line for title or company if not both resolved
+    const nextLineIdx = anchorIdx + 1;
     const nextAnchor = a + 1 < anchorIndices.length ? anchorIndices[a + 1] : expLines.length;
-    let bulletEndLimit = nextAnchor;
-    if (a + 1 < anchorIndices.length) {
-      if (bulletEndLimit - 1 >= 0 && !/^[•·⁃◦*]\s*|^\-\s+/.test(expLines[bulletEndLimit - 1])) {
-        bulletEndLimit--;
-      }
-      if (bulletEndLimit - 1 >= 0 && !/^[•·⁃◦*]\s*|^\-\s+/.test(expLines[bulletEndLimit - 1])) {
-        bulletEndLimit--;
+
+    if (nextLineIdx < nextAnchor && (!position || !company)) {
+      const nextLineText = expLines[nextLineIdx].trim();
+      const isNextBullet = /^[•·⁃◦*]\s*|^\-\s+/.test(nextLineText);
+      const isNextDate = DATE_RANGE_REGEX.test(nextLineText);
+
+      if (!isNextBullet && !isNextDate && nextLineText.length < 70) {
+        if (!position && ROLE_WORDS.test(nextLineText)) {
+          position = nextLineText;
+          consumedNextLine = true;
+        } else if (!company && !ROLE_WORDS.test(nextLineText)) {
+          company = nextLineText;
+          consumedNextLine = true;
+        }
       }
     }
 
+    // If still missing company or position, inspect line immediately above
+    const prevAnchor = a > 0 ? anchorIndices[a - 1] : -1;
+    const lineAboveIdx = anchorIdx - 1;
+    if (lineAboveIdx > prevAnchor && (!position || !company)) {
+      const lineAboveText = expLines[lineAboveIdx].trim();
+      const isAboveBullet = /^[•·⁃◦*]\s*|^\-\s+/.test(lineAboveText);
+      if (!isAboveBullet && lineAboveText.length < 70) {
+        if (!position && ROLE_WORDS.test(lineAboveText)) {
+          position = lineAboveText;
+        } else if (!company && !ROLE_WORDS.test(lineAboveText)) {
+          company = lineAboveText;
+        }
+      }
+    }
+
+    // Collect bullets: starting from after consumed lines up to next anchor
+    const bulletStart = consumedNextLine ? anchorIdx + 2 : anchorIdx + 1;
     const highlights: string[] = [];
-    for (let b = anchorIdx + 1; b < Math.max(anchorIdx + 1, bulletEndLimit); b++) {
+
+    for (let b = bulletStart; b < nextAnchor; b++) {
       const bLine = expLines[b];
       const isBullet = /^[•·⁃◦*]\s*|^\-\s+/.test(bLine);
       const cleanBullet = bLine.replace(/^[•·⁃◦*]\s*|^\-\s+/, '').trim();
+
       if (isBullet && cleanBullet) {
         highlights.push(cleanBullet);
       } else if (highlights.length > 0 && cleanBullet) {
@@ -549,7 +715,11 @@ export function parseExperienceEntries(expLines: string[]): any[] {
   return experiences;
 }
 
-export function fallbackRegexParser(rawText: string, fileName?: string): Partial<ResumeData> {
+export function fallbackRegexParser(
+  rawText: string,
+  fileName?: string,
+  extractedLines?: ExtractedPdfLine[]
+): Partial<ResumeData> {
   const normalizedText = normalizeResumeText(rawText);
   const lines = normalizedText
     .split(/\r?\n/)
@@ -564,69 +734,48 @@ export function fallbackRegexParser(rawText: string, fileName?: string): Partial
   const phoneMatch = normalizedText.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
   const phone = phoneMatch ? phoneMatch[0] : '';
 
-  // Name: first line before email/phone with 2-4 alphabetic words; drop trailing institution tokens
+  // Name: largest-font line on page 1 with 2-4 alphabetic words; strip institution tokens
   let fullName = '';
   let nameSource: 'detected' | 'from file name' | undefined = undefined;
 
-  const contactIndex = normalizedText.search(
-    /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/
-  );
-
-  if (contactIndex > 0) {
-    const textBefore = normalizedText.slice(0, contactIndex).trim();
-    const beforeLines = textBefore.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    for (const bLine of beforeLines) {
-      if (/\d|@|https?:\/\/|www\.|\.(com|org|net|edu|io|dev)\b/i.test(bLine)) continue;
-      if (isSectionHeadingOrKeyword(bLine)) continue;
-      const cand = cleanNameCandidate(bLine);
-      if (!cand || INSTITUTION_REG.test(cand)) continue;
-      const words = cand.split(/\s+/).filter(Boolean);
-      const isAllAlpha = words.every((w) => /^[a-zA-Z.'-]+$/.test(w));
-      if (words.length >= 2 && words.length <= 4 && isAllAlpha) {
-        fullName = cand;
-        nameSource = 'detected';
-        break;
+  if (extractedLines && extractedLines.length > 0) {
+    const page1Lines = extractedLines.filter((l) => l.page === 1);
+    let maxFont = -1;
+    for (const l of page1Lines) {
+      const lineText = l.leftText || l.text;
+      const cand = isValidNameCandidate(lineText);
+      if (cand.valid) {
+        if (l.fontSize > maxFont) {
+          maxFont = l.fontSize;
+          fullName = cand.name;
+          nameSource = 'detected';
+        }
       }
     }
   }
 
   if (!fullName) {
     for (const line of lines) {
-      if (/\d|@|https?:\/\/|www\.|\.(com|org|net|edu|io|dev)\b/i.test(line)) continue;
-      if (isSectionHeadingOrKeyword(line)) continue;
-      const cand = cleanNameCandidate(line);
-      if (!cand || INSTITUTION_REG.test(cand)) continue;
-      const words = cand.split(/\s+/).filter(Boolean);
-      const isAllAlpha = words.every((w) => /^[a-zA-Z.'-]+$/.test(w));
-      if (words.length >= 2 && words.length <= 4 && isAllAlpha) {
-        fullName = cand;
+      const cand = isValidNameCandidate(line);
+      if (cand.valid) {
+        fullName = cand.name;
         nameSource = 'detected';
         break;
       }
     }
   }
 
-  // Fallback: derive from uploaded file name if it yields 2-3 capitalized words
+  // Fallback: derive from uploaded file name if it yields 2-4 capitalized words
   if (!fullName && fileName) {
-    const cleanBase = fileName
-      .replace(/\.[^/.]+$/, '')
-      .replace(/\b(resume|cv)\b/gi, ' ')
-      .replace(/[\d_.-]+/g, ' ')
-      .trim();
-    const fileWords = cleanBase.split(/\s+/).filter(Boolean);
-    if (
-      fileWords.length >= 2 &&
-      fileWords.length <= 3 &&
-      fileWords.every((w) => /^[a-zA-Z]+$/.test(w))
-    ) {
-      fullName = fileWords
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-        .join(' ');
+    const humanized = humanizeFileName(fileName);
+    const fileWords = humanized.split(/\s+/).filter(Boolean);
+    if (fileWords.length >= 2 && fileWords.length <= 4 && fileWords.every((w) => /^[a-zA-Z]+$/.test(w))) {
+      fullName = humanized;
       nameSource = 'from file name';
     }
   }
 
-  // Location: remove name tokens, accept only "City, State/Country"
+  // Location: "City, State/Country" only, name tokens removed
   let location = '';
   const locationMatch = normalizedText.match(/\b([A-Z][a-zA-Z\s.-]+),\s*([A-Z]{2}|[A-Z][a-zA-Z\s.-]+)\b/);
   if (locationMatch) {
@@ -637,7 +786,8 @@ export function fallbackRegexParser(rawText: string, fileName?: string): Partial
       }
       locCand = locCand.replace(/^[,\s-]+|[,\s-]+$/g, '').trim();
     }
-    if (locCand && locCand.includes(',') && !INSTITUTION_REG.test(locCand) && !/company|resume/i.test(locCand)) {
+    locCand = locCand.replace(/\b\d+\b/g, '').replace(/^[,\s-]+|[,\s-]+$/g, '').trim();
+    if (locCand && locCand.includes(',') && !INSTITUTION_REG.test(locCand) && !/company|resume|experience|university|college/i.test(locCand)) {
       location = locCand;
     }
   }
@@ -685,28 +835,27 @@ export function fallbackRegexParser(rawText: string, fileName?: string): Partial
     }
   }
 
-  // Summary (no slice/truncation)
+  // Summary
   const summary = sectionBuckets.summary.length > 0 ? sectionBuckets.summary.join(' ').trim() : '';
 
-  // Experience: anchor entries on date ranges
+  // Experience: anchored on date ranges
   const experience = parseExperienceEntries(sectionBuckets.experience);
 
-  // Target title: line directly under name, else Objective/Title line, else recent experience title, else MERN/role keywords from summary, else empty
+  // Target title: line directly under name if not contact or skill list; else latest experience title; never a lone skill like "Python"
   let jobTitle = '';
   if (fullName) {
     const nameIdx = lines.findIndex((l) => l.includes(fullName));
     if (nameIdx !== -1 && nameIdx + 1 < lines.length) {
       const candidateLine = lines[nameIdx + 1].trim();
-      if (
-        candidateLine &&
-        !/\d|@|https?:\/\/|www\.|\.(com|org|net|edu|io|dev)\b/i.test(candidateLine) &&
-        !isSectionHeadingOrKeyword(candidateLine) &&
-        !INSTITUTION_REG.test(candidateLine)
-      ) {
-        const words = candidateLine.split(/\s+/).filter(Boolean);
-        if (words.length >= 1 && words.length <= 6 && candidateLine.length < 60) {
-          jobTitle = candidateLine;
-        }
+      const isContact = /\d|@|https?:\/\/|www\.|\.(com|org|net|edu|io|dev)\b/i.test(candidateLine);
+      const isHeading = isSectionHeadingOrKeyword(candidateLine);
+      const isInstitution = INSTITUTION_REG.test(candidateLine);
+      const isLocation = /^[A-Za-z\s.-]+,\s*[A-Za-z\s.-]+$/.test(candidateLine);
+      const isSkillList = candidateLine.includes(',') || candidateLine.includes('|') || candidateLine.includes(';') || candidateLine.split(/\s+/).length > 6;
+      const isSkill = isLoneSkill(candidateLine);
+
+      if (candidateLine && !isContact && !isHeading && !isInstitution && !isLocation && !isSkillList && !isSkill) {
+        jobTitle = candidateLine;
       }
     }
   }
@@ -715,25 +864,34 @@ export function fallbackRegexParser(rawText: string, fileName?: string): Partial
     for (const line of lines) {
       const match = line.match(/^(?:objective|target\s+title|role|title)\s*[:|-]\s*(.+)$/i);
       if (match && match[1].trim().length < 60) {
-        jobTitle = match[1].trim();
-        break;
+        const t = match[1].trim();
+        if (!isLoneSkill(t)) {
+          jobTitle = t;
+          break;
+        }
       }
     }
   }
 
   if (!jobTitle && experience.length > 0 && experience[0].position?.trim()) {
-    jobTitle = experience[0].position.trim();
+    const expPos = experience[0].position.trim();
+    if (!isLoneSkill(expPos)) {
+      jobTitle = expPos;
+    }
   }
 
   if (!jobTitle && summary) {
     const roleKeywordsMatch = summary.match(/\b(full\s*stack(?:\s+developer|\s+engineer)?|frontend(?:\s+developer|\s+engineer)?|backend(?:\s+developer|\s+engineer)?|software(?:\s+developer|\s+engineer)?|mern(?:\s+stack)?(?:\s+developer)?|data\s+scientist|machine\s+learning\s+engineer|devops\s+engineer|mobile\s+developer|ai\s+engineer)\b/i);
     if (roleKeywordsMatch) {
       const matched = roleKeywordsMatch[0].trim();
-      jobTitle = matched.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      const derived = matched.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+      if (!isLoneSkill(derived)) {
+        jobTitle = derived;
+      }
     }
   }
 
-  // Education parsing with degree keywords
+  // Education parsing
   const DEGREE_KEYWORD_REGEX = /\b(b\.?tech|b\.?e\.?|b\.?sc|m\.?sc|mba|bachelor(?:'s)?|master(?:'s)?|diploma|12th|10th|associate|ph\.?d|bba|bca|mca)\b/i;
   const education: any[] = [];
   if (sectionBuckets.education.length > 0) {
@@ -788,24 +946,39 @@ export function fallbackRegexParser(rawText: string, fileName?: string): Partial
     }
   }
 
-  // Skills parsing (no slice truncation)
+  // Skills parsing: ONLY from the Skills section
+  // Split on , | bullet ; newline, trim, dedupe, drop labels ending ":" and items > 4 words
   const skills: any[] = [];
   const extractedSkillItems: string[] = [];
+
   if (sectionBuckets.skills.length > 0) {
     for (const sLine of sectionBuckets.skills) {
-      const tokens = sLine.split(/[,|•·⁃◦*\-\n/]+/).map((s) => s.trim()).filter((s) => s.length > 1 && s.length < 35);
-      extractedSkillItems.push(...tokens);
+      const rawTokens = sLine.split(/[,|;•·⁃◦*\n\r]+/).map((s) => s.trim()).filter(Boolean);
+      for (let token of rawTokens) {
+        if (token.endsWith(':')) continue;
+        if (token.includes(':')) {
+          const parts = token.split(':');
+          token = parts.slice(1).join(':').trim();
+        }
+        token = token.replace(/^[•·⁃◦*-]\s*|[•·⁃◦*-]\s*$/g, '').trim();
+        if (!token) continue;
+        const words = token.split(/\s+/).filter(Boolean);
+        if (words.length > 4) continue;
+        if (token.length < 2 || token.length > 40) continue;
+        extractedSkillItems.push(token);
+      }
     }
   }
-  const commonTech = [
-    'JavaScript', 'TypeScript', 'React', 'Node.js', 'Python', 'Go', 'Docker',
-    'Kubernetes', 'AWS', 'GCP', 'SQL', 'PostgreSQL', 'MongoDB', 'Git', 'CI/CD',
-    'Machine Learning', 'PyTorch', 'REST', 'GraphQL'
-  ];
-  const detectedSkills = commonTech.filter((tech) =>
-    new RegExp(`\\b${tech}\\b`, 'i').test(rawText)
-  );
-  const finalSkills = Array.from(new Set([...extractedSkillItems, ...detectedSkills]));
+
+  const seenSkills = new Set<string>();
+  const finalSkills: string[] = [];
+  for (const sk of extractedSkillItems) {
+    const lower = sk.toLowerCase();
+    if (!seenSkills.has(lower)) {
+      seenSkills.add(lower);
+      finalSkills.push(sk);
+    }
+  }
 
   if (finalSkills.length > 0) {
     skills.push({
@@ -837,13 +1010,18 @@ export function fallbackRegexParser(rawText: string, fileName?: string): Partial
   };
 }
 
+/**
+ * Computes section and overall confidence from the final parsed resume object.
+ * 0% only if 0 entries. PersonalInfo = (name,email,phone,location,title)/5, name from file name counts 0.5.
+ * Overall never 100% if Check items exist.
+ */
 export function calculateConfidence(
   data: Partial<ResumeData>,
   hasCheckItems = false
 ): Record<string, number> {
   const confidence: Record<string, number> = {};
 
-  // PersonalInfo = (name, email, phone, location, title detected)/5, name from file name counts 0.5;
+  // PersonalInfo = (name, email, phone, location, title)/5; name from file name = 0.5
   const pi = data.personalInfo;
   let piDetectedCount = 0;
   if (pi?.fullName?.trim()) {
@@ -870,7 +1048,7 @@ export function calculateConfidence(
     confidence['summary'] = 50;
   }
 
-  // Experience = entries having title+company+(startDate OR endDate) / total entries; 0% if empty
+  // Experience: ratio of entries having title+company+(startDate OR endDate) / total entries; 0% if empty
   const exp = data.experience || [];
   if (exp.length === 0) {
     confidence['experience'] = 0;
@@ -881,7 +1059,7 @@ export function calculateConfidence(
     confidence['experience'] = Math.round((valid / exp.length) * 100);
   }
 
-  // Education = entries with degree+school / total; 0% if empty
+  // Education: entries with degree+school / total; 0% if empty
   const edu = data.education || [];
   if (edu.length === 0) {
     confidence['education'] = 0;
@@ -890,7 +1068,7 @@ export function calculateConfidence(
     confidence['education'] = Math.round((valid / edu.length) * 100);
   }
 
-  // Skills = min(count/8, 1); 0% if empty
+  // Skills: min(count/8, 1); 0% if empty
   const totalSkills = data.skills?.reduce((acc, c) => acc + (c.skills?.length || 0), 0) || 0;
   if (totalSkills === 0) {
     confidence['skills'] = 0;
@@ -898,7 +1076,7 @@ export function calculateConfidence(
     confidence['skills'] = Math.round(Math.min(totalSkills / 8, 1) * 100);
   }
 
-  // Projects = entries with title+bullet / total; 0% if empty
+  // Projects: entries with title+bullet / total; 0% if empty
   const projs = data.projects || [];
   if (projs.length === 0) {
     confidence['projects'] = 0;
@@ -909,7 +1087,7 @@ export function calculateConfidence(
     confidence['projects'] = Math.round((valid / projs.length) * 100);
   }
 
-  // Overall: average of sections present in the resume. Never show 100% if the Check list has any items.
+  // Overall: average of sections present in the resume. Never show 100% if any Check item exists.
   const presentScores: number[] = [];
   if (data.personalInfo && Object.values(data.personalInfo).some(Boolean)) presentScores.push(confidence['personalInfo']);
   if (data.summary?.trim()) presentScores.push(confidence['summary']);
@@ -934,7 +1112,7 @@ export async function parseAndStructureResume(
   file: File,
   abortSignal?: AbortSignal
 ): Promise<ParsedResumeResult> {
-  const { rawText, method, jsonData } = await parseResumeFile(file);
+  const { rawText, method, jsonData, extractedLines } = await parseResumeFile(file);
 
   if (jsonData && jsonData.personalInfo) {
     const confidence = calculateConfidence(jsonData);
@@ -943,19 +1121,20 @@ export async function parseAndStructureResume(
       confidence,
       rawText,
       method,
-      isAiFallback: false,
     };
   }
 
-  const { data: structured, fallbackNotice, isAiFallback } = await structureResumeWithGemini(
+  const { data, fallbackNotice, isAiFallback } = await structureResumeWithGemini(
     rawText,
     abortSignal,
-    file.name
+    file.name,
+    extractedLines
   );
-  const confidence = calculateConfidence(structured);
+
+  const confidence = calculateConfidence(data);
 
   return {
-    data: structured,
+    data,
     confidence,
     rawText,
     method,

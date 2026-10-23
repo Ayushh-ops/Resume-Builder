@@ -1,4 +1,5 @@
 import type { ResumeData } from '../types/resume';
+import { calculateLiveATSScore } from './atsScorer';
 
 export interface ResumeIndexEntry {
   id: string;
@@ -82,6 +83,16 @@ export const initResumeStorage = (): ResumeIndexEntry[] => {
       }
     }
 
+    for (const entry of cleanIndex) {
+      if (entry.score === undefined) {
+        const data = getResume(entry.id);
+        if (data && !isResumeCompletelyEmpty(data)) {
+          entry.score = calculateLiveATSScore(data).score;
+          modified = true;
+        }
+      }
+    }
+
     if (modified) {
       localStorage.setItem('rc-index', JSON.stringify(cleanIndex));
     }
@@ -157,9 +168,23 @@ export const saveResume = (
   }
 };
 
+export function humanizeFileName(fileName?: string): string {
+  if (!fileName) return '';
+  let name = fileName.replace(/\.[^/.]+$/, '');
+  name = name.replace(/\b(resume|cv)\b/gi, ' ');
+  name = name.replace(/[_\-.]+/g, ' ').trim();
+  if (!name) return '';
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
 export const createResume = (
   initialData?: Partial<ResumeData>,
-  name?: string
+  name?: string,
+  score?: number
 ): string => {
   const id = 'res_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
   const fullData: ResumeData = {
@@ -182,7 +207,8 @@ export const createResume = (
     fullData.personalInfo.fullName?.trim() ||
     'Untitled resume';
 
-  saveResume(id, fullData, resolvedName);
+  const computedScore = score !== undefined ? score : calculateLiveATSScore(fullData).score;
+  saveResume(id, fullData, resolvedName, computedScore);
   setActiveResumeId(id);
   return id;
 };
