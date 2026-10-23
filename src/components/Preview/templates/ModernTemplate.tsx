@@ -146,7 +146,9 @@ export const ModernTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
                 <div key={edu.id || idx}>
                   <div className="flex items-baseline justify-between text-xs font-bold text-slate-900">
                     <span>{edu.institution}</span>
-                    <span className="text-[11px] font-normal text-slate-500">{edu.endDate}</span>
+                    <span className="text-[11px] font-normal text-slate-500">
+                      {edu.startDate && edu.endDate ? `${edu.startDate} – ${edu.endDate}` : edu.endDate || edu.startDate}
+                    </span>
                   </div>
                   <div className="flex items-baseline justify-between text-xs text-slate-700">
                     <span>

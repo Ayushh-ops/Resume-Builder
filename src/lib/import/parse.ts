@@ -611,12 +611,19 @@ export function parseProjects(projLines: Line[]): ResumeData['projects'] {
       link = 'Live Demo';
     }
 
-    // Name is the header text before the URL or dash
-    let name = headerText.replace(URL_REGEX, '').replace(/live\s+demo/i, '').trim();
-    if (name.includes('—')) {
-      name = name.split('—')[0].trim();
-    } else if (name.includes('-')) {
-      name = name.split('-')[0].trim();
+    // Name is the header text before the URL or dash; subtitle/description is after the dash
+    let cleanHeader = headerText.replace(URL_REGEX, '').replace(/live\s+demo/i, '').trim();
+    let name = cleanHeader;
+    let description = '';
+
+    if (cleanHeader.includes('—')) {
+      const parts = cleanHeader.split('—').map((s) => s.trim());
+      name = parts[0];
+      description = parts.slice(1).join(' — ');
+    } else if (cleanHeader.includes(' - ')) {
+      const parts = cleanHeader.split(' - ').map((s) => s.trim());
+      name = parts[0];
+      description = parts.slice(1).join(' - ');
     }
 
     // Technologies
@@ -632,7 +639,7 @@ export function parseProjects(projLines: Line[]): ResumeData['projects'] {
     projects.push({
       id: `proj-${Date.now()}-${p}`,
       name: name || `Project ${p + 1}`,
-      description: '',
+      description: description || '',
       technologies,
       link,
       githubLink: '',

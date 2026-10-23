@@ -102,7 +102,9 @@ export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
                   <div key={edu.id || idx} className="text-xs">
                     <p className="font-bold text-slate-900">{edu.institution}</p>
                     <p className="text-[11px] text-slate-700">{edu.degree} {edu.grade ? `(${edu.grade})` : ''}</p>
-                    <p className="text-[10px] text-slate-400">{edu.endDate}</p>
+                    <p className="text-[10px] text-slate-400">
+                      {edu.startDate && edu.endDate ? `${edu.startDate} – ${edu.endDate}` : edu.endDate || edu.startDate}
+                    </p>
                   </div>
                 ))}
               </div>

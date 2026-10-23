@@ -129,7 +129,9 @@ export const MinimalistTemplate: React.FC<TemplateProps> = ({ data }) => {
                     <span className="font-bold text-slate-900">{edu.institution}</span>
                     <span className="text-slate-600 text-[11px]"> — {edu.degree} {edu.fieldOfStudy ? `in ${edu.fieldOfStudy}` : ''} {edu.grade ? `(${edu.grade})` : ''}</span>
                   </div>
-                  <span className="text-[10px] text-slate-500 font-mono">{edu.endDate}</span>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {edu.startDate && edu.endDate ? `${edu.startDate} – ${edu.endDate}` : edu.endDate || edu.startDate}
+                  </span>
                 </div>
               ))}
             </div>

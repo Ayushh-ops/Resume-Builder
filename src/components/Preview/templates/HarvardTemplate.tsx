@@ -69,7 +69,9 @@ export const HarvardTemplate: React.FC<TemplateProps> = ({ data }) => {
                 <div key={edu.id || idx}>
                   <div className="flex justify-between items-baseline text-xs font-bold text-black">
                     <span>{edu.institution}</span>
-                    <span className="text-[11px] font-normal">{edu.endDate}</span>
+                    <span className="text-[11px] font-normal">
+                      {edu.startDate && edu.endDate ? `${edu.startDate} – ${edu.endDate}` : edu.endDate || edu.startDate}
+                    </span>
                   </div>
                   <div className="flex justify-between items-baseline text-xs text-neutral-800">
                     <span className="italic">

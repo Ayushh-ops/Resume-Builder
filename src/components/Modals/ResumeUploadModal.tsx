@@ -7,7 +7,6 @@ import {
   RefreshCw,
   FileCode,
   FileCheck,
-  Sparkles,
   ArrowRight,
 } from 'lucide-react';
 import { Modal } from '../common/Modal';
@@ -45,14 +44,11 @@ export const getChecklistItems = (data: Partial<ResumeData>): ChecklistItem[] =>
     });
   }
   if (!data.personalInfo?.jobTitle?.trim()) {
-    const suggestedTitle =
-      (data.personalInfo as any)?.suggestedJobTitle ||
-      data.experience?.find((e) => e.position?.trim())?.position ||
-      (data.summary?.match(/\b([A-Za-z\s]+(?:Developer|Engineer|Analyst|Scientist|Architect|Manager))\b/i)?.[1]?.trim());
+    const suggestedTitle = data.experience?.[0]?.position?.trim() || undefined;
 
     items.push({
       label: 'Target title not in your file (optional)',
-      hint: 'Target title is required for ATS matching and keyword suggestions',
+      hint: 'Add one for job matching, or use the suggestion below.',
       section: 'personal',
       fieldId: 'personalInfo.jobTitle',
       suggestion: suggestedTitle ? `Use: ${suggestedTitle}` : undefined,
@@ -267,7 +263,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Upload resume"
-      subtitle="Import a PDF, Word, JSON or text file"
+      subtitle={step === 'parsing' ? 'Reading your file locally.' : 'Import a PDF, Word, JSON or text file'}
       icon={<Upload className="w-4 h-4 text-ink/70" strokeWidth={1.5} />}
       maxWidth="max-w-2xl"
       footer={
@@ -309,23 +305,13 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
             <span className="text-xs text-ink/50 tabular-nums">
               {elapsedSeconds}s elapsed
             </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="btn-outline h-8 px-3 text-xs cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => currentFile && handleFileProcess(currentFile)}
-                className="btn-outline h-8 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Retry</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="btn-outline h-8 px-3 text-xs cursor-pointer"
+            >
+              Cancel
+            </button>
           </div>
         ) : step === 'error' ? (
           <div className="flex items-center justify-end gap-2 w-full">
@@ -407,23 +393,20 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
         {/* STEP 2: PARSING PROGRESS */}
         {step === 'parsing' && (
           <div className="py-8 px-4 flex flex-col items-center justify-center space-y-6">
-            <div className="relative">
-              <div className="w-16 h-16 rounded-full bg-brand-50 flex items-center justify-center text-brand-600">
-                <RefreshCw className="w-8 h-8 animate-spin" strokeWidth={1.75} />
-              </div>
-              <Sparkles className="w-5 h-5 text-amber-500 absolute -top-1 -right-1 animate-bounce" />
+            <div className="w-16 h-16 rounded-full bg-brand-50 flex items-center justify-center text-brand-600">
+              <RefreshCw className="w-8 h-8 animate-spin" strokeWidth={1.75} />
             </div>
 
             <div className="text-center space-y-1">
               <h3 className="text-base font-bold text-ink">Analyzing Your Resume</h3>
-              <p className="text-xs text-ink/50">Extracting and structuring your career achievements...</p>
+              <p className="text-xs text-ink/50">Reading your file locally.</p>
             </div>
 
             {/* 2 Step Visual Checklist */}
             <div className="w-full max-w-sm space-y-3 bg-muted/60 p-4 rounded-xl border border-line">
               <div className="flex items-center justify-between text-xs font-semibold">
                 <span className={parsingStage >= 1 ? 'text-ink' : 'text-ink/40'}>
-                  1. Reading & Decoding File
+                  1. Reading file
                 </span>
                 {parsingStage >= 2 ? (
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -434,7 +417,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
 
               <div className="flex items-center justify-between text-xs font-semibold">
                 <span className={parsingStage >= 2 ? 'text-ink' : 'text-ink/40'}>
-                  2. Extracting Text & Structuring Sections
+                  2. Extracting sections
                 </span>
                 {parsingStage >= 2 ? (
                   <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-normal">

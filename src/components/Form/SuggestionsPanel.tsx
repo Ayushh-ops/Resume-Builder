@@ -8,6 +8,7 @@ import {
   RefreshCw,
   AlertCircle,
   Lightbulb,
+  Copy,
 } from 'lucide-react';
 import type { ResumeData } from '../../types/resume';
 import { getResumeGuidance, type GuidanceItem } from '../../lib/guidance';
@@ -24,8 +25,10 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
   onApplyChange,
   onOpenSettings,
 }) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  // Collapsed by default
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiSuggestion, setAiSuggestion] = useState<{
@@ -38,17 +41,22 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
     bulletIdx?: number;
   } | null>(null);
 
+  const hasTargetTitle = Boolean(resumeData.personalInfo?.jobTitle?.trim());
+
   // Diagnostic guidance items from existing checks
   const guidanceItems = useMemo(() => {
     return getResumeGuidance(resumeData);
   }, [resumeData]);
 
   // Active suggestions with actionable before/after or skills
+  // Skills-coverage suggestion appears only when a target title exists
   const actionableSuggestions = useMemo(() => {
-    return guidanceItems.filter(
-      (item) => item.status === 'fix' && !dismissedIds.has(item.id) && (item.before || item.after || item.missingSkills?.length)
-    );
-  }, [guidanceItems, dismissedIds]);
+    return guidanceItems.filter((item) => {
+      if (item.status !== 'fix' || dismissedIds.has(item.id)) return false;
+      if (item.id === 'skills-coverage' && !hasTargetTitle) return false;
+      return Boolean(item.before || item.after || item.missingSkills?.length);
+    });
+  }, [guidanceItems, dismissedIds, hasTargetTitle]);
 
   const handleDismiss = (id: string) => {
     setDismissedIds((prev) => {
@@ -58,11 +66,20 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
     });
   };
 
+  const isTemplate = (text?: string) => Boolean(text && /\[[a-zA-Z0-9_\s%]+\]/.test(text));
+
+  const handleCopyTemplate = (id: string, text: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  };
+
   const handleApply = (item: GuidanceItem) => {
     const updated: ResumeData = JSON.parse(JSON.stringify(resumeData));
 
     if (item.section === 'experience' && item.before && item.after) {
-      // Find matching bullet across experience
       let replaced = false;
       for (const exp of updated.experience || []) {
         if (!exp.highlights) continue;
@@ -79,7 +96,6 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
         updated.experience[0].highlights[0] = item.after;
       }
     } else if (item.section === 'skills' && item.missingSkills && item.missingSkills.length > 0) {
-      // Add first missing skill to first category
       const skillToAdd = item.missingSkills[0];
       if (updated.skills && updated.skills.length > 0) {
         if (!updated.skills[0].skills.includes(skillToAdd)) {
@@ -112,7 +128,6 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
       return;
     }
 
-    // Pick first experience bullet or summary to improve
     let targetText = '';
     let targetType: 'bullet' | 'summary' = 'bullet';
     let expIdx = 0;
@@ -193,13 +208,10 @@ Current text:
   };
 
   const totalCount = actionableSuggestions.length + (aiSuggestion ? 1 : 0);
-  if (totalCount === 0 && !aiLoading && !aiError) {
-    return null;
-  }
 
   return (
-    <div className="card border border-line bg-card shadow-xs rounded-[10px] overflow-hidden mb-3">
-      {/* Collapsible Header */}
+    <div className="card border border-line bg-card shadow-xs rounded-[10px] overflow-hidden">
+      {/* Collapsible Header - single header line with plain text count, no pill badge */}
       <button
         type="button"
         onClick={() => setIsCollapsed(!isCollapsed)}
@@ -207,12 +219,9 @@ Current text:
       >
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-brand-600 shrink-0" strokeWidth={1.75} />
-          <span className="text-xs font-semibold text-ink">Suggestions</span>
-          {totalCount > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-brand-500/10 text-brand-600 border border-brand-500/20">
-              {totalCount}
-            </span>
-          )}
+          <span className="text-xs font-semibold text-ink">
+            Suggestions ({totalCount})
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-ink/50">Opt-in</span>
@@ -227,32 +236,39 @@ Current text:
       {/* Panel Body */}
       {!isCollapsed && (
         <div className="p-3 space-y-3 border-t border-line">
-          {/* AI Suggestion Card if available */}
+          {/* When no target title exists, show one muted line */}
+          {!hasTargetTitle && (
+            <p className="text-[11px] text-ink/50 italic py-0.5">
+              Add a target title to check skills
+            </p>
+          )}
+
+          {/* AI Suggestion Card if available (Neutral styling only) */}
           {aiSuggestion && (
-            <div className="p-3 bg-brand-50/40 dark:bg-brand-950/20 rounded-[8px] border border-brand-200 dark:border-brand-800/60 space-y-2">
+            <div className="p-3 bg-muted/20 rounded-[8px] border border-line space-y-2 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-brand-700 dark:text-brand-300 flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-ink flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                   {aiSuggestion.title}
                 </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-brand-100 dark:bg-brand-900 text-brand-800 dark:text-brand-200">
+                <span className="text-[10px] font-medium text-ink/60 border border-line px-1.5 py-0.5 rounded bg-muted/40">
                   AI Generated
                 </span>
               </div>
 
               <div className="space-y-1.5 text-xs">
-                <div className="p-2 rounded bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200/50 dark:border-rose-800/50">
-                  <span className="text-[10px] font-bold uppercase text-rose-700 dark:text-rose-300 block mb-0.5">
-                    Current Text
+                <div className="p-2.5 rounded-[6px] border border-line bg-muted/20 text-xs">
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-ink/50 block mb-1">
+                    Current
                   </span>
-                  <p className="text-slate-800 dark:text-slate-200">{aiSuggestion.before}</p>
+                  <p className="text-ink/80 text-xs leading-relaxed">{aiSuggestion.before}</p>
                 </div>
 
-                <div className="p-2 rounded bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-800/50">
-                  <span className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 block mb-0.5">
-                    Proposed Text
+                <div className="p-2.5 rounded-[6px] border border-line border-l-2 border-l-brand-600 bg-muted/20 text-xs pl-3">
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-brand-600 dark:text-brand-400 block mb-1">
+                    Proposed
                   </span>
-                  <p className="text-slate-800 dark:text-slate-200 font-medium">{aiSuggestion.after}</p>
+                  <p className="text-ink font-medium text-xs leading-relaxed">{aiSuggestion.after}</p>
                 </div>
               </div>
 
@@ -277,82 +293,122 @@ Current text:
             </div>
           )}
 
-          {/* Actionable Suggestions from Guidance */}
-          {actionableSuggestions.map((item) => (
-            <div
-              key={item.id}
-              className="p-3 bg-muted/30 rounded-[8px] border border-line space-y-2 text-xs"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                  <span className="font-semibold text-ink">{item.title}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleDismiss(item.id)}
-                  className="text-ink/40 hover:text-ink/80 transition cursor-pointer p-0.5"
-                  title="Dismiss suggestion"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
+          {/* Actionable Suggestions from Guidance (Neutral styling only) */}
+          {actionableSuggestions.map((item) => {
+            const isTemplateCard = isTemplate(item.after);
 
-              <p className="text-[11px] text-ink/70 leading-relaxed">{item.found}</p>
-
-              {/* Exact current text vs proposed text */}
-              {item.before && item.after && (
-                <div className="space-y-1 pt-1">
-                  <div className="p-2 rounded bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/40 dark:border-rose-800/40 text-[11px]">
-                    <span className="text-[10px] font-bold uppercase text-rose-700 dark:text-rose-300 block mb-0.5">
-                      Current Text
-                    </span>
-                    <p className="text-slate-800 dark:text-slate-200">{item.before}</p>
+            return (
+              <div
+                key={item.id}
+                className="p-3 bg-muted/20 rounded-[8px] border border-line space-y-2 text-xs"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span className="font-semibold text-ink">{item.title}</span>
                   </div>
-                  <div className="p-2 rounded bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/40 dark:border-emerald-800/40 text-[11px]">
-                    <span className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 block mb-0.5">
-                      Proposed Text
-                    </span>
-                    <p className="text-slate-800 dark:text-slate-200 font-medium">{item.after}</p>
+                  <button
+                    type="button"
+                    onClick={() => handleDismiss(item.id)}
+                    className="text-ink/40 hover:text-ink/80 transition cursor-pointer p-0.5"
+                    title="Dismiss suggestion"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-ink/70 leading-relaxed">{item.found}</p>
+
+                {/* Exact current text vs proposed text */}
+                {item.before && item.after && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="p-2.5 rounded-[6px] border border-line bg-muted/20 text-xs">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-ink/50 block mb-1">
+                        Current
+                      </span>
+                      <p className="text-ink/80 text-xs leading-relaxed">{item.before}</p>
+                    </div>
+                    <div className="p-2.5 rounded-[6px] border border-line border-l-2 border-l-brand-600 bg-muted/20 text-xs pl-3">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-brand-600 dark:text-brand-400 block mb-1">
+                        Proposed
+                      </span>
+                      <p className="text-ink font-medium text-xs leading-relaxed">{item.after}</p>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Skills addition case */}
-              {item.missingSkills && item.missingSkills.length > 0 && !item.before && (
-                <div className="p-2 rounded bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/40 dark:border-emerald-800/40 text-[11px]">
-                  <span className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300 block mb-0.5">
-                    Proposed Addition
-                  </span>
-                  <p className="text-slate-800 dark:text-slate-200 font-medium">
-                    Add skill: {item.missingSkills[0]}
-                  </p>
-                </div>
-              )}
+                {/* Skills addition case: "You may add if true" */}
+                {item.missingSkills && item.missingSkills.length > 0 && !item.before && (
+                  <div className="p-2.5 rounded-[6px] border border-line border-l-2 border-l-brand-600 bg-muted/20 text-xs pl-3">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-brand-600 dark:text-brand-400 block mb-1">
+                      Proposed Addition
+                    </span>
+                    <p className="text-ink text-xs">
+                      Add skill: <span className="font-semibold">{item.missingSkills[0]}</span>{' '}
+                      <span className="text-ink/60 font-normal">(You may add if true)</span>
+                    </p>
+                  </div>
+                )}
 
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleDismiss(item.id)}
-                  className="px-2 py-1 text-[11px] font-medium text-ink/60 hover:bg-muted rounded-[6px] transition cursor-pointer"
-                >
-                  Dismiss
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleApply(item)}
-                  className="btn-primary h-6 px-2.5 text-[11px] flex items-center gap-1 cursor-pointer"
-                >
-                  <Check className="w-3 h-3" />
-                  <span>Apply</span>
-                </button>
+                {/* Action buttons: Template cards only get Copy template + Dismiss; Non-templates get Apply + Dismiss */}
+                {isTemplateCard ? (
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[10px] font-medium text-ink/60 border border-line px-1.5 py-0.5 rounded bg-muted/40">
+                      Template
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleDismiss(item.id)}
+                        className="px-2 py-1 text-[11px] font-medium text-ink/60 hover:bg-muted rounded-[6px] transition cursor-pointer"
+                      >
+                        Dismiss
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyTemplate(item.id, item.after!)}
+                        className="btn-outline h-6 px-2.5 text-[11px] flex items-center gap-1 cursor-pointer"
+                      >
+                        {copiedId === item.id ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            <span className="text-emerald-600 font-semibold">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy template</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleDismiss(item.id)}
+                      className="px-2 py-1 text-[11px] font-medium text-ink/60 hover:bg-muted rounded-[6px] transition cursor-pointer"
+                    >
+                      Dismiss
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApply(item)}
+                      className="btn-primary h-6 px-2.5 text-[11px] flex items-center gap-1 cursor-pointer"
+                    >
+                      <Check className="w-3 h-3" />
+                      <span>Apply</span>
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {/* AI Error if any */}
           {aiError && (
-            <div className="p-2.5 rounded-[8px] bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 flex items-start gap-2 text-xs text-amber-800 dark:text-amber-200">
+            <div className="p-2.5 rounded-[8px] bg-muted/40 border border-line flex items-start gap-2 text-xs text-ink/80">
               <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <span>{aiError}</span>
@@ -369,7 +425,7 @@ Current text:
               <button
                 type="button"
                 onClick={() => setAiError(null)}
-                className="text-amber-600 hover:text-amber-800 cursor-pointer"
+                className="text-ink/50 hover:text-ink cursor-pointer"
               >
                 <X className="w-3 h-3" />
               </button>

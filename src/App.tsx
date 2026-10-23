@@ -1709,13 +1709,6 @@ export const App: React.FC = () => {
               {/* Completeness Bar */}
               <CompletenessBar data={resumeData} />
 
-              {/* Opt-in Suggestions Panel */}
-              <SuggestionsPanel
-                resumeData={resumeData}
-                onApplyChange={(updated) => pushHistory(updated)}
-                onOpenSettings={() => setIsApiKeyModalOpen(true)}
-              />
-
               {/* Section Nav */}
               <SectionNav onOpenSection={handleOpenSection} />
 
@@ -1723,6 +1716,13 @@ export const App: React.FC = () => {
               <div className="space-y-3">
                 {sectionOrder.map((secId) => renderSectionItem(secId))}
               </div>
+
+              {/* Opt-in Suggestions Panel (placed below form sections) */}
+              <SuggestionsPanel
+                resumeData={resumeData}
+                onApplyChange={(updated) => pushHistory(updated)}
+                onOpenSettings={() => setIsApiKeyModalOpen(true)}
+              />
             </div>
 
             {/* Right: Live Preview */}

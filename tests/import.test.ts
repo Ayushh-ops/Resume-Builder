@@ -647,4 +647,59 @@ describe('Resume Importer Rebuild Tests', () => {
       expect(count, `Section heading "${h}" must render exactly once in MinimalistTemplate, but rendered ${count} times`).toBe(1);
     }
   });
+
+  it('generic fidelity test: every token from debug/raw-lines.txt appears in the final resume data and education dates are complete', async () => {
+    const lines = await extractLinesFromPdf(pdfBuffer);
+    const rawText = lines.map((l) => l.text).join('\n');
+    const parsed = fallbackRegexParser(rawText, 'resume.pdf', lines);
+
+    // 1. Assert education dates
+    expect(parsed.education).toBeDefined();
+    expect(parsed.education!.length).toBeGreaterThan(0);
+    expect(parsed.education![0].startDate).toBe('Jan 2024');
+    expect(parsed.education![0].endDate).toBe('Jan 2028');
+
+    // 2. Collect all text from parsed resume data
+    const parsedStrings: string[] = [];
+    function collect(obj: any, key?: string) {
+      if (!obj) return;
+      if (key === 'id') return;
+      if (typeof obj === 'string') {
+        parsedStrings.push(obj);
+      } else if (Array.isArray(obj)) {
+        obj.forEach((item) => collect(item));
+      } else if (typeof obj === 'object') {
+        for (const [k, v] of Object.entries(obj)) {
+          collect(v, k);
+        }
+      }
+    }
+    collect(parsed);
+    const allParsedTextLower = parsedStrings.join(' ').toLowerCase();
+
+    // 3. Extract tokens from debug/raw-lines.txt
+    const rawLinesStripped = rawLinesContent
+      .split('\n')
+      .map((l) => l.replace(/^\[p\d+\s+y=[\d.]+\]\s*/, '').trim())
+      .filter(Boolean);
+
+    const missingTokens: string[] = [];
+    for (const line of rawLinesStripped) {
+      const tokens = line
+        .split(/\s+/)
+        .map((t) => t.replace(/^[•·⁃◦*|–—,;:]+|[|–—,;:]+$/g, ''))
+        .filter((t) => t.length > 0);
+      for (const t of tokens) {
+        if (t === '•' || t === '|' || t === '—' || t === '–') continue;
+        if (!allParsedTextLower.includes(t.toLowerCase())) {
+          missingTokens.push(t);
+        }
+      }
+    }
+
+    if (missingTokens.length > 0) {
+      console.error('Missing tokens from final resume data:', Array.from(new Set(missingTokens)));
+    }
+    expect(Array.from(new Set(missingTokens))).toEqual([]);
+  });
 });
