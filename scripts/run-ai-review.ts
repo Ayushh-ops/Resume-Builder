@@ -3,6 +3,17 @@ import * as path from 'path';
 import { extractLinesFromPdf } from '../src/lib/import/extract';
 import { fallbackRegexParser } from '../src/services/resumeParser';
 import { reviewResumeWithAI } from '../src/services/aiReview';
+import { setSelectedModel } from '../src/lib/gemini';
+
+if (!globalThis.localStorage || typeof globalThis.localStorage.getItem !== 'function') {
+  const store = new Map<string, string>();
+  (globalThis as any).localStorage = {
+    getItem: (k: string) => store.get(k) || null,
+    setItem: (k: string, v: string) => store.set(k, String(v)),
+    removeItem: (k: string) => store.delete(k),
+    clear: () => store.clear(),
+  };
+}
 
 function loadEnvKey(): string {
   const envPath = path.resolve(process.cwd(), '.env');
@@ -32,6 +43,7 @@ async function main() {
   }
 
   process.env.VITE_GEMINI_API_KEY = key;
+  setSelectedModel('gemini-3.5-flash-lite');
 
   console.log('1. Loading and parsing ./resume.pdf...');
   const pdfBuffer = fs.readFileSync(path.resolve(process.cwd(), 'resume.pdf'));

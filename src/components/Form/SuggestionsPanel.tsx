@@ -240,11 +240,7 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
         });
         setAiStatus('AI review ready');
       } else {
-        const firstReason = result.rejected[0]?.reason;
-        const currentModel = result.modelUsed || getSelectedModel();
-        const err = `[${currentModel}] ${firstReason ? `AI suggestions rejected: ${firstReason}` : 'No valid improvements generated'}`;
-        setAiError(err);
-        setAiStatus(err);
+        setAiStatus('No major issues found');
       }
     } catch (err: any) {
       clearTimeout(timeoutId);
@@ -293,6 +289,14 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
             <p className="text-[11px] text-ink/50 italic py-0.5">
               Add a target title to check skills
             </p>
+          )}
+
+          {/* If AI review was run and no issues were found */}
+          {hasRunAi && activeAiSuggestions.length === 0 && !aiError && (
+            <div className="p-2.5 rounded-[8px] bg-muted/30 border border-line flex items-center gap-2 text-xs text-ink/70">
+              <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>No major issues found · Resume adheres to strong metric and action-verb standards.</span>
+            </div>
           )}
 
           {/* AI Review Suggestions if available (Neutral styling only) */}

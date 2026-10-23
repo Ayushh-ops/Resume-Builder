@@ -651,9 +651,9 @@ export async function generate(
     };
   }
 
-  // If 404, 410, or 503 (high demand): drop model from cache, re-pick automatically, then retry candidate models
+  // If 404, 410, 503, or 429 (quota exhausted): drop model from cache, re-pick automatically, then retry candidate models
   let attempts = 0;
-  while ((result.status === 404 || result.status === 410 || result.status === 503) && attempts < 3) {
+  while ((result.status === 404 || result.status === 410 || result.status === 503 || result.status === 429) && attempts < 3) {
     attempts++;
     console.warn(`[Gemini REST] model ${currentModel} returned ${result.status}, re-picking dynamically (attempt ${attempts})...`);
     clearCachedModels();

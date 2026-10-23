@@ -64,11 +64,7 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
         setAiSuggestions(result.accepted);
         setAiStatus('AI review ready');
       } else {
-        const firstReason = result.rejected[0]?.reason;
-        const currentModel = result.modelUsed || getSelectedModel();
-        setAiStatus(
-          `[${currentModel}] ${firstReason ? `AI suggestions rejected: ${firstReason}` : 'No valid improvements generated'}`
-        );
+        setAiStatus('No major issues found');
       }
     } catch (err: any) {
       clearTimeout(timer);

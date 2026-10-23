@@ -200,18 +200,71 @@ describe('Gemini Resilience & Fallback Tests', () => {
 describe('AI Review Validator Unit Tests', () => {
   const dummyResume: any = {
     personalInfo: { fullName: 'Sachin Verma', jobTitle: 'Data Analyst Intern' },
-    summary: 'Data Analyst Intern with proven experience in Python, SQL, and predictive machine learning models.',
+    summary: 'Data Analyst Intern with experience in Python, SQL, and predictive machine learning models across 1,000+ records.',
+    education: [
+      {
+        institution: 'Chandigarh University',
+        degree: 'Bachelor of Engineering',
+        startDate: 'Jan 2024',
+        endDate: 'Jan 2028',
+        gpa: '8.4',
+      },
+    ],
     experience: [
       {
         company: 'Unified Mentor',
         position: 'Data Analyst Intern',
         startDate: 'Jan 2024',
         endDate: 'Jan 2028',
-        highlights: ['Developed predictive machine learning models reducing processing time by 20%.'],
+        highlights: ['Developed predictive machine learning models reducing processing time by 20% across 10,000+ user interactions.'],
       },
     ],
     skills: [{ name: 'Data Analytics', skills: ['Python', 'SQL', 'Tableau'] }],
   };
+
+  it('rejects suggestions with missing or invalid issue type', async () => {
+    const { validateAIReviewSuggestion } = await import('../src/services/aiReview');
+    const resultMissing = validateAIReviewSuggestion(
+      {
+        section: 'experience',
+        targetType: 'bullet',
+        before: 'Old text',
+        after: 'Optimized data pipeline with Python.',
+      },
+      dummyResume
+    );
+    expect(resultMissing.valid).toBe(false);
+    expect(resultMissing.reason).toMatch(/missing or invalid issue type/i);
+
+    const resultInvalid = validateAIReviewSuggestion(
+      {
+        section: 'experience',
+        targetType: 'bullet',
+        before: 'Old text',
+        after: 'Optimized data pipeline with Python.',
+        issue: 'random_invalid' as any,
+      },
+      dummyResume
+    );
+    expect(resultInvalid.valid).toBe(false);
+    expect(resultInvalid.reason).toMatch(/missing or invalid issue type/i);
+  });
+
+  it('rejects near-synonym swaps (e.g. Built -> Constructed)', async () => {
+    const { validateAIReviewSuggestion } = await import('../src/services/aiReview');
+    const result = validateAIReviewSuggestion(
+      {
+        section: 'experience',
+        targetType: 'bullet',
+        before: 'Built automated reporting pipeline using Python.',
+        after: 'Constructed automated reporting pipeline using Python.',
+        issue: 'weak_verb',
+      },
+      dummyResume
+    );
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/near-synonym swap/i);
+  });
 
   it('rejects suggestions containing placeholders like [X] or [Metric]', async () => {
     const { validateAIReviewSuggestion } = await import('../src/services/aiReview');
@@ -221,6 +274,7 @@ describe('AI Review Validator Unit Tests', () => {
         targetType: 'bullet',
         before: 'Old text',
         after: 'Architected pipeline resulting in [X]% improvement in [Metric].',
+        issue: 'vague',
       },
       dummyResume
     );
@@ -236,6 +290,7 @@ describe('AI Review Validator Unit Tests', () => {
         targetType: 'bullet',
         before: 'Old text',
         after: 'Completed multi-million enterprise migration project in 2019.',
+        issue: 'vague',
       },
       dummyResume
     );
@@ -251,11 +306,12 @@ describe('AI Review Validator Unit Tests', () => {
         targetType: 'summary',
         before: dummyResume.summary,
         after: 'Performance-driven MERN Stack Developer and Data Analyst with proven experience. Proven track record delivering machine learning models.',
+        issue: 'weak_verb',
       },
       dummyResume
     );
     expect(result.valid).toBe(false);
-    expect(result.reason).toMatch(/fluff|role upgrade|standalone role claim/i);
+    expect(result.reason).toMatch(/fluff|role upgrade|standalone role claim|seniority dropped/i);
   });
 
   it('rejects invented technology or tool not present in the resume', async () => {
@@ -266,6 +322,7 @@ describe('AI Review Validator Unit Tests', () => {
         targetType: 'bullet',
         before: dummyResume.experience[0].highlights[0],
         after: 'Deployed predictive machine learning models using Docker, Kubernetes, and AWS infrastructure.',
+        issue: 'vague',
       },
       dummyResume
     );
@@ -273,7 +330,7 @@ describe('AI Review Validator Unit Tests', () => {
     expect(result.reason).toMatch(/technology\/tool|not present/i);
   });
 
-  it('rejects invented number not present in the resume', async () => {
+  it('rejects invented number not present in the resume and prints the offending token', async () => {
     const { validateAIReviewSuggestion } = await import('../src/services/aiReview');
     const result = validateAIReviewSuggestion(
       {
@@ -281,11 +338,13 @@ describe('AI Review Validator Unit Tests', () => {
         targetType: 'bullet',
         before: dummyResume.experience[0].highlights[0],
         after: 'Developed predictive machine learning models reducing processing time by 45%.',
+        issue: 'no_metric',
       },
       dummyResume
     );
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/number \(45%?\)|not present in source resume/i);
+    expect(result.reason).toContain('45%');
   });
 
   it('rejects seniority inflation or dropping intern status (Intern -> Analyst)', async () => {
@@ -296,6 +355,7 @@ describe('AI Review Validator Unit Tests', () => {
         targetType: 'summary',
         before: 'Data Analyst Intern with proven experience in Python, SQL, and predictive machine learning models.',
         after: 'Data Analyst with proven experience in Python, SQL, and predictive machine learning models.',
+        issue: 'weak_verb',
       },
       dummyResume
     );
@@ -303,7 +363,22 @@ describe('AI Review Validator Unit Tests', () => {
     expect(result.reason).toMatch(/seniority dropped|role upgrade/i);
   });
 
-  it('accepts valid, truthful enhancements', async () => {
+  it('accepts faithful summary rewrite keeping "8.4", "10,000+", and "1,000+"', async () => {
+    const { validateAIReviewSuggestion } = await import('../src/services/aiReview');
+    const result = validateAIReviewSuggestion(
+      {
+        section: 'summary',
+        targetType: 'summary',
+        before: dummyResume.summary,
+        after: 'Data Analyst Intern maintaining an 8.4 CGPA and analyzing 1,000+ records and 10,000+ interactions using Python and SQL predictive workflows.',
+        issue: 'vague',
+      },
+      dummyResume
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts valid, truthful bullet enhancements', async () => {
     const { validateAIReviewSuggestion } = await import('../src/services/aiReview');
     const result = validateAIReviewSuggestion(
       {
@@ -311,6 +386,7 @@ describe('AI Review Validator Unit Tests', () => {
         targetType: 'bullet',
         before: 'Developed predictive machine learning models reducing processing time by 20%.',
         after: 'Engineered predictive machine learning models with Python and SQL, reducing data processing latency by 20%.',
+        issue: 'weak_verb',
       },
       dummyResume
     );
