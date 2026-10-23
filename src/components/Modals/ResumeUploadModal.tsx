@@ -121,7 +121,7 @@ type UploadStep = 'upload' | 'parsing' | 'review' | 'error';
 interface ResumeUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSaveAsNew: (data: Partial<ResumeData>, fileName?: string, firstProblemField?: string) => void;
+  onSaveAsNew: (data: Partial<ResumeData>, fileName?: string, firstProblemField?: string) => void | Promise<void>;
   onReplaceCurrent?: (data: Partial<ResumeData>) => void;
   canReplace?: boolean;
   initialFile?: File | null;
@@ -288,11 +288,10 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
             )}
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 const checkItems = getChecklistItems(parsedResult.data);
                 const firstField = checkItems[0]?.fieldId || checkItems[0]?.section;
-                onSaveAsNew(parsedResult.data, fileName, firstField);
-                onClose();
+                await onSaveAsNew(parsedResult.data, fileName, firstField);
               }}
               className="btn-primary h-8 px-3 text-xs flex items-center gap-1.5 cursor-pointer"
             >
@@ -463,9 +462,8 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
           const hasMissing = checkItems.length > 0;
           const displayConfidence = calculateConfidence(parsedResult.data, hasMissing);
 
-          const handleFixInEditor = (sec: string, fieldId?: string) => {
-            onSaveAsNew(parsedResult.data, fileName, fieldId || sec);
-            onClose();
+          const handleFixInEditor = async (sec: string, fieldId?: string) => {
+            await onSaveAsNew(parsedResult.data, fileName, fieldId || sec);
             if (onGoToSection) {
               onGoToSection(sec, fieldId);
             }

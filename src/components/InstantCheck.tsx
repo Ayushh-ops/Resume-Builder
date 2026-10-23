@@ -110,7 +110,7 @@ export const InstantCheck: React.FC<InstantCheckProps> = ({
           value={text}
           onChange={handleTextChange}
           placeholder="Paste resume text here, or click 'Try with a sample resume' above..."
-          className="w-full min-h-[160px] p-2.5 text-xs font-mono text-ink bg-canvas/60 border border-line rounded-[6px] focus:outline-none focus:border-ink/40 resize-y leading-relaxed"
+          className="w-full min-h-[160px] p-2.5 text-xs font-sans text-ink bg-canvas/60 border border-line rounded-[6px] focus:outline-none focus:border-ink/40 resize-y leading-relaxed"
         />
       </div>
 

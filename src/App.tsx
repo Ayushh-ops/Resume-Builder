@@ -731,7 +731,7 @@ export const App: React.FC = () => {
   };
 
   // 3. Upload handlers
-  const handleUploadSaveAsNew = (
+  const handleUploadSaveAsNew = async (
     importedData: Partial<ResumeData>,
     fileName?: string,
     firstProblemField?: string
@@ -763,12 +763,19 @@ export const App: React.FC = () => {
       const newId = createResume(fullData, resolvedName, score);
       justCreatedIdsRef.current.add(newId);
       setResumeIndex(getResumeIndex());
+      setResumeData(fullData);
+      setHistory([fullData]);
+      setHistoryIndex(0);
+      setActiveResumeId(newId);
 
-      closeModal(setIsUploadModalOpen);
+      // Close modal directly without triggering an asynchronous history.back() that cancels navigation
+      setIsUploadModalOpen(false);
+      setUploadedFileForModal(null);
 
       const path = `/editor/${newId}`;
       console.log(path);
       navigate(path);
+      setRoute({ type: 'editor', resumeId: newId });
       showToast('Imported and saved as new resume!', 'success');
       confetti({ particleCount: 70, spread: 80 });
 
@@ -1531,7 +1538,7 @@ export const App: React.FC = () => {
                             {entry.name}
                           </h3>
                         )}
-                        {entry.title?.trim() ? (
+                        {entry.title?.trim() && entry.title.trim().toLowerCase() !== entry.name.trim().toLowerCase() ? (
                           <p className="text-[11px] text-ink/60 truncate mt-0.5">
                             {entry.title}
                           </p>

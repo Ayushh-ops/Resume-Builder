@@ -4,7 +4,6 @@ export const CANDIDATE_MODELS = [
   'gemini-2.5-flash',
   'gemini-2.0-flash',
   'gemini-flash-latest',
-  'gemini-1.5-flash',
 ] as const;
 
 export type CandidateModel = (typeof CANDIDATE_MODELS)[number];
@@ -35,7 +34,7 @@ export function setKey(key: string): void {
 
 export function getSelectedModel(): string {
   const saved = localStorage.getItem(LOCAL_STORAGE_MODEL_KEY);
-  if (saved && CANDIDATE_MODELS.includes(saved as any)) {
+  if (saved && (CANDIDATE_MODELS as readonly string[]).includes(saved)) {
     return saved;
   }
   return CANDIDATE_MODELS[0];
@@ -46,15 +45,12 @@ export function setSelectedModel(model: string): void {
 }
 
 export interface GeminiModelInfo {
-  name: string; // e.g. "models/gemini-2.5-flash"
-  cleanName: string; // e.g. "gemini-2.5-flash"
+  name: string;
+  cleanName: string;
   displayName?: string;
   supportedGenerationMethods?: string[];
 }
 
-/**
- * Lists models using plain fetch with a dedicated 5s AbortController.
- */
 export async function listModels(apiKey?: string): Promise<GeminiModelInfo[]> {
   const key = apiKey || getKey();
   if (!key) {
@@ -119,9 +115,6 @@ export async function listModels(apiKey?: string): Promise<GeminiModelInfo[]> {
   }
 }
 
-/**
- * From the live list choose first existing of CANDIDATE_MODELS.
- */
 export async function pickModel(apiKey?: string, preferredModel?: string): Promise<{ picked: string; fallbackList: string[] }> {
   let liveModels: GeminiModelInfo[] = [];
   try {
@@ -209,16 +202,120 @@ export function formatGeminiError(
   return rawMessage || 'AI unavailable';
 }
 
+export const RESUME_DATA_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    personalInfo: {
+      type: 'OBJECT',
+      properties: {
+        fullName: { type: 'STRING' },
+        jobTitle: { type: 'STRING' },
+        email: { type: 'STRING' },
+        phone: { type: 'STRING' },
+        location: { type: 'STRING' },
+        website: { type: 'STRING' },
+        linkedin: { type: 'STRING' },
+        github: { type: 'STRING' },
+      },
+    },
+    summary: { type: 'STRING' },
+    experience: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          company: { type: 'STRING' },
+          position: { type: 'STRING' },
+          location: { type: 'STRING' },
+          startDate: { type: 'STRING' },
+          endDate: { type: 'STRING' },
+          current: { type: 'BOOLEAN' },
+          highlights: {
+            type: 'ARRAY',
+            items: { type: 'STRING' },
+          },
+        },
+      },
+    },
+    education: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          institution: { type: 'STRING' },
+          degree: { type: 'STRING' },
+          fieldOfStudy: { type: 'STRING' },
+          location: { type: 'STRING' },
+          startDate: { type: 'STRING' },
+          endDate: { type: 'STRING' },
+          grade: { type: 'STRING' },
+        },
+      },
+    },
+    skills: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' },
+          skills: {
+            type: 'ARRAY',
+            items: { type: 'STRING' },
+          },
+        },
+      },
+    },
+    projects: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' },
+          description: { type: 'STRING' },
+          technologies: {
+            type: 'ARRAY',
+            items: { type: 'STRING' },
+          },
+          link: { type: 'STRING' },
+          githubLink: { type: 'STRING' },
+          highlights: {
+            type: 'ARRAY',
+            items: { type: 'STRING' },
+          },
+        },
+      },
+    },
+    certifications: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' },
+          issuer: { type: 'STRING' },
+          date: { type: 'STRING' },
+        },
+      },
+    },
+  },
+};
+
 /**
  * Executes generateContent using plain REST fetch:
  * - Uses the model selected in Settings first.
- * - Call listModels only if the first generate returns 404, then pick first available of candidate list.
- * - generationConfig: responseMimeType: "application/json", temperature: 0.1, thinkingConfig: { thinkingBudget: 0 }.
- * - Timeout 40s for generate, 5s for listModels, separate controllers.
+ * - Call listModels only if the first generate returns 404, then pick first available of gemini-2.5-flash, gemini-2.0-flash, gemini-flash-latest.
+ * - generationConfig: responseMimeType: "application/json", responseSchema, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 }.
+ * - Timeout 40s for generate, 5s for listModels.
+ * - Logs request size, status, elapsed ms, first 300 chars of response/error body.
  */
 export async function generate(
   prompt: string,
-  options?: { apiKey?: string; preferredModel?: string; signal?: AbortSignal; responseMimeType?: string }
+  options?: {
+    apiKey?: string;
+    preferredModel?: string;
+    signal?: AbortSignal;
+    responseMimeType?: string;
+    responseSchema?: any;
+  }
 ): Promise<GenerateResult> {
   const key = options?.apiKey || getKey();
   if (!key) {
@@ -226,12 +323,12 @@ export async function generate(
     return { ok: false, status: 0, message: 'No API key set' };
   }
 
-  // 1. Initial model from settings or preferred option
   const initialModel = (options?.preferredModel || getSelectedModel() || CANDIDATE_MODELS[0]).replace(/^models\//, '');
   const triedModels: string[] = [initialModel];
 
-  // Helper to execute single generate call with 40s timeout
-  const executeGenerate = async (modelName: string): Promise<{ ok: boolean; status: number; text?: string; errorMsg?: string; isTimeout?: boolean }> => {
+  const executeGenerate = async (
+    modelName: string
+  ): Promise<{ ok: boolean; status: number; text?: string; errorMsg?: string; isTimeout?: boolean }> => {
     const controller = new AbortController();
     let isTimedOut = false;
     const timeoutId = setTimeout(() => {
@@ -249,6 +346,7 @@ export async function generate(
       }
     }
 
+    const startTime = Date.now();
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`;
       const payload: any = {
@@ -266,12 +364,19 @@ export async function generate(
         },
       };
 
+      if (options?.responseSchema) {
+        payload.generationConfig.responseSchema = options.responseSchema;
+      }
+
+      const bodyString = JSON.stringify(payload);
+      const requestSize = new Blob([bodyString]).size;
+
       const res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: bodyString,
         signal: controller.signal,
       });
 
@@ -280,20 +385,31 @@ export async function generate(
         externalSignal.removeEventListener('abort', abortListener);
       }
 
+      const elapsedMs = Date.now() - startTime;
+      const resText = await res.text();
+      const first300 = resText.slice(0, 300);
+
+      console.log(`[Gemini REST] model=${modelName} reqSize=${requestSize}b status=${res.status} elapsed=${elapsedMs}ms bodySnippet="${first300.replace(/\s+/g, ' ')}"`);
+
       if (!res.ok) {
         let errorMsg = res.statusText;
         try {
-          const errData = await res.json();
+          const errData = JSON.parse(resText);
           errorMsg = errData?.error?.message || errorMsg;
         } catch {}
-        console.error(`Gemini REST error (${res.status}) on model ${modelName}:`, errorMsg);
         return { ok: false, status: res.status, errorMsg };
       }
 
-      const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      let parsed: any;
+      try {
+        parsed = JSON.parse(resText);
+      } catch {
+        return { ok: false, status: 200, errorMsg: 'Invalid response JSON' };
+      }
+
+      const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (typeof text !== 'string') {
-        return { ok: false, status: 200, errorMsg: 'Invalid response' };
+        return { ok: false, status: 200, errorMsg: 'Invalid response content' };
       }
 
       return { ok: true, status: 200, text };
@@ -302,7 +418,8 @@ export async function generate(
       if (externalSignal) {
         externalSignal.removeEventListener('abort', abortListener);
       }
-      console.error(`Gemini generate exception on model ${modelName}:`, err);
+      const elapsedMs = Date.now() - startTime;
+      console.error(`[Gemini REST] exception on model=${modelName} elapsed=${elapsedMs}ms:`, err);
       if (isTimedOut || err?.name === 'AbortError') {
         return { ok: false, status: 408, isTimeout: true, errorMsg: 'AI timed out, used basic parsing' };
       }
@@ -312,7 +429,7 @@ export async function generate(
     }
   };
 
-  // Attempt with selected model first
+  // 1. Try initial model from settings
   const firstAttempt = await executeGenerate(initialModel);
   if (firstAttempt.ok && firstAttempt.text) {
     return {
@@ -331,7 +448,7 @@ export async function generate(
     };
   }
 
-  // If first attempt returned 404, call listModels and try first candidate available
+  // 2. Call listModels ONLY after a 404, and pick first available of gemini-2.5-flash, gemini-2.0-flash, gemini-flash-latest
   if (firstAttempt.status === 404) {
     try {
       const pickedInfo = await pickModel(key, initialModel);
