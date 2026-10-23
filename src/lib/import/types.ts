@@ -52,6 +52,8 @@ export interface SectionMap {
   awards: Line[];
   extracurricular: Line[];
   rawText: string;
+  detectedOrder?: string[];
+  detectedTitles?: Record<string, string>;
 }
 
 export interface ParsedImportResult {

@@ -82,6 +82,8 @@ export interface ResumeData {
   skills: SkillCategory[];
   certifications: CertificationItem[];
   customSections: CustomSection[];
+  sectionOrder?: string[];
+  sectionTitles?: Record<string, string>;
 }
 
 export type TemplateType = 'modern' | 'harvard' | 'minimalist' | 'creative';

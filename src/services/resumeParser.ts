@@ -129,16 +129,14 @@ export function fallbackRegexParser(
   const certifications = parseCertifications(sections.certifications);
   const customSections = parseCustomSections(sections);
 
-  // If personalInfo didn't detect target job title, fallback to latest experience title or summary
+  // Suggested target title for optional chip, but never written automatically to data
   if (!personalInfo.jobTitle) {
     if (experience.length > 0 && experience[0].position) {
-      personalInfo.jobTitle = experience[0].position;
-      (personalInfo as any).titleInferred = true;
+      (personalInfo as any).suggestedJobTitle = experience[0].position;
     } else if (summary) {
       const roleMatch = summary.match(/\b([A-Za-z\s]+(?:Developer|Engineer|Analyst|Scientist|Architect|Manager))\b/i);
       if (roleMatch) {
-        personalInfo.jobTitle = roleMatch[1].trim();
-        (personalInfo as any).titleInferred = true;
+        (personalInfo as any).suggestedJobTitle = roleMatch[1].trim();
       }
     }
   }
@@ -152,6 +150,8 @@ export function fallbackRegexParser(
     projects,
     certifications,
     customSections,
+    sectionOrder: sections.detectedOrder,
+    sectionTitles: sections.detectedTitles,
   };
 }
 
@@ -371,11 +371,12 @@ ${rawText}`;
 }
 
 /**
- * Main entry point: Parses and structures a resume file (combines extraction, parsing, AI fallback, confidence).
+ * Main entry point: Parses and structures a resume file deterministically (extract -> sections -> parse).
+ * Zero network requests during import; finishes in < 3s.
  */
 export async function parseAndStructureResume(
   file: File,
-  signal?: AbortSignal
+  _signal?: AbortSignal
 ): Promise<ParsedResumeResult> {
   const parseResult = await parseResumeFile(file);
 
@@ -391,25 +392,22 @@ export async function parseAndStructureResume(
     };
   }
 
-  const structureResult = await structureResumeWithGemini(
+  // Pure deterministic parsing path
+  const parsedData = fallbackRegexParser(
     parseResult.rawText,
-    signal,
     file.name,
     parseResult.extractedLines
   );
 
-  const { confidence, counts } = calculateConfidenceAndCounts(structureResult.data);
+  const { confidence, counts } = calculateConfidenceAndCounts(parsedData);
 
   return {
-    data: structureResult.data,
+    data: parsedData,
     confidence,
     counts,
     rawText: parseResult.rawText,
     lines: parseResult.extractedLines || [],
     method: parseResult.method,
-    fallbackNotice: structureResult.fallbackNotice,
-    isAiFallback: structureResult.isAiFallback,
-    modelUsed: structureResult.modelUsed,
   };
 }
 

@@ -43,6 +43,9 @@ export function matchSectionHeading(line: Line): CanonicalSectionKey | null {
 }
 
 export function groupLinesIntoSections(lines: Line[]): SectionMap {
+  const detectedOrder: string[] = [];
+  const detectedTitles: Record<string, string> = {};
+
   const map: SectionMap = {
     header: [],
     summary: [],
@@ -55,6 +58,8 @@ export function groupLinesIntoSections(lines: Line[]): SectionMap {
     awards: [],
     extracurricular: [],
     rawText: lines.map((l) => l.text).join('\n'),
+    detectedOrder,
+    detectedTitles,
   };
 
   if (lines.length === 0) return map;
@@ -67,6 +72,19 @@ export function groupLinesIntoSections(lines: Line[]): SectionMap {
 
     if (headingKey) {
       currentKey = headingKey;
+      const rawTitle = line.text.trim().replace(/[:\s]+$/, '');
+
+      // Normalize to standard section keys
+      let normKey = headingKey as string;
+      if (headingKey === 'work experience' || headingKey === 'employment') normKey = 'experience';
+      else if (headingKey === 'profile' || headingKey === 'objective') normKey = 'summary';
+      else if (headingKey === 'technical skills') normKey = 'skills';
+      else if (headingKey === 'activities') normKey = 'extracurricular';
+
+      if (!detectedOrder.includes(normKey)) {
+        detectedOrder.push(normKey);
+        detectedTitles[normKey] = rawTitle;
+      }
       // We do not add the heading line itself to the section content
       continue;
     }

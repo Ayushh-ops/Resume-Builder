@@ -23,6 +23,8 @@ export interface ChecklistItem {
   hint: string;
   section: string;
   fieldId?: string;
+  suggestion?: string;
+  suggestedValue?: string;
 }
 
 export const getChecklistItems = (data: Partial<ResumeData>): ChecklistItem[] => {
@@ -43,18 +45,18 @@ export const getChecklistItems = (data: Partial<ResumeData>): ChecklistItem[] =>
     });
   }
   if (!data.personalInfo?.jobTitle?.trim()) {
+    const suggestedTitle =
+      (data.personalInfo as any)?.suggestedJobTitle ||
+      data.experience?.find((e) => e.position?.trim())?.position ||
+      (data.summary?.match(/\b([A-Za-z\s]+(?:Developer|Engineer|Analyst|Scientist|Architect|Manager))\b/i)?.[1]?.trim());
+
     items.push({
-      label: 'Target role missing',
+      label: 'Target title not in your file (optional)',
       hint: 'Target title is required for ATS matching and keyword suggestions',
       section: 'personal',
       fieldId: 'personalInfo.jobTitle',
-    });
-  } else if ((data.personalInfo as any)?.titleInferred) {
-    items.push({
-      label: 'Target title inferred, please confirm',
-      hint: 'Target title was inferred from work experience or summary, please confirm',
-      section: 'personal',
-      fieldId: 'personalInfo.jobTitle',
+      suggestion: suggestedTitle ? `Use: ${suggestedTitle}` : undefined,
+      suggestedValue: suggestedTitle,
     });
   }
   if (!data.personalInfo?.email?.trim()) {
@@ -144,13 +146,12 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
   canReplace = false,
   initialFile = null,
   onGoToSection,
-  onOpenSettings,
 }) => {
   const [step, setStep] = useState<UploadStep>('upload');
   const [dragActive, setDragActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [fileName, setFileName] = useState('');
-  const [parsingStage, setParsingStage] = useState<1 | 2 | 3>(1);
+  const [parsingStage, setParsingStage] = useState<1 | 2>(1);
   const [parsedResult, setParsedResult] = useState<ParsedResumeResult | null>(null);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -218,19 +219,17 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
     abortControllerRef.current = controller;
 
     try {
-      const timer1 = setTimeout(() => setParsingStage(2), 600);
-      const timer2 = setTimeout(() => setParsingStage(3), 1400);
+      const timer = setTimeout(() => setParsingStage(2), 350);
 
       const result = await parseAndStructureResume(file, controller.signal);
 
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      setParsingStage(3);
+      clearTimeout(timer);
+      setParsingStage(2);
 
       setTimeout(() => {
         setParsedResult(result);
         setStep('review');
-      }, 400);
+      }, 300);
     } catch (err: any) {
       console.error('File parsing failed:', err);
       setErrorMessage(err.message || 'Failed to parse resume document. Please try again or paste in text.');
@@ -420,7 +419,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
               <p className="text-xs text-ink/50">Extracting and structuring your career achievements...</p>
             </div>
 
-            {/* 3 Step Visual Checklist */}
+            {/* 2 Step Visual Checklist */}
             <div className="w-full max-w-sm space-y-3 bg-muted/60 p-4 rounded-xl border border-line">
               <div className="flex items-center justify-between text-xs font-semibold">
                 <span className={parsingStage >= 1 ? 'text-ink' : 'text-ink/40'}>
@@ -435,25 +434,11 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
 
               <div className="flex items-center justify-between text-xs font-semibold">
                 <span className={parsingStage >= 2 ? 'text-ink' : 'text-ink/40'}>
-                  2. Extracting Text & Sections
+                  2. Extracting Text & Structuring Sections
                 </span>
-                {parsingStage >= 3 ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                ) : parsingStage === 2 ? (
-                  <RefreshCw className="w-3.5 h-3.5 text-brand-600 animate-spin" />
-                ) : (
-                  <span className="text-[10px] text-ink/30">Pending</span>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between text-xs font-semibold">
-                <span className={parsingStage >= 3 ? 'text-ink' : 'text-ink/40'}>
-                  3. AI Field Structuring & Polish
-                </span>
-                {parsingStage >= 3 ? (
-                  <div className="flex items-center gap-1.5 text-ink/60 text-[11px] font-normal">
-                    <RefreshCw className="w-3.5 h-3.5 text-brand-600 animate-spin" />
-                    <span className="tabular-nums">{elapsedSeconds}s</span>
+                {parsingStage >= 2 ? (
+                  <div className="flex items-center gap-1.5 text-emerald-600 text-xs font-normal">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   </div>
                 ) : (
                   <span className="text-[10px] text-ink/30">Pending</span>
@@ -478,45 +463,7 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
 
           return (
             <div className="space-y-4">
-              {parsedResult.fallbackNotice ? (
-                <div className="p-3 bg-muted border border-line rounded-[6px] flex items-center justify-between gap-2.5 text-xs text-ink/80">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                    <div className="min-w-0">
-                      <span className="font-semibold text-ink block">{parsedResult.fallbackNotice}</span>
-                      <p className="text-[11px] text-ink/60 mt-0.5">
-                        {parsedResult.fallbackNotice === 'No API key set' ? (
-                          <>
-                            Add a Gemini key in{' '}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onClose();
-                                onOpenSettings?.();
-                              }}
-                              className="text-brand-600 underline font-medium hover:text-brand-700 cursor-pointer"
-                            >
-                              Settings
-                            </button>{' '}
-                            for AI parsing.
-                          </>
-                        ) : (
-                          'Review detected fields below and refine them in the editor.'
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                  {currentFile && (
-                    <button
-                      type="button"
-                      onClick={() => handleFileProcess(currentFile)}
-                      className="btn-outline h-7 px-2.5 text-[11px] font-medium shrink-0 cursor-pointer"
-                    >
-                      Retry
-                    </button>
-                  )}
-                </div>
-              ) : hasMissing ? (
+              {hasMissing ? (
                 <div className="p-3 bg-muted border border-line rounded-[6px] flex items-center gap-2.5 text-xs text-ink">
                   <AlertCircle className="w-4 h-4 text-ink/50 shrink-0" />
                   <div className="flex-1">
@@ -554,6 +501,34 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
                         <div className="min-w-0">
                           <span className="font-semibold text-ink block">{item.label}</span>
                           <span className="text-[11px] text-ink/60 truncate block mt-0.5">{item.hint}</span>
+                          {item.suggestion && item.suggestedValue && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (item.fieldId === 'personalInfo.jobTitle' && parsedResult) {
+                                  const updated = {
+                                    ...parsedResult.data,
+                                    personalInfo: {
+                                      fullName: parsedResult.data.personalInfo?.fullName || '',
+                                      email: parsedResult.data.personalInfo?.email || '',
+                                      phone: parsedResult.data.personalInfo?.phone || '',
+                                      location: parsedResult.data.personalInfo?.location || '',
+                                      website: parsedResult.data.personalInfo?.website || '',
+                                      linkedin: parsedResult.data.personalInfo?.linkedin || '',
+                                      github: parsedResult.data.personalInfo?.github || '',
+                                      ...parsedResult.data.personalInfo,
+                                      jobTitle: item.suggestedValue || '',
+                                    },
+                                  };
+                                  setParsedResult({ ...parsedResult, data: updated });
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-brand-50 hover:bg-brand-100 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300 border border-brand-200 dark:border-brand-800 transition cursor-pointer"
+                            >
+                              <span>{item.suggestion}</span>
+                            </button>
+                          )}
                         </div>
                         <button
                           type="button"

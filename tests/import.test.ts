@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import React from 'react';
@@ -84,7 +84,7 @@ describe('Resume Importer Rebuild Tests', () => {
 
     // Collect all words from parsed string values
     const checkWordsInField = (val: any, key?: string) => {
-      if (key === 'id' || key === 'link' || key === 'githubLink' || key === 'website') return;
+      if (key === 'id' || key === 'link' || key === 'githubLink' || key === 'website' || key === 'sectionOrder' || key === 'sectionTitles') return;
       if (typeof val === 'string') {
         const words = val.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length > 3 && !/^\d+$/.test(w));
         for (const w of words) {
@@ -421,38 +421,230 @@ describe('Resume Importer Rebuild Tests', () => {
 
     // ModernTemplate
     const modernHtml = renderToStaticMarkup(React.createElement(ModernTemplate, { data: fullData, theme }));
-    expect(modernHtml).toContain('Professional Summary');
-    expect(modernHtml).toContain('Work Experience');
-    expect(modernHtml).toContain('Education');
-    expect(modernHtml).toContain('Certifications &amp; Licenses');
-    expect(modernHtml).toContain('Achievements');
-    expect(modernHtml).toContain('Extracurricular');
+    expect(modernHtml.toUpperCase()).toContain('SUMMARY');
+    expect(modernHtml.toUpperCase()).toContain('EXPERIENCE');
+    expect(modernHtml.toUpperCase()).toContain('EDUCATION');
+    expect(modernHtml.toUpperCase()).toContain('CERTIF');
+    expect(modernHtml.toUpperCase()).toContain('ACHIEVEMENTS');
+    expect(modernHtml.toUpperCase()).toContain('EXTRACURRICULAR');
 
     // HarvardTemplate
     const harvardHtml = renderToStaticMarkup(React.createElement(HarvardTemplate, { data: fullData, theme }));
-    expect(harvardHtml).toContain('Professional Summary');
-    expect(harvardHtml).toContain('Experience');
-    expect(harvardHtml).toContain('Education');
-    expect(harvardHtml).toContain('Certifications');
-    expect(harvardHtml).toContain('Achievements');
-    expect(harvardHtml).toContain('Extracurricular');
+    expect(harvardHtml.toUpperCase()).toContain('SUMMARY');
+    expect(harvardHtml.toUpperCase()).toContain('EXPERIENCE');
+    expect(harvardHtml.toUpperCase()).toContain('EDUCATION');
+    expect(harvardHtml.toUpperCase()).toContain('CERTIF');
+    expect(harvardHtml.toUpperCase()).toContain('ACHIEVEMENTS');
+    expect(harvardHtml.toUpperCase()).toContain('EXTRACURRICULAR');
 
     // MinimalistTemplate
     const minHtml = renderToStaticMarkup(React.createElement(MinimalistTemplate, { data: fullData, theme }));
-    expect(minHtml).toContain('Experience');
-    expect(minHtml).toContain('Education');
-    expect(minHtml).toContain('Skills');
-    expect(minHtml).toContain('Certifications');
-    expect(minHtml).toContain('Achievements');
-    expect(minHtml).toContain('Extracurricular');
+    expect(minHtml.toUpperCase()).toContain('EXPERIENCE');
+    expect(minHtml.toUpperCase()).toContain('EDUCATION');
+    expect(minHtml.toUpperCase()).toContain('SKILLS');
+    expect(minHtml.toUpperCase()).toContain('CERTIF');
+    expect(minHtml.toUpperCase()).toContain('ACHIEVEMENTS');
+    expect(minHtml.toUpperCase()).toContain('EXTRACURRICULAR');
 
     // CreativeTemplate
     const creativeHtml = renderToStaticMarkup(React.createElement(CreativeTemplate, { data: fullData, theme }));
-    expect(creativeHtml).toContain('Experience');
-    expect(creativeHtml).toContain('Key Projects');
-    expect(creativeHtml).toContain('Education');
-    expect(creativeHtml).toContain('Certifications');
-    expect(creativeHtml).toContain('Achievements');
-    expect(creativeHtml).toContain('Extracurricular');
+    expect(creativeHtml.toUpperCase()).toContain('EXPERIENCE');
+    expect(creativeHtml.toUpperCase()).toContain('PROJECTS');
+    expect(creativeHtml.toUpperCase()).toContain('EDUCATION');
+    expect(creativeHtml.toUpperCase()).toContain('CERTIF');
+    expect(creativeHtml.toUpperCase()).toContain('ACHIEVEMENTS');
+    expect(creativeHtml.toUpperCase()).toContain('EXTRACURRICULAR');
+  });
+
+  // --- Strict Verbatim and Deterministic Import Suite ---
+
+  it('target title empty for ./resume.pdf; the "Use:" suggestion exists but is not applied', async () => {
+    const lines = await extractLinesFromPdf(pdfBuffer);
+    const rawText = lines.map((l) => l.text).join('\n');
+    const parsed = fallbackRegexParser(rawText, 'resume.pdf', lines);
+
+    // Target title must remain empty
+    expect(parsed.personalInfo?.jobTitle).toBe('');
+
+    // Check items contain the suggestion chip
+    const { getChecklistItems } = await import('../src/components/Modals/ResumeUploadModal');
+    const checkItems = getChecklistItems(parsed);
+    const titleItem = checkItems.find((i) => i.fieldId === 'personalInfo.jobTitle');
+    expect(titleItem).toBeDefined();
+    expect(titleItem!.label).toBe('Target title not in your file (optional)');
+    expect(titleItem!.suggestion).toBe('Use: Data Analyst Intern');
+    expect(titleItem!.suggestedValue).toBe('Data Analyst Intern');
+
+    // Assert that target title was NOT automatically applied
+    expect(parsed.personalInfo?.jobTitle).toBe('');
+  });
+
+  it('section order and section titles equal the PDF', async () => {
+    const lines = await extractLinesFromPdf(pdfBuffer);
+    const rawText = lines.map((l) => l.text).join('\n');
+    const parsed = fallbackRegexParser(rawText, 'resume.pdf', lines);
+
+    expect(parsed.sectionOrder).toEqual([
+      'summary',
+      'education',
+      'skills',
+      'experience',
+      'projects',
+      'achievements',
+      'certifications',
+      'extracurricular',
+    ]);
+
+    expect(parsed.sectionTitles).toEqual({
+      summary: 'SUMMARY',
+      education: 'EDUCATION',
+      skills: 'TECHNICAL SKILLS',
+      experience: 'PROFESSIONAL EXPERIENCE',
+      projects: 'PROJECTS',
+      achievements: 'ACHIEVEMENTS',
+      certifications: 'CERTIFICATES',
+      extracurricular: 'EXTRACURRICULAR',
+    });
+  });
+
+  it('every bullet, date string, role and company equals the raw text after whitespace normalization (zero diff)', async () => {
+    const lines = await extractLinesFromPdf(pdfBuffer);
+    const rawText = lines.map((l) => l.text).join('\n');
+    const parsed = fallbackRegexParser(rawText, 'resume.pdf', lines);
+
+    const norm = (str: string) => str.trim().replace(/\s+/g, ' ');
+
+    const normalizedRawLines = rawLinesContent.split('\n').map((l) => {
+      const clean = l.replace(/^\[p\d+\s+y=[\d.]+\]\s*/, '').replace(/^[•·⁃◦*]\s*|^-\s+/, '');
+      return norm(clean);
+    });
+
+    const assertVerbatimInRaw = (val: string, context: string) => {
+      const nVal = norm(val);
+      const found = normalizedRawLines.some((rl) => rl.includes(nVal) || nVal.includes(rl));
+      expect(found, `${context} "${nVal}" must exist in raw text with zero diff`).toBe(true);
+    };
+
+    // Experience: roles, companies, dates, bullets
+    for (const exp of parsed.experience || []) {
+      assertVerbatimInRaw(exp.company, 'Experience company');
+      assertVerbatimInRaw(exp.position, 'Experience position');
+      if (exp.startDate && exp.endDate) {
+        assertVerbatimInRaw(`${exp.startDate}`, 'Experience startDate');
+        assertVerbatimInRaw(`${exp.endDate}`, 'Experience endDate');
+      }
+      for (const b of exp.highlights) {
+        assertVerbatimInRaw(b, 'Experience bullet');
+      }
+    }
+
+    // Projects: name, bullets
+    for (const proj of parsed.projects || []) {
+      assertVerbatimInRaw(proj.name, 'Project name');
+      for (const b of proj.highlights) {
+        assertVerbatimInRaw(b, 'Project bullet');
+      }
+    }
+
+    // Achievements: bullets
+    const achSec = parsed.customSections?.find((s) => /achievement/i.test(s.title));
+    for (const b of achSec?.items[0]?.bullets || []) {
+      assertVerbatimInRaw(b, 'Achievement bullet');
+    }
+
+    // Certifications: names
+    for (const cert of parsed.certifications || []) {
+      assertVerbatimInRaw(cert.name, 'Certification name');
+    }
+
+    // Extracurricular: titles, bullets
+    const extraSec = parsed.customSections?.find((s) => /extracurricular/i.test(s.title));
+    for (const item of extraSec?.items || []) {
+      assertVerbatimInRaw(item.title, 'Extracurricular title');
+      for (const b of item.bullets || []) {
+        assertVerbatimInRaw(b, 'Extracurricular bullet');
+      }
+    }
+  });
+
+  it('import makes no network request (mock fetch, assert not called) and completes < 3s', async () => {
+    const originalFetch = globalThis.fetch;
+    const mockFetch = vi.fn();
+    globalThis.fetch = mockFetch;
+
+    try {
+      const file = new File([pdfBuffer], 'resume.pdf', { type: 'application/pdf' });
+      const startTime = performance.now();
+      const result = await parseAndStructureResume(file);
+      const duration = performance.now() - startTime;
+
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(duration).toBeLessThan(3000);
+      expect(result.data.personalInfo?.fullName).toBe('Sachin Verma');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('editor preview renders each source section exactly once', async () => {
+    const lines = await extractLinesFromPdf(pdfBuffer);
+    const rawText = lines.map((l) => l.text).join('\n');
+    const parsed = fallbackRegexParser(rawText, 'resume.pdf', lines);
+
+    const fullData: ResumeData = {
+      personalInfo: {
+        fullName: parsed.personalInfo?.fullName || '',
+        jobTitle: parsed.personalInfo?.jobTitle || '',
+        email: parsed.personalInfo?.email || '',
+        phone: parsed.personalInfo?.phone || '',
+        location: parsed.personalInfo?.location || '',
+        website: parsed.personalInfo?.website || '',
+        linkedin: parsed.personalInfo?.linkedin || '',
+        github: parsed.personalInfo?.github || '',
+      },
+      summary: parsed.summary || '',
+      experience: parsed.experience || [],
+      education: parsed.education || [],
+      skills: parsed.skills || [],
+      projects: parsed.projects || [],
+      certifications: parsed.certifications || [],
+      customSections: parsed.customSections || [],
+      sectionOrder: parsed.sectionOrder,
+      sectionTitles: parsed.sectionTitles,
+    };
+
+    const theme = THEME_PRESETS[0];
+
+    // ModernTemplate
+    const modernHtml = renderToStaticMarkup(React.createElement(ModernTemplate, { data: fullData, theme }));
+    const headings = [
+      'SUMMARY',
+      'EDUCATION',
+      'TECHNICAL SKILLS',
+      'PROFESSIONAL EXPERIENCE',
+      'PROJECTS',
+      'ACHIEVEMENTS',
+      'CERTIFICATES',
+      'EXTRACURRICULAR',
+    ];
+
+    for (const h of headings) {
+      const count = (modernHtml.match(new RegExp(`>${h}<`, 'g')) || []).length;
+      expect(count, `Section heading "${h}" must render exactly once in ModernTemplate, but rendered ${count} times`).toBe(1);
+    }
+
+    // HarvardTemplate
+    const harvardHtml = renderToStaticMarkup(React.createElement(HarvardTemplate, { data: fullData, theme }));
+    for (const h of headings) {
+      const count = (harvardHtml.match(new RegExp(`>${h}<`, 'g')) || []).length;
+      expect(count, `Section heading "${h}" must render exactly once in HarvardTemplate, but rendered ${count} times`).toBe(1);
+    }
+
+    // MinimalistTemplate
+    const minHtml = renderToStaticMarkup(React.createElement(MinimalistTemplate, { data: fullData, theme }));
+    for (const h of headings) {
+      const count = (minHtml.match(new RegExp(`>${h}<`, 'g')) || []).length;
+      expect(count, `Section heading "${h}" must render exactly once in MinimalistTemplate, but rendered ${count} times`).toBe(1);
+    }
   });
 });

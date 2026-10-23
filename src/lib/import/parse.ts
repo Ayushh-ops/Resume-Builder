@@ -694,7 +694,7 @@ export function parseCustomSections(sections: SectionMap): CustomSection[] {
     if (achBullets.length > 0) {
       customSections.push({
         id: 'custom-achievements',
-        title: 'Achievements',
+        title: sections.detectedTitles?.['achievements'] || 'Achievements',
         items: [
           {
             id: 'ach-1',
@@ -720,7 +720,10 @@ export function parseCustomSections(sections: SectionMap): CustomSection[] {
         let title = text;
         let subtitle = '';
 
-        if (/secretary/i.test(text)) {
+        if (line.segments.length >= 2) {
+          title = line.segments[0].text.trim();
+          subtitle = line.segments[1].text.trim();
+        } else if (/secretary/i.test(text)) {
           title = 'AWS Builder Group Club, ABES Engineering College';
           subtitle = 'Secretary';
         } else if (/volunteer|technical team/i.test(text)) {
@@ -753,7 +756,7 @@ export function parseCustomSections(sections: SectionMap): CustomSection[] {
     if (items.length > 0) {
       customSections.push({
         id: 'custom-extracurricular',
-        title: 'Extracurricular',
+        title: sections.detectedTitles?.['extracurricular'] || 'Extracurricular',
         items,
       });
     }

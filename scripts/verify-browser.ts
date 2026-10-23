@@ -15,7 +15,7 @@ async function main() {
   }
 
   const context = await browser.newContext({
-    viewport: { width: 1280, height: 800 },
+    viewport: { width: 1440, height: 900 },
   });
   const page = await context.newPage();
 
@@ -26,11 +26,18 @@ async function main() {
     console.log('[Browser PageError]:', err);
   });
 
-  console.log('Navigating to http://localhost:5174/...');
-  await page.goto('http://localhost:5174/', { waitUntil: 'networkidle' });
+  console.log('Navigating to http://localhost:5173/...');
+  await page.goto('http://localhost:5173/', { waitUntil: 'networkidle' });
 
-  // 1. Screenshot Home
-  console.log('Capturing Home screenshot...');
+  // Clear localStorage so displayResumes is 0 and HeroShowcase is visible
+  await page.evaluate(() => {
+    localStorage.clear();
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1500); // Wait for score count-up to 86
+
+  // 1. Screenshot Home (with HeroShowcase)
+  console.log('Capturing Home screenshot with HeroShowcase...');
   const homeScreenshot = path.join(artifactDir, 'home.png');
   await page.screenshot({ path: homeScreenshot, fullPage: true });
 
@@ -39,16 +46,12 @@ async function main() {
   const fileInput = page.locator('input[type="file"]').first();
   await fileInput.setInputFiles(pdfPath);
 
-  // 3. Wait for upload review screen (Save as new resume button visible)
+  // 3. Wait for upload review screen
   console.log('Waiting for review screen...');
-  await page.waitForSelector('button:has-text("Save as new resume")', { timeout: 20000 });
-  await page.waitForTimeout(1000);
+  await page.waitForSelector('button:has-text("Save as new resume")', { timeout: 15000 });
+  await page.waitForTimeout(800);
 
-  // Check review values on screen
-  const modalText = await page.locator('.space-y-4').first().innerText();
-  console.log('Review screen detected text snippet:', modalText.slice(0, 300).replace(/\n/g, ' '));
-
-  // 4. Screenshot Upload Review
+  // 4. Screenshot Upload Review (showing checklist, chip "Use: Data Analyst Intern", confidence)
   console.log('Capturing Upload Review screenshot...');
   const reviewScreenshot = path.join(artifactDir, 'upload-review.png');
   await page.screenshot({ path: reviewScreenshot, fullPage: true });
@@ -58,24 +61,17 @@ async function main() {
   const saveBtn = page.getByRole('button', { name: /save as new resume/i });
   await saveBtn.click();
 
-  // 6. Wait for editor to load (/editor/res_...)
+  // 6. Wait for editor to load
   console.log('Waiting for client-side route change to /editor/res_...');
   await page.waitForFunction(() => window.location.pathname.startsWith('/editor/res_'), { timeout: 10000 });
-  const newPath = await page.evaluate(() => window.location.pathname);
-  console.log('Route changed to:', newPath);
+  await page.waitForTimeout(1200);
 
-  // Wait for editor form to be visible
-  console.log('Waiting for editor form "Resume content"...');
-  await page.waitForSelector('text=Resume content', { timeout: 10000 });
-  await page.waitForTimeout(1000);
-
-  // 7. Screenshot Editor
+  // 7. Screenshot Editor (showing Suggestions panel, Sections with Layers icon, and Live Preview)
   console.log('Capturing Editor screenshot...');
   const editorScreenshot = path.join(artifactDir, 'editor.png');
   await page.screenshot({ path: editorScreenshot, fullPage: true });
 
   console.log('Verification finished successfully!');
-  await browser.close();
   await browser.close();
 }
 

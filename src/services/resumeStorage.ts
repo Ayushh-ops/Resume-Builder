@@ -200,6 +200,8 @@ export const createResume = (
     skills: initialData?.skills || [],
     certifications: initialData?.certifications || [],
     customSections: initialData?.customSections || [],
+    sectionOrder: initialData?.sectionOrder,
+    sectionTitles: initialData?.sectionTitles,
   };
 
   const resolvedName =

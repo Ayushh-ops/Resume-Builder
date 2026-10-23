@@ -11,6 +11,7 @@ interface TemplateProps {
 export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
   const { personalInfo, summary, experience, education, projects, skills, certifications, customSections } = data;
   const primary = theme.primaryColor || '#0284c7';
+  const titles = data.sectionTitles || {};
 
   return (
     <div
@@ -65,7 +66,7 @@ export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
                 className="text-xs font-black uppercase tracking-wider mb-2"
                 style={{ color: primary }}
               >
-                Skills
+                {titles['skills'] || 'Skills'}
               </h2>
               <div className="space-y-2.5">
                 {skills.map((cat, idx) => (
@@ -94,13 +95,13 @@ export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
                 className="text-xs font-black uppercase tracking-wider mb-2"
                 style={{ color: primary }}
               >
-                Education
+                {titles['education'] || 'Education'}
               </h2>
               <div className="space-y-2">
                 {education.map((edu, idx) => (
                   <div key={edu.id || idx} className="text-xs">
                     <p className="font-bold text-slate-900">{edu.institution}</p>
-                    <p className="text-[11px] text-slate-700">{edu.degree}</p>
+                    <p className="text-[11px] text-slate-700">{edu.degree} {edu.grade ? `(${edu.grade})` : ''}</p>
                     <p className="text-[10px] text-slate-400">{edu.endDate}</p>
                   </div>
                 ))}
@@ -115,7 +116,7 @@ export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
                 className="text-xs font-black uppercase tracking-wider mb-2"
                 style={{ color: primary }}
               >
-                Certifications
+                {titles['certifications'] || 'Certifications'}
               </h2>
               <div className="space-y-1.5 text-xs">
                 {certifications.map((c, idx) => (
@@ -137,7 +138,7 @@ export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
                 className="text-xs font-black uppercase tracking-wider mb-1"
                 style={{ color: primary }}
               >
-                Profile Summary
+                {titles['summary'] || 'Profile Summary'}
               </h2>
               <p className="text-xs text-slate-700 leading-relaxed">{summary}</p>
             </div>
@@ -149,18 +150,21 @@ export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
                 className="text-xs font-black uppercase tracking-wider mb-2.5"
                 style={{ color: primary }}
               >
-                Experience
+                {titles['experience'] || 'Experience'}
               </h2>
               <div className="space-y-3">
                 {experience.map((exp, idx) => (
                   <div key={exp.id || idx} className="avoid-break">
                     <div className="flex justify-between items-baseline">
-                      <span className="text-xs font-bold text-slate-900">{exp.position}</span>
+                      <span className="text-xs font-bold text-slate-900">{exp.company}</span>
                       <span className="text-[10px] text-slate-500">
                         {exp.startDate} – {exp.current ? 'Present' : exp.endDate}
                       </span>
                     </div>
-                    <p className="text-[11px] font-semibold text-slate-600 mb-1">{exp.company}</p>
+                    <div className="flex justify-between items-baseline text-[11px] font-semibold text-slate-600 mb-1">
+                      <span>{exp.position}</span>
+                      {exp.location && <span>{exp.location}</span>}
+                    </div>
                     <ul className="list-disc list-outside ml-3.5 space-y-0.5 text-xs text-slate-700 leading-relaxed">
                       {exp.highlights.filter(Boolean).map((h, hIdx) => (
                         <li key={hIdx}>{h}</li>
@@ -178,7 +182,7 @@ export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
                 className="text-xs font-black uppercase tracking-wider mb-2"
                 style={{ color: primary }}
               >
-                Key Projects
+                {titles['projects'] || 'Key Projects'}
               </h2>
               <div className="space-y-2">
                 {projects.map((proj, idx) => (

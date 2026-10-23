@@ -9,6 +9,7 @@ import {
   Wrench,
   FolderGit2,
   Award,
+  Layers,
   Eye,
   Edit3,
   Upload,
@@ -33,7 +34,7 @@ import {
   getActiveProfileId,
   setActiveProfileId,
 } from './services/atsScorer';
-import { HeroScan } from './components/HeroScan';
+import { HeroShowcase } from './components/HeroShowcase';
 import { getChecklistItems } from './components/Modals/ResumeUploadModal';
 import { ModernTemplate } from './components/Preview/templates/ModernTemplate';
 import {
@@ -70,6 +71,7 @@ import { CertificationsForm } from './components/Form/CertificationsForm';
 import { CustomSectionsForm } from './components/Form/CustomSectionsForm';
 import { SectionNav } from './components/Form/SectionNav';
 import { CompletenessBar } from './components/Form/CompletenessBar';
+import { SuggestionsPanel } from './components/Form/SuggestionsPanel';
 import { ResumePreview } from './components/Preview/ResumePreview';
 import { JobRadarModal } from './components/Modals/JobRadarModal';
 import { TrendAdvisorModal } from './components/Modals/TrendAdvisorModal';
@@ -758,6 +760,8 @@ export const App: React.FC = () => {
         skills: importedData.skills || [],
         certifications: importedData.certifications || [],
         customSections: importedData.customSections || [],
+        sectionOrder: importedData.sectionOrder,
+        sectionTitles: importedData.sectionTitles,
       };
 
       // Compute and store the ATS score on save so Home card never shows "ATS --"
@@ -884,6 +888,9 @@ export const App: React.FC = () => {
         projects: importedData.projects || resumeData.projects,
         skills: importedData.skills || resumeData.skills,
         certifications: importedData.certifications || resumeData.certifications,
+        customSections: importedData.customSections || resumeData.customSections,
+        sectionOrder: importedData.sectionOrder || resumeData.sectionOrder,
+        sectionTitles: importedData.sectionTitles || resumeData.sectionTitles,
       };
       pushHistory(merged);
       closeConfirmModal();
@@ -1142,7 +1149,7 @@ export const App: React.FC = () => {
             key="customSections"
             id="customSections"
             title="Additional Sections"
-            icon={<Award className="w-4 h-4" strokeWidth={1.5} />}
+            icon={<Layers className="w-4 h-4" strokeWidth={1.5} />}
             badge={resumeData.customSections?.length ? `${resumeData.customSections.length}` : undefined}
             defaultOpen={false}
             forceOpen={isForced}
@@ -1373,10 +1380,10 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Right Column (span 5): Hero scanning animation (hidden when user has resumes) */}
+                {/* Right Column (span 5): Hero Showcase (hidden when user has resumes) */}
                 {displayResumes.length === 0 && (
                   <div className="lg:col-span-5 hidden lg:flex flex-col items-center justify-center">
-                    <HeroScan />
+                    <HeroShowcase />
                   </div>
                 )}
               </div>
@@ -1701,6 +1708,13 @@ export const App: React.FC = () => {
 
               {/* Completeness Bar */}
               <CompletenessBar data={resumeData} />
+
+              {/* Opt-in Suggestions Panel */}
+              <SuggestionsPanel
+                resumeData={resumeData}
+                onApplyChange={(updated) => pushHistory(updated)}
+                onOpenSettings={() => setIsApiKeyModalOpen(true)}
+              />
 
               {/* Section Nav */}
               <SectionNav onOpenSection={handleOpenSection} />
