@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { id: 'projects', title: 'Projects', icon: FolderGit2 },
   { id: 'education', title: 'Education', icon: GraduationCap },
   { id: 'certifications', title: 'Certifications', icon: Award },
+  { id: 'customSections', title: 'Additional', icon: Award },
 ];
 
 export const SectionNav: React.FC<SectionNavProps> = ({ onOpenSection, activeSection: propActive }) => {

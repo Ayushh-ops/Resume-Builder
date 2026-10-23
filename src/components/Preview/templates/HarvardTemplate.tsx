@@ -7,7 +7,7 @@ interface TemplateProps {
 }
 
 export const HarvardTemplate: React.FC<TemplateProps> = ({ data }) => {
-  const { personalInfo, summary, experience, education, projects, skills, certifications } = data;
+  const { personalInfo, summary, experience, education, projects, skills, certifications, customSections } = data;
 
   return (
     <div
@@ -198,7 +198,7 @@ export const HarvardTemplate: React.FC<TemplateProps> = ({ data }) => {
 
       {/* Certifications */}
       {certifications && certifications.length > 0 && (
-        <section className="avoid-break">
+        <section className="mb-3.5 avoid-break">
           <h2 className="text-xs font-bold uppercase tracking-wider border-b border-black pb-0.5 mb-1.5 text-black">
             Certifications
           </h2>
@@ -210,6 +210,42 @@ export const HarvardTemplate: React.FC<TemplateProps> = ({ data }) => {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Additional / Custom Sections */}
+      {customSections && customSections.length > 0 && (
+        <>
+          {customSections.map((sec, sIdx) => (
+            <section key={sec.id || sIdx} className="mb-3.5 avoid-break">
+              <h2 className="text-xs font-bold uppercase tracking-wider border-b border-black pb-0.5 mb-1.5 text-black">
+                {sec.title}
+              </h2>
+              <div className="space-y-2 text-xs text-neutral-900">
+                {sec.items.map((item, iIdx) => (
+                  <div key={item.id || iIdx}>
+                    {(item.title || item.subtitle || item.date) && (
+                      <div className="flex justify-between items-baseline">
+                        <span className="font-bold text-black">
+                          {item.title}
+                          {item.subtitle ? ` – ${item.subtitle}` : ''}
+                        </span>
+                        {item.date && <span className="text-[11px] font-normal text-neutral-600">{item.date}</span>}
+                      </div>
+                    )}
+                    {item.description && <p className="text-neutral-800 mt-0.5">{item.description}</p>}
+                    {item.bullets && item.bullets.length > 0 && (
+                      <ul className="list-disc list-outside ml-4 mt-1 space-y-0.5">
+                        {item.bullets.filter(Boolean).map((b, bIdx) => (
+                          <li key={bIdx}>{b}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </>
       )}
     </div>
   );

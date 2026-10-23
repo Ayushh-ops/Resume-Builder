@@ -7,7 +7,7 @@ interface TemplateProps {
 }
 
 export const MinimalistTemplate: React.FC<TemplateProps> = ({ data }) => {
-  const { personalInfo, summary, experience, education, projects, skills } = data;
+  const { personalInfo, summary, experience, education, projects, skills, certifications, customSections } = data;
 
 
   return (
@@ -138,7 +138,7 @@ export const MinimalistTemplate: React.FC<TemplateProps> = ({ data }) => {
 
       {/* Education */}
       {education && education.length > 0 && (
-        <section className="avoid-break">
+        <section className="mb-4 avoid-break">
           <h2 className="text-[11px] font-bold tracking-widest uppercase text-slate-400 mb-2">
             Education
           </h2>
@@ -154,6 +154,58 @@ export const MinimalistTemplate: React.FC<TemplateProps> = ({ data }) => {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Certifications */}
+      {certifications && certifications.length > 0 && (
+        <section className="mb-4 avoid-break">
+          <h2 className="text-[11px] font-bold tracking-widest uppercase text-slate-400 mb-2">
+            Certifications
+          </h2>
+          <div className="space-y-1 text-xs text-slate-700">
+            {certifications.map((cert, idx) => (
+              <div key={cert.id || idx}>
+                <span className="font-bold text-slate-800">{cert.name}</span> — {cert.issuer} {cert.date ? `(${cert.date})` : ''}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Additional / Custom Sections */}
+      {customSections && customSections.length > 0 && (
+        <>
+          {customSections.map((sec, sIdx) => (
+            <section key={sec.id || sIdx} className="mb-4 avoid-break">
+              <h2 className="text-[11px] font-bold tracking-widest uppercase text-slate-400 mb-2">
+                {sec.title}
+              </h2>
+              <div className="space-y-2 text-xs">
+                {sec.items.map((item, iIdx) => (
+                  <div key={item.id || iIdx}>
+                    {(item.title || item.subtitle || item.date) && (
+                      <div className="flex justify-between items-baseline">
+                        <span className="font-bold text-slate-900">
+                          {item.title}
+                          {item.subtitle ? ` — ${item.subtitle}` : ''}
+                        </span>
+                        {item.date && <span className="text-[10px] text-slate-500 font-mono">{item.date}</span>}
+                      </div>
+                    )}
+                    {item.description && <p className="text-slate-600 mt-0.5">{item.description}</p>}
+                    {item.bullets && item.bullets.length > 0 && (
+                      <ul className="list-disc list-outside ml-4 mt-1 space-y-0.5 text-slate-700">
+                        {item.bullets.filter(Boolean).map((b, bIdx) => (
+                          <li key={bIdx}>{b}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </>
       )}
     </div>
   );

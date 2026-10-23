@@ -9,7 +9,7 @@ interface TemplateProps {
 }
 
 export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
-  const { personalInfo, summary, experience, education, projects, skills, certifications } = data;
+  const { personalInfo, summary, experience, education, projects, skills, certifications, customSections } = data;
   const primary = theme.primaryColor || '#0284c7';
 
   return (
@@ -202,6 +202,46 @@ export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {customSections && customSections.length > 0 && (
+            <div className="space-y-3">
+              {customSections.map((sec, sIdx) => (
+                <div key={sec.id || sIdx}>
+                  <h2
+                    className="text-xs font-black uppercase tracking-wider mb-2"
+                    style={{ color: primary }}
+                  >
+                    {sec.title}
+                  </h2>
+                  <div className="space-y-2">
+                    {sec.items.map((item, iIdx) => (
+                      <div key={item.id || iIdx} className="avoid-break text-xs">
+                        {(item.title || item.subtitle || item.date) && (
+                          <div className="flex justify-between items-baseline font-bold text-slate-900">
+                            <span>
+                              {item.title}
+                              {item.subtitle ? ` – ${item.subtitle}` : ''}
+                            </span>
+                            {item.date && (
+                              <span className="text-[10px] font-normal text-slate-500">{item.date}</span>
+                            )}
+                          </div>
+                        )}
+                        {item.description && <p className="text-slate-600 text-[11px] mt-0.5">{item.description}</p>}
+                        {item.bullets && item.bullets.length > 0 && (
+                          <ul className="list-disc list-outside ml-3.5 mt-0.5 text-slate-700 space-y-0.5 text-[11px]">
+                            {item.bullets.filter(Boolean).map((b, bIdx) => (
+                              <li key={bIdx}>{b}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

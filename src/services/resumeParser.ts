@@ -4,7 +4,7 @@ import {
   extractLinesFromDocx,
   extractLinesFromPlainText,
 } from '../lib/import/extract';
-import { groupLinesIntoSections } from '../lib/import/sections';
+import { groupLinesIntoSections, matchSectionHeading } from '../lib/import/sections';
 import {
   parseHeader,
   parseExperience,
@@ -12,6 +12,8 @@ import {
   parseSkills,
   parseProjects,
   parseCertifications,
+  parseCustomSections,
+  validateSummary,
 } from '../lib/import/parse';
 import { calculateConfidenceAndCounts } from '../lib/import/confidence';
 import { generate, RESUME_DATA_RESPONSE_SCHEMA, getKey } from '../lib/gemini';
@@ -109,16 +111,36 @@ export function fallbackRegexParser(
   const sections = groupLinesIntoSections(lines);
 
   const personalInfo = parseHeader(sections.header, sections.rawText);
-  const summary = sections.summary.map((l) => l.text).join(' ').trim();
+  let summary = sections.summary.map((l) => l.text).join(' ').trim();
+  if (!validateSummary(summary)) {
+    // Re-derive strictly: filter only lines before any section keywords
+    const cleanLines: string[] = [];
+    for (const l of sections.summary) {
+      if (matchSectionHeading(l)) break;
+      cleanLines.push(l.text);
+    }
+    summary = cleanLines.join(' ').trim();
+  }
+
   const experience = parseExperience(sections.experience);
   const education = parseEducation(sections.education);
   const skills = parseSkills(sections.skills);
   const projects = parseProjects(sections.projects);
   const certifications = parseCertifications(sections.certifications);
+  const customSections = parseCustomSections(sections);
 
-  // If personalInfo didn't detect target job title, fallback to latest experience title
-  if (!personalInfo.jobTitle && experience.length > 0 && experience[0].position) {
-    personalInfo.jobTitle = experience[0].position;
+  // If personalInfo didn't detect target job title, fallback to latest experience title or summary
+  if (!personalInfo.jobTitle) {
+    if (experience.length > 0 && experience[0].position) {
+      personalInfo.jobTitle = experience[0].position;
+      (personalInfo as any).titleInferred = true;
+    } else if (summary) {
+      const roleMatch = summary.match(/\b([A-Za-z\s]+(?:Developer|Engineer|Analyst|Scientist|Architect|Manager))\b/i);
+      if (roleMatch) {
+        personalInfo.jobTitle = roleMatch[1].trim();
+        (personalInfo as any).titleInferred = true;
+      }
+    }
   }
 
   return {
@@ -129,7 +151,7 @@ export function fallbackRegexParser(
     skills,
     projects,
     certifications,
-    customSections: [],
+    customSections,
   };
 }
 
@@ -179,7 +201,19 @@ function mergeWithAiData(
     }
   }
 
-  const mergedSummary = (ai.summary && ai.summary.trim().length > 30) ? ai.summary.trim() : (offline.summary || '');
+  // Preserve titleInferred flag if jobTitle was inferred offline
+  if ((offline.personalInfo as any)?.titleInferred) {
+    (mergedPi as any).titleInferred = true;
+  }
+
+  // Validator: summary > 90 words or containing text that appears under another heading => reject
+  let mergedSummary = offline.summary || '';
+  if (ai.summary && validateSummary(ai.summary)) {
+    mergedSummary = ai.summary.trim();
+  } else if (ai.summary && !validateSummary(ai.summary)) {
+    console.warn('[mergeWithAiData] AI summary rejected by validator; keeping offline summary.');
+    (mergedPi as any).hasValidatorFailure = true;
+  }
 
   let mergedExp = offline.experience || [];
   if (Array.isArray(ai.experience) && ai.experience.length > 0) {
@@ -262,6 +296,14 @@ function mergeWithAiData(
     }
   }
 
+  let mergedCustom = offline.customSections || [];
+  if (Array.isArray(ai.customSections) && ai.customSections.length > 0) {
+    const validCustom = ai.customSections.filter((cs) => cs.title?.trim() && Array.isArray(cs.items));
+    if (validCustom.length >= mergedCustom.length) {
+      mergedCustom = validCustom;
+    }
+  }
+
   return {
     personalInfo: mergedPi,
     summary: mergedSummary,
@@ -270,7 +312,7 @@ function mergeWithAiData(
     skills: mergedSkills,
     projects: mergedProjects,
     certifications: mergedCerts,
-    customSections: [],
+    customSections: mergedCustom,
   };
 }
 
@@ -373,7 +415,7 @@ export async function parseAndStructureResume(
 
 export function calculateConfidence(
   data: Partial<ResumeData>,
-  _hasCheckItems?: boolean
+  hasCheckItems?: boolean
 ): Record<string, number> {
-  return calculateConfidenceAndCounts(data).confidence;
+  return calculateConfidenceAndCounts(data, hasCheckItems).confidence;
 }

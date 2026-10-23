@@ -9,7 +9,7 @@ interface TemplateProps {
 }
 
 export const ModernTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
-  const { personalInfo, summary, experience, education, projects, skills, certifications } = data;
+  const { personalInfo, summary, experience, education, projects, skills, certifications, customSections } = data;
   const primaryColor = theme.primaryColor || '#4f46e5';
 
   return (
@@ -208,7 +208,7 @@ export const ModernTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
 
       {/* Certifications */}
       {certifications && certifications.length > 0 && (
-        <section className="avoid-break">
+        <section className="mb-4 avoid-break">
           <h2
             className="text-xs font-bold uppercase tracking-wider mb-1.5 pb-0.5 border-b border-slate-200"
             style={{ color: primaryColor }}
@@ -226,6 +226,47 @@ export const ModernTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Additional / Custom Sections */}
+      {customSections && customSections.length > 0 && (
+        <>
+          {customSections.map((sec, sIdx) => (
+            <section key={sec.id || sIdx} className="mb-4 avoid-break">
+              <h2
+                className="text-xs font-bold uppercase tracking-wider mb-2 pb-0.5 border-b border-slate-200"
+                style={{ color: primaryColor }}
+              >
+                {sec.title}
+              </h2>
+              <div className="space-y-2">
+                {sec.items.map((item, iIdx) => (
+                  <div key={item.id || iIdx}>
+                    {(item.title || item.subtitle || item.date) && (
+                      <div className="flex items-baseline justify-between text-xs">
+                        <span className="font-bold text-slate-900">
+                          {item.title}
+                          {item.subtitle ? ` – ${item.subtitle}` : ''}
+                        </span>
+                        {item.date && <span className="text-[11px] font-normal text-slate-500">{item.date}</span>}
+                      </div>
+                    )}
+                    {item.description && (
+                      <p className="text-xs text-slate-700 leading-relaxed mt-0.5">{item.description}</p>
+                    )}
+                    {item.bullets && item.bullets.length > 0 && (
+                      <ul className="list-disc list-outside ml-4 mt-1 space-y-0.5 text-xs text-slate-700">
+                        {item.bullets.filter(Boolean).map((b, bIdx) => (
+                          <li key={bIdx}>{b}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </>
       )}
     </div>
   );

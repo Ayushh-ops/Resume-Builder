@@ -30,6 +30,56 @@ export const ROLE_SKILLS_MAP: Record<string, string[]> = {
   'software engineer': ['TypeScript', 'Python', 'Data Structures', 'System Design', 'Git', 'RESTful APIs', 'Docker', 'Unit Testing'],
 };
 
+export const SKILL_SYNONYMS: Record<string, string[]> = {
+  'rest apis': ['rest', 'restful apis', 'restful api', 'rest api', 'rest apis'],
+  'restful apis': ['rest', 'rest apis', 'restful api', 'rest api'],
+  'rest': ['rest apis', 'restful apis', 'restful api', 'rest api'],
+  'unit testing': ['jest', 'mocha', 'testing', 'unit tests', 'vitest', 'cypress'],
+  'testing': ['unit testing', 'jest', 'mocha', 'testing', 'vitest'],
+  'js': ['javascript', 'es6', 'es6+', 'ecmascript'],
+  'javascript': ['js', 'es6', 'es6+', 'ecmascript'],
+  'node': ['node.js', 'nodejs'],
+  'node.js': ['node', 'nodejs'],
+  'postgres': ['postgresql', 'psql'],
+  'postgresql': ['postgres', 'psql'],
+  'react': ['react.js', 'reactjs'],
+  'react.js': ['react', 'reactjs'],
+  'ts': ['typescript'],
+  'typescript': ['ts'],
+  'k8s': ['kubernetes'],
+  'kubernetes': ['k8s'],
+  'docker': ['containerization', 'containers'],
+  'ci/cd': ['continuous integration', 'github actions', 'jenkins', 'gitlab ci'],
+  'aws': ['amazon web services', 'cloud'],
+  'gcp': ['google cloud platform', 'google cloud'],
+  'mongo': ['mongodb'],
+  'mongodb': ['mongo', 'mongoose'],
+  'ml': ['machine learning'],
+  'machine learning': ['ml'],
+  'ai': ['artificial intelligence', 'gen ai', 'generative ai'],
+};
+
+export function matchesSkillOrSynonym(targetSkill: string, userSkill: string): boolean {
+  const normTarget = targetSkill.toLowerCase().trim().replace(/[-_.]/g, ' ');
+  const normUser = userSkill.toLowerCase().trim().replace(/[-_.]/g, ' ');
+
+  if (normTarget === normUser || normTarget.includes(normUser) || normUser.includes(normTarget)) {
+    return true;
+  }
+
+  // Check synonym groups
+  for (const [canonical, syns] of Object.entries(SKILL_SYNONYMS)) {
+    const group = [canonical, ...syns].map((s) => s.toLowerCase().replace(/[-_.]/g, ' '));
+    const targetInGroup = group.some((s) => s === normTarget || normTarget.includes(s) || s.includes(normTarget));
+    const userInGroup = group.some((s) => s === normUser || normUser.includes(s) || s.includes(normUser));
+    if (targetInGroup && userInGroup) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export const WEAK_OPENERS = [
   { pattern: /^responsible for\s+/i, verb: 'Engineered', name: 'responsible for' },
   { pattern: /^worked on\s+/i, verb: 'Architected', name: 'worked on' },
@@ -213,10 +263,9 @@ export function getResumeGuidance(resumeData: ResumeData): GuidanceItem[] {
   const targetTitle = resumeData.personalInfo.jobTitle || '';
   const coreSkills = getCoreSkillsForRole(targetTitle);
   const userSkillStrings = (resumeData.skills || []).flatMap((s) => s.skills || []).map((s) => s.trim());
-  const userSkillsLower = userSkillStrings.map((s) => s.toLowerCase());
 
   const presentSkills = coreSkills.filter((cs) =>
-    userSkillsLower.some((us) => us === cs.toLowerCase() || us.includes(cs.toLowerCase()) || cs.toLowerCase().includes(us))
+    userSkillStrings.some((us) => matchesSkillOrSynonym(cs, us))
   );
   const missingSkills = coreSkills.filter((cs) => !presentSkills.includes(cs));
 

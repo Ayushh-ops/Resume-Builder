@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Radar, ExternalLink, Check, ArrowRight, Plus } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { HowToUse } from '../common/HowToUse';
-import { getCoreSkillsForRole } from '../../lib/guidance';
+import { getCoreSkillsForRole, matchesSkillOrSynonym } from '../../lib/guidance';
 import type { ResumeData } from '../../types/resume';
 
 interface JobRadarModalProps {
@@ -30,10 +30,6 @@ export const JobRadarModal: React.FC<JobRadarModalProps> = ({
     if (!userTitle) return [];
     return getCoreSkillsForRole(userTitle).slice(0, 5);
   }, [userTitle]);
-
-  const existingSkillsLower = useMemo(() => {
-    return new Set(skills.map((s) => s.toLowerCase().trim()));
-  }, [skills]);
 
   const suggestedTitles = useMemo(() => {
     if (!userTitle) return [];
@@ -195,9 +191,7 @@ export const JobRadarModal: React.FC<JobRadarModalProps> = ({
               </p>
               <div className="space-y-2">
                 {coreSkills.map((skill, idx) => {
-                  const isPresent =
-                    existingSkillsLower.has(skill.toLowerCase().trim()) ||
-                    skills.some((s) => s.toLowerCase().includes(skill.toLowerCase().trim()));
+                  const isPresent = skills.some((s) => matchesSkillOrSynonym(skill, s));
                   return (
                     <div
                       key={idx}

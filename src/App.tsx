@@ -33,7 +33,7 @@ import {
   getActiveProfileId,
   setActiveProfileId,
 } from './services/atsScorer';
-import { InstantCheck } from './components/InstantCheck';
+import { HeroScan } from './components/HeroScan';
 import { getChecklistItems } from './components/Modals/ResumeUploadModal';
 import { ModernTemplate } from './components/Preview/templates/ModernTemplate';
 import {
@@ -67,6 +67,7 @@ import { EducationForm } from './components/Form/EducationForm';
 import { SkillsForm } from './components/Form/SkillsForm';
 import { ProjectsForm } from './components/Form/ProjectsForm';
 import { CertificationsForm } from './components/Form/CertificationsForm';
+import { CustomSectionsForm } from './components/Form/CustomSectionsForm';
 import { SectionNav } from './components/Form/SectionNav';
 import { CompletenessBar } from './components/Form/CompletenessBar';
 import { ResumePreview } from './components/Preview/ResumePreview';
@@ -348,6 +349,7 @@ export const App: React.FC = () => {
     'projects',
     'education',
     'certifications',
+    'customSections',
   ]);
   const [hiddenSections, setHiddenSections] = useState<Set<string>>(new Set());
   const [draggedSection, setDraggedSection] = useState<string | null>(null);
@@ -806,39 +808,6 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleInstantCheckOpenInEditor = (parsedData: Partial<ResumeData>) => {
-    try {
-      const resolvedName = parsedData.personalInfo?.fullName?.trim() || 'Sample Resume';
-      const fullData: ResumeData = {
-        ...blankResumeData,
-        ...parsedData,
-        personalInfo: {
-          ...blankResumeData.personalInfo,
-          ...(parsedData.personalInfo || {}),
-        },
-        experience: parsedData.experience || [],
-        education: parsedData.education || [],
-        projects: parsedData.projects || [],
-        skills: parsedData.skills || [],
-        certifications: parsedData.certifications || [],
-        customSections: parsedData.customSections || [],
-      };
-      const score = calculateLiveATSScore(fullData).score;
-      const newId = createResume(fullData, resolvedName, score);
-      justCreatedIdsRef.current.add(newId);
-      setResumeIndex(getResumeIndex());
-
-      const path = `/editor/${newId}`;
-      console.log(path);
-      navigate(path);
-      showToast('Opened in editor!', 'success');
-      confetti({ particleCount: 60, spread: 70 });
-    } catch (err) {
-      console.error('Failed to open instant check in editor:', err);
-      showToast('Failed to open resume', 'error');
-    }
-  };
-
   const handleUploadReplaceCurrent = (importedData: Partial<ResumeData>) => {
     closeModal(setIsUploadModalOpen);
     openConfirmModal({
@@ -1167,6 +1136,30 @@ export const App: React.FC = () => {
           </FormSection>
         );
 
+      case 'customSections':
+        return (
+          <FormSection
+            key="customSections"
+            id="customSections"
+            title="Additional Sections"
+            icon={<Award className="w-4 h-4" strokeWidth={1.5} />}
+            badge={resumeData.customSections?.length ? `${resumeData.customSections.length}` : undefined}
+            defaultOpen={false}
+            forceOpen={isForced}
+            draggable={true}
+            onDragStart={() => setDraggedSection('customSections')}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => handleDrop('customSections')}
+            isHidden={isHidden}
+            onToggleHidden={() => toggleSectionHidden('customSections')}
+          >
+            <CustomSectionsForm
+              customSections={resumeData.customSections || []}
+              onChange={(customSections) => pushHistory({ ...resumeData, customSections })}
+            />
+          </FormSection>
+        );
+
       default:
         return null;
     }
@@ -1380,13 +1373,12 @@ export const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Right Column (span 5): Instant check card */}
-                <div className="lg:col-span-5 hidden lg:flex flex-col items-center justify-center">
-                  <InstantCheck
-                    onCheckMyOwnResume={() => homeFileInputRef.current?.click()}
-                    onOpenInEditor={handleInstantCheckOpenInEditor}
-                  />
-                </div>
+                {/* Right Column (span 5): Hero scanning animation (hidden when user has resumes) */}
+                {displayResumes.length === 0 && (
+                  <div className="lg:col-span-5 hidden lg:flex flex-col items-center justify-center">
+                    <HeroScan />
+                  </div>
+                )}
               </div>
 
               {/* 3-step strip: Upload -> See score and fixes -> Download PDF (plain text, numbers, no pills) */}

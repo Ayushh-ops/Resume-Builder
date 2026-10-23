@@ -30,7 +30,9 @@ export type CanonicalSectionKey =
   | 'projects'
   | 'certifications'
   | 'achievements'
-  | 'awards';
+  | 'awards'
+  | 'extracurricular'
+  | 'activities';
 
 export interface SectionBlock {
   key: CanonicalSectionKey;
@@ -48,6 +50,7 @@ export interface SectionMap {
   certifications: Line[];
   achievements: Line[];
   awards: Line[];
+  extracurricular: Line[];
   rawText: string;
 }
 

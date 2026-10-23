@@ -64,6 +64,7 @@ export interface CustomSectionItem {
   subtitle?: string;
   date?: string;
   description?: string;
+  bullets?: string[];
 }
 
 export interface CustomSection {

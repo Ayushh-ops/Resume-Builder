@@ -5,7 +5,10 @@ export interface ConfidenceAndCounts {
   counts: Record<string, number>;
 }
 
-export function calculateConfidenceAndCounts(data: Partial<ResumeData>): ConfidenceAndCounts {
+export function calculateConfidenceAndCounts(
+  data: Partial<ResumeData>,
+  hasCheckItems?: boolean
+): ConfidenceAndCounts {
   const confidence: Record<string, number> = {};
   const counts: Record<string, number> = {};
 
@@ -87,6 +90,16 @@ export function calculateConfidenceAndCounts(data: Partial<ResumeData>): Confide
     confidence['certifications'] = 100;
   }
 
+  // 8. Additional / Custom Sections
+  const customSecs = data.customSections || [];
+  const customItemsCount = customSecs.reduce((acc, s) => acc + (s.items?.length || 0), 0);
+  counts['additional'] = customItemsCount;
+  if (customItemsCount === 0) {
+    confidence['additional'] = 0;
+  } else {
+    confidence['additional'] = 100;
+  }
+
   // Overall confidence
   const presentSections = ['personalInfo', 'summary', 'experience', 'education', 'skills', 'projects']
     .filter((sec) => counts[sec] > 0);
@@ -95,7 +108,16 @@ export function calculateConfidenceAndCounts(data: Partial<ResumeData>): Confide
     confidence['overall'] = 0;
   } else {
     const sum = presentSections.reduce((acc, sec) => acc + confidence[sec], 0);
-    confidence['overall'] = Math.round(sum / presentSections.length);
+    let overall = Math.round(sum / presentSections.length);
+
+    // Rule: Overall is never 100% if any validator failed or any Check item exists
+    const hasValidatorFailure = Boolean((data as any)?.hasValidatorFailure);
+    const hasTitleInferred = Boolean((data.personalInfo as any)?.titleInferred);
+    if ((hasCheckItems || hasValidatorFailure || hasTitleInferred) && overall >= 100) {
+      overall = 95;
+    }
+
+    confidence['overall'] = overall;
   }
 
   return { confidence, counts };

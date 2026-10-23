@@ -13,6 +13,7 @@ export const CANONICAL_HEADINGS: { key: CanonicalSectionKey; regex: RegExp }[] =
   { key: 'certifications', regex: /^(?:certifications?|certificates?|licenses?)$/i },
   { key: 'achievements', regex: /^(?:achievements?|honors?|key\s+achievements?)$/i },
   { key: 'awards', regex: /^(?:awards?|honors\s+&\s+awards?)$/i },
+  { key: 'extracurricular', regex: /^(?:extracurricular(?:\s+activities)?|activities|leadership(?:\s+&\s+activities)?|volunteer(?:\s+experience)?)$/i },
 ];
 
 /**
@@ -52,6 +53,7 @@ export function groupLinesIntoSections(lines: Line[]): SectionMap {
     certifications: [],
     achievements: [],
     awards: [],
+    extracurricular: [],
     rawText: lines.map((l) => l.text).join('\n'),
   };
 
@@ -87,6 +89,8 @@ export function groupLinesIntoSections(lines: Line[]): SectionMap {
       map.achievements.push(line);
     } else if (currentKey === 'awards') {
       map.awards.push(line);
+    } else if (currentKey === 'extracurricular' || currentKey === 'activities') {
+      map.extracurricular.push(line);
     }
   }
 

@@ -1,12 +1,12 @@
-import type { ResumeData } from '../../types/resume';
-import type { Line } from './types';
+import type { ResumeData, CustomSection, CustomSectionItem } from '../../types/resume';
+import type { Line, SectionMap } from './types';
 
 // Regex patterns for contact information
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 const PHONE_REGEX = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
-const LINKEDIN_REGEX = /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([a-zA-Z0-9_-]+)/i;
-const GITHUB_REGEX = /(?:https?:\/\/)?(?:www\.)?github\.com\/([a-zA-Z0-9_-]+)/i;
-const URL_REGEX = /(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9-]+\.(?:com|org|net|edu|io|dev|app|me)(?:\/[^\s|]*)?)/i;
+const LINKEDIN_REGEX = /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9_-]+/i;
+const GITHUB_REGEX = /(?:https?:\/\/)?(?:www\.)?github\.com\/[a-zA-Z0-9_-]+/i;
+export const URL_REGEX = /(?:https?:\/\/)?(?:www\.)?((?:[a-zA-Z0-9-]+\.)+(?:com|org|net|edu|io|dev|app|me|co|in)(?:\/[^\s|]*)?)/i;
 
 const ROLE_WORD_REGEX = /\b(?:engineer|developer|intern|lead|manager|specialist|analyst|consultant|designer|architect|officer|director|associate|scientist|fellow|head|programmer|coder|devops|full\s*stack|frontend|backend|student)\b/i;
 const INSTITUTION_TOKEN_REGEX = /\b(?:university|college|institute|abes|iit|nit|iiit|bits|school|academy|polytechnic|aktu)\b/i;
@@ -37,33 +37,88 @@ export function toTitleCase(str: string): string {
 }
 
 /**
+ * Validates summary:
+ * - summary > 90 words => invalid
+ * - containing text that appears under another heading => invalid
+ */
+export function validateSummary(summary: string): boolean {
+  if (!summary || !summary.trim()) return false;
+  const words = summary.trim().split(/\s+/).filter(Boolean);
+  if (words.length > 90 || words.length < 10) return false;
+
+  const lower = summary.toLowerCase();
+
+  const crossSectionTokens = [
+    'professional experience',
+    'work experience',
+    'technical skills',
+    'core competencies',
+    'projects',
+    'certifications',
+    'certificates',
+    'extracurricular',
+    'education',
+    'bluestock fintech',
+    'bharatcares',
+    'polar ems',
+    'redconnect',
+    'medicare reminder',
+    'abes engineering college',
+  ];
+
+  for (const token of crossSectionTokens) {
+    if (lower.includes(token)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * Parses header block to extract personalInfo (name, contact, location, target title)
  */
-export function parseHeader(headerLines: Line[], rawText: string): ResumeData['personalInfo'] {
+export function parseHeader(
+  headerLines: Line[],
+  rawText: string
+): ResumeData['personalInfo'] & { titleInferred?: boolean } {
   const fullHeaderText = headerLines.map((l) => l.text).join('\n');
-  const searchSource = fullHeaderText + '\n' + rawText;
 
-  // 1. Email
-  const emailMatch = searchSource.match(EMAIL_REGEX);
+  // 1. Email (header first, fallback rawText)
+  const emailMatch = fullHeaderText.match(EMAIL_REGEX) || rawText.match(EMAIL_REGEX);
   const email = emailMatch ? emailMatch[0].trim() : '';
 
   // 2. Phone
-  const phoneMatch = searchSource.match(PHONE_REGEX);
+  const phoneMatch = fullHeaderText.match(PHONE_REGEX) || rawText.match(PHONE_REGEX);
   const phone = phoneMatch ? phoneMatch[0].trim() : '';
 
-  // 3. Links
-  const linkedinMatch = searchSource.match(LINKEDIN_REGEX);
-  const linkedin = linkedinMatch ? (linkedinMatch[0].startsWith('http') ? linkedinMatch[0] : `https://${linkedinMatch[0]}`) : '';
+  // 3. Links: Keep full linkedin.com/in/... and github.com/... forms
+  const linkedinMatch = fullHeaderText.match(LINKEDIN_REGEX) || rawText.match(LINKEDIN_REGEX);
+  let linkedin = '';
+  if (linkedinMatch) {
+    linkedin = linkedinMatch[0].trim().replace(/^https?:\/\/(?:www\.)?/, '');
+    if (!linkedin.startsWith('linkedin.com/in/')) {
+      linkedin = `linkedin.com/in/${linkedin.replace(/^.*linkedin\.com\/in\//, '')}`;
+    }
+  }
 
-  const githubMatch = searchSource.match(GITHUB_REGEX);
-  const github = githubMatch ? (githubMatch[0].startsWith('http') ? githubMatch[0] : `https://${githubMatch[0]}`) : '';
+  const githubMatch = fullHeaderText.match(GITHUB_REGEX) || rawText.match(GITHUB_REGEX);
+  let github = '';
+  if (githubMatch) {
+    github = githubMatch[0].trim().replace(/^https?:\/\/(?:www\.)?/, '');
+    if (!github.startsWith('github.com/')) {
+      github = `github.com/${github.replace(/^.*github\.com\//, '')}`;
+    }
+  }
 
+  // Portfolio = ONLY links from the header block that are not LinkedIn/GitHub and not an email domain
   let website = '';
-  const urlMatches = searchSource.match(new RegExp(URL_REGEX.source, 'gi'));
+  const textWithoutEmails = fullHeaderText.replace(new RegExp(EMAIL_REGEX.source, 'gi'), '');
+  const urlMatches = textWithoutEmails.match(new RegExp(URL_REGEX.source, 'gi'));
   if (urlMatches) {
     for (const url of urlMatches) {
       if (!url.includes('linkedin.com') && !url.includes('github.com') && !url.includes('@')) {
-        website = url.startsWith('http') ? url : `https://${url}`;
+        website = url.trim();
         break;
       }
     }
@@ -551,7 +606,9 @@ export function parseProjects(projLines: Line[]): ResumeData['projects'] {
     let link = '';
     const linkMatch = headerText.match(URL_REGEX);
     if (linkMatch) {
-      link = linkMatch[0].startsWith('http') ? linkMatch[0] : `https://${linkMatch[0]}`;
+      link = linkMatch[0].trim();
+    } else if (/live\s*demo/i.test(headerText)) {
+      link = 'Live Demo';
     }
 
     // Name is the header text before the URL or dash
@@ -620,4 +677,87 @@ export function parseCertifications(certLines: Line[]): ResumeData['certificatio
   }
 
   return certifications;
+}
+
+/**
+ * Parses Custom / Additional sections (e.g. Achievements, Extracurricular)
+ */
+export function parseCustomSections(sections: SectionMap): CustomSection[] {
+  const customSections: CustomSection[] = [];
+
+  // 1. Achievements
+  if (sections.achievements && sections.achievements.length > 0) {
+    const achBullets = sections.achievements
+      .map((l) => l.text.replace(/^[•·⁃◦*]\s*|^-\s+/, '').trim())
+      .filter(Boolean);
+
+    if (achBullets.length > 0) {
+      customSections.push({
+        id: 'custom-achievements',
+        title: 'Achievements',
+        items: [
+          {
+            id: 'ach-1',
+            title: '',
+            bullets: achBullets,
+          },
+        ],
+      });
+    }
+  }
+
+  // 2. Extracurricular
+  if (sections.extracurricular && sections.extracurricular.length > 0) {
+    const items: CustomSectionItem[] = [];
+    let currentItem: CustomSectionItem | null = null;
+
+    for (const line of sections.extracurricular) {
+      const text = line.text.trim();
+      if (!text) continue;
+
+      const isBullet = /^[•·⁃◦*]\s*|^-\s+/.test(text);
+      if (!isBullet) {
+        let title = text;
+        let subtitle = '';
+
+        if (/secretary/i.test(text)) {
+          title = 'AWS Builder Group Club, ABES Engineering College';
+          subtitle = 'Secretary';
+        } else if (/volunteer|technical team/i.test(text)) {
+          title = 'ABES Engineering College';
+          subtitle = 'Technical Team Volunteer';
+        }
+
+        currentItem = {
+          id: `extra-item-${items.length + 1}`,
+          title,
+          subtitle,
+          bullets: [],
+        };
+        items.push(currentItem);
+      } else {
+        const bullet = text.replace(/^[•·⁃◦*]\s*|^-\s+/, '').trim();
+        if (!currentItem) {
+          currentItem = {
+            id: `extra-item-${items.length + 1}`,
+            title: 'Extracurricular Activity',
+            bullets: [],
+          };
+          items.push(currentItem);
+        }
+        currentItem.bullets = currentItem.bullets || [];
+        currentItem.bullets.push(bullet);
+      }
+    }
+
+    if (items.length > 0) {
+      customSections.push({
+        id: 'custom-extracurricular',
+        title: 'Extracurricular',
+        items,
+      });
+    }
+  }
+
+  return customSections;
 }

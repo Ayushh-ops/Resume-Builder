@@ -49,6 +49,13 @@ export const getChecklistItems = (data: Partial<ResumeData>): ChecklistItem[] =>
       section: 'personal',
       fieldId: 'personalInfo.jobTitle',
     });
+  } else if ((data.personalInfo as any)?.titleInferred) {
+    items.push({
+      label: 'Target title inferred, please confirm',
+      hint: 'Target title was inferred from work experience or summary, please confirm',
+      section: 'personal',
+      fieldId: 'personalInfo.jobTitle',
+    });
   }
   if (!data.personalInfo?.email?.trim()) {
     items.push({
@@ -620,6 +627,14 @@ export const ResumeUploadModal: React.FC<ResumeUploadModalProps> = ({
                         {(parsedResult.data.projects?.length || 0) === 1 ? 'project' : 'projects'}
                       </span>
                     </div>
+                    {(parsedResult.data.customSections?.length || 0) > 0 && (
+                      <div>
+                        <span className="text-ink/60 block text-[12.5px]">Additional</span>
+                        <span className="font-semibold text-ink">
+                          {parsedResult.data.customSections!.reduce((acc, s) => acc + (s.items?.length || 0), 0)} items
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
