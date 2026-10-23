@@ -3,7 +3,9 @@ import {
   generate,
   getKey,
   selectMainModel,
+  getGeminiRequestStats,
   type ModelProbeResult,
+  type Parsed429Info,
 } from '../lib/gemini';
 
 export const VALID_ISSUE_TYPES = [
@@ -22,13 +24,23 @@ export type IssueType = (typeof VALID_ISSUE_TYPES)[number];
 
 export interface AIReviewSuggestion {
   id: string;
-  section: 'summary' | 'experience' | 'skills';
-  targetType: 'summary' | 'bullet' | 'skill';
+  section:
+    | 'summary'
+    | 'experience'
+    | 'skills'
+    | 'projects'
+    | 'education'
+    | 'certifications'
+    | 'achievements'
+    | 'extracurricular'
+    | 'custom';
+  targetType: 'summary' | 'bullet' | 'skill' | 'description' | 'title';
   issue: IssueType;
   title: string;
   before: string;
   after: string;
   explanation: string;
+  itemId?: string;
   expIdx?: number;
   bulletIdx?: number;
   skillName?: string;
@@ -37,6 +49,13 @@ export interface AIReviewSuggestion {
 export interface AIReviewValidationResult {
   valid: boolean;
   reason?: string;
+}
+
+export interface SectionDiagnostic {
+  name: string;
+  items: number;
+  bullets: number;
+  proseIncluded: boolean;
 }
 
 export interface AIReviewResult {
@@ -49,6 +68,11 @@ export interface AIReviewResult {
   rawCount: number;
   rawResponseSnippet?: string;
   statusText: string;
+  sectionDiagnostics: SectionDiagnostic[];
+  mentionedSections: string[];
+  unmentionedSections: string[];
+  requestStats?: { cpm: number; cpd: number; text: string };
+  quotaInfo?: Parsed429Info;
 }
 
 export const FLUFF_PHRASES = [
@@ -86,7 +110,20 @@ export const AI_REVIEW_SCHEMA = {
       items: {
         type: 'OBJECT',
         properties: {
-          section: { type: 'STRING' },
+          section: {
+            type: 'STRING',
+            enum: [
+              'summary',
+              'experience',
+              'skills',
+              'projects',
+              'education',
+              'certifications',
+              'achievements',
+              'extracurricular',
+              'custom',
+            ],
+          },
           targetType: { type: 'STRING' },
           issue: {
             type: 'STRING',
@@ -342,15 +379,16 @@ export interface AIReviewOptions {
   apiKey?: string;
   preferredModel?: string;
   stricter?: boolean;
+  allowLiteFallback?: boolean;
+  onRateLimitCountdown?: (secondsRemaining: number) => void;
 }
 
 /**
  * Executes AI resume review:
- * - Probes user's main non-lite model first; falls back to lite only if every non-lite fails.
- * - Quality pass asking for 3 to 6 suggestions ranked by impact (tense consistency, weak openers, missing metrics, redundancy, long bullets).
- * - Two few-shot examples (good: tense fix, vague->specific; bad: synonym swap, invented numbers).
- * - Strictly keeps seniority words, no title inflation, no fluff phrases, no thesaurus swaps.
- * - Validates each suggestion and filters out invalid, hallucinated, or inflated entries.
+ * - Checks working model cache before probing to avoid probing 4 models on every review.
+ * - Collects diagnostics for all sections with prose (Summary, Education, Skills, Experience, Projects, Achievements, Certificates, Extracurricular).
+ * - Quality pass asking for 3 to 6 suggestions ranked by impact across all sections.
+ * - Handles 429 cleanly with retry delay reporting, request counter stats, and prompt diagnostics.
  */
 export async function reviewResumeWithAI(
   resume: ResumeData,
@@ -362,24 +400,155 @@ export async function reviewResumeWithAI(
       : optionsOrSignal || {};
 
   const apiKey = options.apiKey || getKey();
-  const modelSelection = await selectMainModel(apiKey, options.preferredModel);
+  const modelSelection = await selectMainModel(
+    apiKey,
+    options.preferredModel,
+    false,
+    undefined,
+    options.allowLiteFallback
+  );
   const chosenModel = modelSelection.chosenModel;
 
   const jobTitle = resume.personalInfo?.jobTitle || '';
   const summary = resume.summary || '';
-  const skillsList = resume.skills?.flatMap((s) => s.skills) || [];
-  const experiences = (resume.experience || []).map((e, idx) => ({
+
+  // Assemble diagnostics and prose payload for all sections
+  const sectionDiagnostics: SectionDiagnostic[] = [];
+
+  // 1. Summary
+  const hasSummary = Boolean(summary.trim());
+  sectionDiagnostics.push({
+    name: 'Summary',
+    items: hasSummary ? 1 : 0,
+    bullets: 0,
+    proseIncluded: hasSummary,
+  });
+
+  // 2. Education
+  const eduItems = (resume.education || []).map((ed, idx) => ({
+    id: ed.id || `edu-${idx}`,
+    institution: ed.institution,
+    degree: ed.degree,
+    fieldOfStudy: ed.fieldOfStudy,
+    highlights: ed.highlights || [],
+  }));
+  const eduBullets = eduItems.reduce((acc, ed) => acc + (ed.highlights?.length || 0), 0);
+  sectionDiagnostics.push({
+    name: 'Education',
+    items: eduItems.length,
+    bullets: eduBullets,
+    proseIncluded: eduItems.length > 0,
+  });
+
+  // 3. Skills
+  const skillCategories = resume.skills || [];
+  const totalSkillsCount = skillCategories.reduce((acc, cat) => acc + (cat.skills?.length || 0), 0);
+  sectionDiagnostics.push({
+    name: 'Skills',
+    items: skillCategories.length,
+    bullets: totalSkillsCount,
+    proseIncluded: totalSkillsCount > 0,
+  });
+
+  // 4. Experience
+  const expItems = (resume.experience || []).map((e, idx) => ({
+    id: e.id || `exp-${idx}`,
     expIdx: idx,
     company: e.company,
     position: e.position,
     highlights: e.highlights || [],
   }));
+  const expBullets = expItems.reduce((acc, e) => acc + (e.highlights?.length || 0), 0);
+  sectionDiagnostics.push({
+    name: 'Experience',
+    items: expItems.length,
+    bullets: expBullets,
+    proseIncluded: expItems.length > 0,
+  });
+
+  // 5. Projects
+  const projItems = (resume.projects || []).map((p, idx) => ({
+    id: p.id || `proj-${idx}`,
+    name: p.name,
+    description: p.description,
+    technologies: p.technologies || [],
+    highlights: p.highlights || [],
+  }));
+  const projBullets = projItems.reduce((acc, p) => acc + (p.highlights?.length || 0), 0);
+  sectionDiagnostics.push({
+    name: 'Projects',
+    items: projItems.length,
+    bullets: projBullets,
+    proseIncluded: projItems.length > 0,
+  });
+
+  // 6. Certifications
+  const certItems = (resume.certifications || []).map((c, idx) => ({
+    id: c.id || `cert-${idx}`,
+    name: c.name,
+    issuer: c.issuer,
+    date: c.date,
+  }));
+  sectionDiagnostics.push({
+    name: 'Certificates',
+    items: certItems.length,
+    bullets: 0,
+    proseIncluded: certItems.length > 0,
+  });
+
+  // 7. Achievements & Extracurricular
+  const customSecs = resume.customSections || [];
+  const achieveSecs = customSecs.filter((cs) => /achievement|award|honor/i.test(cs.title));
+  const achieveItems = achieveSecs.flatMap((cs) => cs.items || []);
+  const achieveBullets = achieveItems.reduce((acc, it) => acc + (it.bullets?.length || 0), 0);
+  sectionDiagnostics.push({
+    name: 'Achievements',
+    items: achieveItems.length,
+    bullets: achieveBullets,
+    proseIncluded: achieveItems.length > 0,
+  });
+
+  const extraSecs = customSecs.filter((cs) =>
+    /extracurricular|activity|activities|leadership|volunteer/i.test(cs.title)
+  );
+  const extraItems = extraSecs.flatMap((cs) => cs.items || []);
+  const extraBullets = extraItems.reduce((acc, it) => acc + (it.bullets?.length || 0), 0);
+  sectionDiagnostics.push({
+    name: 'Extracurricular',
+    items: extraItems.length,
+    bullets: extraBullets,
+    proseIncluded: extraItems.length > 0,
+  });
+
+  const otherCustomSecs = customSecs.filter(
+    (cs) =>
+      !/achievement|award|honor/i.test(cs.title) &&
+      !/extracurricular|activity|activities|leadership|volunteer/i.test(cs.title)
+  );
+  if (otherCustomSecs.length > 0) {
+    const otherItems = otherCustomSecs.flatMap((cs) => cs.items || []);
+    const otherBullets = otherItems.reduce((acc, it) => acc + (it.bullets?.length || 0), 0);
+    sectionDiagnostics.push({
+      name: 'Custom Sections',
+      items: otherItems.length,
+      bullets: otherBullets,
+      proseIncluded: otherItems.length > 0,
+    });
+  }
+
+  const diagnosticSummary = sectionDiagnostics
+    .map(
+      (s) =>
+        `${s.name} (${s.items} item${s.items === 1 ? '' : 's'}${s.bullets ? `, ${s.bullets} bullets` : ''})`
+    )
+    .join(', ');
+  console.log(`[AI Review Pipeline] Payload sections: ${diagnosticSummary}`);
 
   let prompt = `You are an expert executive resume reviewer and editor.
-Conduct a thorough quality pass over the candidate's resume and generate 3 to 6 high-impact improvement suggestions ranked by impact.
+Conduct a thorough quality pass over the candidate's resume sections (Summary, Education, Skills, Experience, Projects, Certificates, Achievements, Extracurricular) and generate 3 to 6 high-impact improvement suggestions ranked by impact.
 
-QUALITY AUDIT CRITERIA (actively inspect and fix):
-1. Grammar & Tense Consistency: Ensure consistent verb tenses across bullets. For past positions, convert present-tense verbs to past tense (e.g., "Lead the club" -> "Led the club", "organize weekly code reviews" -> "organized weekly code reviews").
+QUALITY AUDIT CRITERIA (actively inspect and fix across all sections):
+1. Grammar & Tense Consistency: Ensure consistent verb tenses across bullets. For past roles or projects, convert present-tense verbs to past tense (e.g., "Lead the club" -> "Led the club", "organize weekly code reviews" -> "organized weekly code reviews").
 2. Weak or Vague Openers: Replace weak openers ("Responsible for...", "Worked on...", "Assisted with...", "Helped...") with direct, active ownership verbs.
 3. Missing Metric: Where the resume hints at scale or outcomes already documented in the resume text, connect and articulate that impact.
 4. Redundancy: Eliminate redundant phrasing (e.g., "Assisted in helping to create", repetitive tech mentions).
@@ -415,7 +584,7 @@ STRICT FAITHFULNESS CONSTRAINTS (Violations will be automatically rejected):
 4. NO FLUFF: Absolutely forbidden words/phrases: "proven track record", "results-driven", "performance-driven", "dynamic", "passionate", "seasoned", "expert", "world-class", "cutting-edge", "spearheaded".
 5. FACTS ONLY: Every number, decimal (e.g. 8.4), threshold (e.g. 10,000+, 1,000+), metric, technology, tool, employer, and degree MUST come strictly from the provided resume text below. Do NOT introduce unmentioned tools.
 6. SENTENCE COUNT: For summaries, the sentence count must be within +-1 of original.
-7. FORMAT: For experience bullets, 'before' must match an existing bullet verbatim.
+7. FORMAT: For bullet points, 'before' must match an existing bullet verbatim from the sections below.
 
 Do NOT return an empty list unless the resume truly has none of these issues. Rank suggestions by impact.`;
 
@@ -423,15 +592,32 @@ Do NOT return an empty list unless the resume truly has none of these issues. Ra
     prompt += `\n\nSTRICT SECOND PASS: You are conducting an uncompromising critical audit. You MUST identify at least 3 distinct improvement areas across tense consistency, weak openers ("Responsible for", "Helped"), unanchored outcomes, or rambling descriptions. Retain candidate facts with zero hallucinations.`;
   }
 
-  prompt += `\n\nCandidate Target Title: ${jobTitle}
-Current Summary:
+  prompt += `\n\nCandidate Target Title: ${jobTitle || '(None specified)'}
+
+=== RESUME PROSE & CONTENT SECTIONS ===
+Summary:
 "${summary}"
 
-Skills in Resume:
-${skillsList.join(', ')}
+Education:
+${JSON.stringify(eduItems, null, 2)}
 
-Experience in Resume:
-${JSON.stringify(experiences, null, 2)}
+Skills:
+${JSON.stringify(skillCategories.map((c) => ({ name: c.name, skills: c.skills })), null, 2)}
+
+Experience:
+${JSON.stringify(expItems, null, 2)}
+
+Projects:
+${JSON.stringify(projItems, null, 2)}
+
+Certificates:
+${JSON.stringify(certItems, null, 2)}
+
+Achievements:
+${JSON.stringify(achieveItems, null, 2)}
+
+Extracurricular:
+${JSON.stringify(extraItems, null, 2)}
 
 Output raw JSON strictly matching the schema.`;
 
@@ -442,14 +628,23 @@ Output raw JSON strictly matching the schema.`;
     responseMimeType: 'application/json',
     responseSchema: AI_REVIEW_SCHEMA,
     temperature: options.stricter ? 0.5 : 0.1,
+    onRateLimitCountdown: options.onRateLimitCountdown,
   });
 
+  const requestStats = getGeminiRequestStats(res.modelUsed || chosenModel);
+
   if (!res.ok || !res.text) {
-    const modelTag = res.modelUsed ? `[${res.modelUsed}] ` : '';
-    throw new Error(`${modelTag}${res.message || 'AI review failed'}`);
+    const err: any = new Error(
+      res.message || `Daily quota reached for ${chosenModel}. Resets later.`
+    );
+    err.status = res.status;
+    err.quotaInfo = res.quotaInfo;
+    err.modelUsed = res.modelUsed || chosenModel;
+    err.sectionDiagnostics = sectionDiagnostics;
+    throw err;
   }
 
-  const rawResponseSnippet = res.text.slice(0, 500);
+  const rawResponseSnippet = res.text.slice(0, 800);
 
   let parsed: any;
   try {
@@ -463,11 +658,59 @@ Output raw JSON strictly matching the schema.`;
   const accepted: AIReviewSuggestion[] = [];
   const rejected: { suggestion: any; reason: string }[] = [];
 
+  const canonicalSectionNames = [
+    'summary',
+    'education',
+    'skills',
+    'experience',
+    'projects',
+    'certifications',
+    'achievements',
+    'extracurricular',
+  ];
+  const mentionedSections = Array.from(
+    new Set(rawSuggestions.map((s: any) => String(s?.section || '').toLowerCase()))
+  ).filter(Boolean);
+  const unmentionedSections = canonicalSectionNames.filter(
+    (sec) => !mentionedSections.includes(sec)
+  );
+
+  console.log(`[AI Review Pipeline] Sections with suggestions: [${mentionedSections.join(', ')}]`);
+  if (unmentionedSections.length > 0) {
+    console.log(
+      `[AI Review Pipeline] Sections with NO suggestions: [${unmentionedSections.join(', ')}]`
+    );
+  }
+
   rawSuggestions.forEach((s, idx) => {
+    const rawSection = String(s.section || 'experience').toLowerCase();
+    const section = canonicalSectionNames.includes(rawSection)
+      ? (rawSection as any)
+      : rawSection.includes('cert')
+      ? 'certifications'
+      : rawSection.includes('proj')
+      ? 'projects'
+      : rawSection.includes('edu')
+      ? 'education'
+      : rawSection.includes('achieve')
+      ? 'achievements'
+      : rawSection.includes('extra')
+      ? 'extracurricular'
+      : 'experience';
+
+    const targetType =
+      s.targetType === 'summary'
+        ? 'summary'
+        : s.targetType === 'skill'
+        ? 'skill'
+        : s.targetType === 'title'
+        ? 'title'
+        : 'bullet';
+
     const suggestion: AIReviewSuggestion = {
       id: `ai-rev-${Date.now()}-${idx}`,
-      section: s.section === 'summary' ? 'summary' : s.section === 'skills' ? 'skills' : 'experience',
-      targetType: s.targetType === 'summary' ? 'summary' : s.targetType === 'skill' ? 'skill' : 'bullet',
+      section,
+      targetType,
       issue: s.issue as IssueType,
       title: s.title || 'AI Improvement',
       before: s.before || '',
@@ -502,5 +745,10 @@ Output raw JSON strictly matching the schema.`;
     rawCount,
     rawResponseSnippet,
     statusText,
+    sectionDiagnostics,
+    mentionedSections,
+    unmentionedSections,
+    requestStats,
+    quotaInfo: res.quotaInfo,
   };
 }

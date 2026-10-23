@@ -445,10 +445,10 @@ describe('AI Review Validator Unit Tests', () => {
     expect(result.valid).toBe(true);
   });
 
-  it('verifies tests/fixtures/weak-resume.json has 6 intentionally weak bullets', async () => {
+  it('verifies tests/data/weak-resume.json has 6 intentionally weak bullets', async () => {
     const fs = await import('fs');
     const path = await import('path');
-    const fixturePath = path.resolve(process.cwd(), 'tests/fixtures/weak-resume.json');
+    const fixturePath = path.resolve(process.cwd(), 'tests/data/weak-resume.json');
     expect(fs.existsSync(fixturePath)).toBe(true);
 
     const data = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
@@ -456,6 +456,59 @@ describe('AI Review Validator Unit Tests', () => {
     expect(data.experience[0].highlights).toHaveLength(6);
     expect(data.experience[0].highlights[0]).toMatch(/^Lead the/);
     expect(data.experience[0].highlights[1]).toMatch(/^Responsible for/);
+  });
+
+  it('correctly parses 429 RetryInfo and detects daily vs transient quotas', async () => {
+    const { parse429Error } = await import('../src/lib/gemini');
+
+    // 1. Transient per-minute rate limit (<90s)
+    const transientBody = JSON.stringify({
+      error: {
+        code: 429,
+        message: 'Resource exhausted. Please retry in 18.5s.',
+        details: [
+          {
+            '@type': 'type.googleapis.com/google.rpc.RetryInfo',
+            retryDelay: '18s',
+          },
+        ],
+      },
+    });
+    const transientParsed = parse429Error(transientBody);
+    expect(transientParsed.isQuota).toBe(true);
+    expect(transientParsed.isDaily).toBe(false);
+    expect(transientParsed.retryDelaySeconds).toBe(18);
+
+    // 2. Daily quota limit (>=90s or per-day description)
+    const dailyBody = JSON.stringify({
+      error: {
+        code: 429,
+        message: 'Generate content requests per day limit exceeded on Free Tier. Please retry in 13h38m12s.',
+        details: [
+          {
+            '@type': 'type.googleapis.com/google.rpc.RetryInfo',
+            retryDelay: '49092s',
+          },
+        ],
+      },
+    });
+    const dailyParsed = parse429Error(dailyBody);
+    expect(dailyParsed.isQuota).toBe(true);
+    expect(dailyParsed.isDaily).toBe(true);
+    expect(dailyParsed.retryDelaySeconds).toBe(49092);
+  });
+
+  it('reuses cached working model without probing candidate models', async () => {
+    const { selectMainModel, setWorkingModel, clearWorkingModel } = await import(
+      '../src/lib/gemini'
+    );
+    clearWorkingModel();
+    setWorkingModel('gemini-3.8-flash');
+
+    const result = await selectMainModel('dummy-key');
+    expect(result.chosenModel).toBe('gemini-3.8-flash');
+    expect(result.probeTable).toHaveLength(0); // Did not probe
+    expect(result.statusMessage).toContain('Using cached model');
   });
 });
 

@@ -47,13 +47,13 @@ async function main() {
   // PART 1: TEST WITH KNOWN-WEAK FIXTURE
   // ==========================================
   console.log('====================================================');
-  console.log('PART 1: REAL AI REVIEW ON tests/fixtures/weak-resume.json');
+  console.log('PART 1: REAL AI REVIEW ON tests/data/weak-resume.json');
   console.log('====================================================');
-  const weakFixturePath = path.resolve(process.cwd(), 'tests/fixtures/weak-resume.json');
+  const weakFixturePath = path.resolve(process.cwd(), 'tests/data/weak-resume.json');
   const weakData = JSON.parse(fs.readFileSync(weakFixturePath, 'utf8'));
 
   const tWeak = Date.now();
-  const weakResult = await reviewResumeWithAI(weakData, { apiKey: key });
+  const weakResult = await reviewResumeWithAI(weakData, { apiKey: key, allowLiteFallback: true });
   const msWeak = Date.now() - tWeak;
 
   console.log(`\nModel Used: ${weakResult.modelUsed} ${weakResult.isLiteFallback ? '(lite fallback)' : '(main)'}`);
@@ -91,20 +91,60 @@ async function main() {
   console.log('PART 2: REAL AI REVIEW ON ./resume.pdf DATA');
   console.log('====================================================');
 
+  const { probeModel, listModels } = await import('../src/lib/gemini');
+  const allCandidates = await listModels(key, false);
+  const mainCandidates = allCandidates.filter((m) => !m.endsWith('-lite'));
+
+  let workingMainModel: string | null = null;
+  let last429Delay = 'resets later';
+
+  for (const m of mainCandidates) {
+    const probe = await probeModel(m, key);
+    if (probe.ok) {
+      workingMainModel = m;
+      break;
+    } else if (probe.status === 429) {
+      if (probe.quotaInfo?.retryMessage) {
+        last429Delay = probe.quotaInfo.retryMessage;
+      }
+    }
+  }
+
+  if (!workingMainModel) {
+    console.log(`BLOCKED: 429 on all main models (retry delay: ${last429Delay}). Resets later.`);
+    console.log('SKIPPING real-PDF check with lite model (per instructions: do not report lite results as real-PDF result).');
+    console.log('====================================================\n');
+    return;
+  }
+
   const pdfBuffer = fs.readFileSync(path.resolve(process.cwd(), 'resume.pdf'));
   const lines = await extractLinesFromPdf(pdfBuffer);
   const rawText = lines.map((l) => l.text).join('\n');
   const resumeData = fallbackRegexParser(rawText, 'resume.pdf', lines);
 
   const tResume = Date.now();
-  const resumeResult = await reviewResumeWithAI(resumeData as any, { apiKey: key });
+  const resumeResult = await reviewResumeWithAI(resumeData as any, {
+    apiKey: key,
+    preferredModel: workingMainModel,
+    allowLiteFallback: false,
+  });
   const msResume = Date.now() - tResume;
 
-  console.log(`\nModel Used: ${resumeResult.modelUsed} ${resumeResult.isLiteFallback ? '(lite fallback)' : '(main)'}`);
-  console.log(`Status line: ${resumeResult.probeStatusMessage || ''}`);
-  console.log(`Status text: ${resumeResult.statusText}`);
-  console.log(`Latency:     ${msResume}ms`);
-  console.log(`Counts:      Model returned ${resumeResult.rawCount}, accepted ${resumeResult.accepted.length}, rejected ${resumeResult.rejected.length}`);
+  console.log(`\nModel Used: ${resumeResult.modelUsed} (main)`);
+  console.log(`Latency:    ${msResume}ms`);
+  console.log(`Counts:     Model returned ${resumeResult.rawCount}, accepted ${resumeResult.accepted.length}, rejected ${resumeResult.rejected.length}`);
+
+  console.log('\nPayload Section List:');
+  resumeResult.sectionDiagnostics.forEach((s) => {
+    console.log(`  - ${s.name}: ${s.items} items, ${s.bullets} bullets (prose included: ${s.proseIncluded})`);
+  });
+
+  if (resumeResult.mentionedSections && resumeResult.mentionedSections.length > 0) {
+    console.log(`\nSections with suggestions: [${resumeResult.mentionedSections.join(', ')}]`);
+  }
+  if (resumeResult.unmentionedSections && resumeResult.unmentionedSections.length > 0) {
+    console.log(`Sections never mentioned:   [${resumeResult.unmentionedSections.join(', ')}]`);
+  }
 
   if (resumeResult.rejected.length > 0) {
     console.log('\nRejected suggestions:');
@@ -123,11 +163,8 @@ async function main() {
     });
   }
 
-  if (resumeResult.rawCount === 0) {
-    console.log('\nModel returned 0 suggestions. Raw model response snippet (first 500 chars):');
-    console.log(resumeResult.rawResponseSnippet || '(empty response)');
-  }
-
+  console.log('\nRaw model response snippet (first 800 chars):');
+  console.log(resumeResult.rawResponseSnippet || '(empty response)');
   console.log('====================================================\n');
 }
 

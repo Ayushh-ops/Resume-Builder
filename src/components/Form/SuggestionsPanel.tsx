@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   Sparkles,
   ChevronDown,
@@ -38,7 +38,13 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
   const [aiError, setAiError] = useState<string | null>(null);
   const [hasRunAi, setHasRunAi] = useState(false);
   const [aiStatus, setAiStatus] = useState<string | null>(null);
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
+  const [dailyQuotaInfo, setDailyQuotaInfo] = useState<{
+    model: string;
+    retryMessage?: string;
+  } | null>(null);
   const [lastReviewResult, setLastReviewResult] = useState<AIReviewResult | null>(null);
+  const lastReviewedHashRef = useRef<string | null>(null);
   const [aiReviewSuggestions, setAiReviewSuggestions] = useState<AIReviewSuggestion[]>(() => {
     try {
       const saved = sessionStorage.getItem('resumecraft_ai_review_suggestions');
@@ -49,6 +55,24 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
   });
 
   const hasTargetTitle = Boolean(resumeData.personalInfo?.jobTitle?.trim());
+
+  // Helper to hash content to prevent auto-running review more than once per resume content hash
+  const getResumeContentHash = (data: ResumeData): string => {
+    try {
+      return JSON.stringify({
+        t: data.personalInfo?.jobTitle,
+        s: data.summary,
+        sk: data.skills,
+        e: data.experience,
+        ed: data.education,
+        p: data.projects,
+        c: data.certifications,
+        cs: data.customSections,
+      });
+    } catch {
+      return '';
+    }
+  };
 
   // Diagnostic guidance items from existing checks
   const guidanceItems = useMemo(() => {
@@ -160,9 +184,9 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
   const handleApplyAiSuggestion = (suggestion: AIReviewSuggestion) => {
     const updated: ResumeData = JSON.parse(JSON.stringify(resumeData));
 
-    if (suggestion.targetType === 'summary') {
+    if (suggestion.targetType === 'summary' || suggestion.section === 'summary') {
       updated.summary = suggestion.after;
-    } else if (suggestion.targetType === 'skill') {
+    } else if (suggestion.targetType === 'skill' || suggestion.section === 'skills') {
       const skillName = suggestion.skillName || suggestion.after;
       if (updated.skills && updated.skills.length > 0) {
         if (!updated.skills[0].skills.includes(skillName)) {
@@ -178,8 +202,10 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
         ];
       }
     } else {
-      // Bullet point
+      // Bullet point replacement across experience, projects, education, customSections
       let replaced = false;
+
+      // 1. Experience
       if (typeof suggestion.expIdx === 'number' && typeof suggestion.bulletIdx === 'number') {
         if (updated.experience?.[suggestion.expIdx]?.highlights?.[suggestion.bulletIdx]) {
           updated.experience[suggestion.expIdx].highlights[suggestion.bulletIdx] = suggestion.after;
@@ -199,6 +225,56 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
           if (replaced) break;
         }
       }
+
+      // 2. Projects
+      if (!replaced && suggestion.before) {
+        for (const proj of updated.projects || []) {
+          if (!proj.highlights) continue;
+          for (let b = 0; b < proj.highlights.length; b++) {
+            if (proj.highlights[b].trim() === suggestion.before.trim()) {
+              proj.highlights[b] = suggestion.after;
+              replaced = true;
+              break;
+            }
+          }
+          if (replaced) break;
+        }
+      }
+
+      // 3. Custom Sections (Achievements, Extracurricular, etc.)
+      if (!replaced && suggestion.before) {
+        for (const cs of updated.customSections || []) {
+          for (const item of cs.items || []) {
+            if (!item.bullets) continue;
+            for (let b = 0; b < item.bullets.length; b++) {
+              if (item.bullets[b].trim() === suggestion.before.trim()) {
+                item.bullets[b] = suggestion.after;
+                replaced = true;
+                break;
+              }
+            }
+            if (replaced) break;
+          }
+          if (replaced) break;
+        }
+      }
+
+      // 4. Education
+      if (!replaced && suggestion.before) {
+        for (const ed of updated.education || []) {
+          if (!ed.highlights) continue;
+          for (let b = 0; b < ed.highlights.length; b++) {
+            if (ed.highlights[b].trim() === suggestion.before.trim()) {
+              ed.highlights[b] = suggestion.after;
+              replaced = true;
+              break;
+            }
+          }
+          if (replaced) break;
+        }
+      }
+
+      // 5. Fallback
       if (!replaced && updated.experience?.[0]?.highlights?.length) {
         updated.experience[0].highlights[0] = suggestion.after;
       }
@@ -209,9 +285,27 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
     scrollToChangedField(suggestion.section, suggestion.expIdx, suggestion.bulletIdx);
   };
 
-  const handleReviewWithAi = async (opts?: { stricter?: boolean }) => {
+  const handleReviewWithAi = async (opts?: {
+    stricter?: boolean;
+    forceRefresh?: boolean;
+    allowLiteFallback?: boolean;
+  }) => {
     setAiError(null);
     setAiStatus(null);
+    setDailyQuotaInfo(null);
+    setRetryCountdown(null);
+
+    const currentHash = getResumeContentHash(resumeData);
+    if (
+      !opts?.forceRefresh &&
+      !opts?.stricter &&
+      !opts?.allowLiteFallback &&
+      lastReviewedHashRef.current === currentHash &&
+      aiReviewSuggestions.length > 0
+    ) {
+      setAiStatus('Resume content unchanged since last review');
+      return;
+    }
 
     const apiKey = getKey();
     if (!apiKey) {
@@ -228,16 +322,21 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
-    }, 45000); // 45-second timeout
+    }, 60000); // 60-second timeout to allow transient countdown
 
     try {
       const result = await reviewResumeWithAI(resumeData, {
         signal: controller.signal,
         stricter: opts?.stricter,
+        allowLiteFallback: opts?.allowLiteFallback,
+        onRateLimitCountdown: (secs) => {
+          setRetryCountdown(secs > 0 ? secs : null);
+        },
       });
       clearTimeout(timeoutId);
       setHasRunAi(true);
       setLastReviewResult(result);
+      lastReviewedHashRef.current = currentHash;
 
       if (result.accepted.length > 0) {
         setAiReviewSuggestions((prev) => {
@@ -252,13 +351,30 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
     } catch (err: any) {
       clearTimeout(timeoutId);
       setHasRunAi(true);
-      const currentModel = getSelectedModel();
-      const msg = err.name === 'AbortError' ? 'AI review timed out after 45 seconds' : (err.message || 'AI review failed');
+      const currentModel = err.modelUsed || getSelectedModel();
+      if (err.status === 429) {
+        const isDaily = err.quotaInfo?.isDaily ?? true;
+        if (isDaily) {
+          setDailyQuotaInfo({
+            model: currentModel,
+            retryMessage: err.quotaInfo?.retryMessage,
+          });
+          const statusMsg = `Daily quota reached for ${currentModel}. Resets later.`;
+          setAiError(statusMsg);
+          setAiStatus(statusMsg);
+          return;
+        }
+      }
+      const msg =
+        err.name === 'AbortError'
+          ? 'AI review timed out'
+          : err.message || 'AI review failed';
       const formatted = msg.startsWith('[') ? msg : `[${currentModel}] ${msg}`;
       setAiError(formatted);
       setAiStatus(formatted);
     } finally {
       setAiLoading(false);
+      setRetryCountdown(null);
     }
   };
 
@@ -298,78 +414,181 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
             </p>
           )}
 
-          {/* Model Choice, Exact Counts & Expandable Details */}
+          {/* Rate Limit Active Countdown */}
+          {typeof retryCountdown === 'number' && retryCountdown > 0 && (
+            <div className="p-2.5 rounded-[8px] bg-amber-500/10 border border-amber-500/30 text-xs font-medium text-amber-700 dark:text-amber-300 animate-pulse flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 animate-spin shrink-0" />
+              <span>Rate limit reached. Retrying in {retryCountdown}s...</span>
+            </div>
+          )}
+
+          {/* Daily Quota Notice with Action Buttons */}
+          {dailyQuotaInfo && (
+            <div className="p-2.5 rounded-[8px] bg-amber-500/10 border border-amber-500/30 text-xs space-y-2">
+              <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-medium">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>
+                  Daily quota reached for {dailyQuotaInfo.model}. Resets later.
+                  {dailyQuotaInfo.retryMessage ? ` (in ~${dailyQuotaInfo.retryMessage})` : ''}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleReviewWithAi({ forceRefresh: true })}
+                  disabled={aiLoading}
+                  className="px-2.5 py-1 text-[11px] font-medium bg-card border border-line rounded-[6px] hover:bg-muted transition cursor-pointer"
+                >
+                  Retry with main model
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleReviewWithAi({ allowLiteFallback: true })}
+                  disabled={aiLoading}
+                  className="px-2.5 py-1 text-[11px] font-medium bg-card border border-line rounded-[6px] hover:bg-muted transition cursor-pointer"
+                >
+                  Use lite for now
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Model Status & Expandable Details */}
           {lastReviewResult && (
             <div className="p-2.5 rounded-[8px] bg-muted/20 border border-line space-y-2 text-xs">
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                <span className="font-semibold text-ink">
-                  Model: <span className="font-mono text-brand-600 dark:text-brand-400">{lastReviewResult.modelUsed}</span>
+                <div className="flex items-center flex-wrap gap-1.5">
+                  <span className="font-semibold text-ink">
+                    Model: <span className="font-mono text-brand-600 dark:text-brand-400">{lastReviewResult.modelUsed}</span>
+                  </span>
                   {lastReviewResult.isLiteFallback && (
-                    <span className="ml-1.5 text-[10px] text-amber-600 dark:text-amber-400 font-normal">
-                      (lite fallback: all non-lite models failed)
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[10px] font-medium border border-amber-500/20">
+                      Lite model: may miss issues
                     </span>
                   )}
-                </span>
+                  {lastReviewResult.isLiteFallback && (
+                    <button
+                      type="button"
+                      onClick={() => handleReviewWithAi({ forceRefresh: true })}
+                      disabled={aiLoading}
+                      className="text-[10px] text-brand-600 dark:text-brand-400 underline hover:opacity-80 cursor-pointer"
+                    >
+                      Retry with main model
+                    </button>
+                  )}
+                </div>
                 <span className="text-[11px] text-ink/80 font-medium">
                   {lastReviewResult.statusText}
                 </span>
               </div>
 
-              {lastReviewResult.isLiteFallback && (
-                <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                  Notice: Every non-lite model failed probe. Used {lastReviewResult.modelUsed}.
-                </p>
-              )}
+              {/* Expandable Details Container */}
+              <details className="text-[11px] text-ink/70">
+                <summary className="cursor-pointer hover:text-ink font-medium">
+                  Details
+                </summary>
+                <div className="mt-2 space-y-2 pt-1 border-t border-line/50">
+                  {/* Request Usage stats */}
+                  {lastReviewResult.requestStats && (
+                    <p className="text-[10px] text-ink/60">
+                      <span className="font-semibold text-ink">Usage:</span> {lastReviewResult.requestStats.text}
+                    </p>
+                  )}
 
-              {/* Expandable Model Probe Table */}
-              {lastReviewResult.probeTable && lastReviewResult.probeTable.length > 0 && (
-                <details className="text-[11px] text-ink/70">
-                  <summary className="cursor-pointer hover:text-ink font-medium">
-                    View model probe table ({lastReviewResult.probeTable.length} models probed)
-                  </summary>
-                  <div className="mt-1.5 overflow-x-auto border border-line rounded-[6px] bg-card p-2">
-                    <table className="w-full text-left font-mono text-[10px]">
-                      <thead>
-                        <tr className="border-b border-line text-ink/50">
-                          <th className="pb-1 pr-2">Model</th>
-                          <th className="pb-1 pr-2">Status</th>
-                          <th className="pb-1 pr-2">Latency</th>
-                          <th className="pb-1">Result</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {lastReviewResult.probeTable.map((p) => (
-                          <tr key={p.model} className="border-b border-line/40 last:border-0">
-                            <td className="py-0.5 pr-2">{p.model}</td>
-                            <td className={`py-0.5 pr-2 font-bold ${p.status === 200 ? 'text-emerald-600' : 'text-red-500'}`}>{p.status}</td>
-                            <td className="py-0.5 pr-2">{p.elapsedMs}ms</td>
-                            <td className="py-0.5 text-ink/60 truncate max-w-[140px]">
-                              {p.status === 200 ? 'OK' : p.errorMsg || 'Failed'}
-                            </td>
+                  {/* Payload sections breakdown */}
+                  {lastReviewResult.sectionDiagnostics && lastReviewResult.sectionDiagnostics.length > 0 && (
+                    <div className="text-[10px] text-ink/70">
+                      <span className="font-semibold text-ink">Payload sections: </span>
+                      {lastReviewResult.sectionDiagnostics
+                        .map(
+                          (s) =>
+                            `${s.name} (${s.items} item${s.items === 1 ? '' : 's'}${s.bullets ? `, ${s.bullets} bullets` : ''})`
+                        )
+                        .join(', ')}
+                    </div>
+                  )}
+
+                  {/* Section Coverage */}
+                  {lastReviewResult.mentionedSections && (
+                    <div className="text-[10px] text-ink/60">
+                      <span className="font-semibold text-ink">Reviewed sections:</span> [
+                      {lastReviewResult.mentionedSections.join(', ')}]
+                      {lastReviewResult.unmentionedSections && lastReviewResult.unmentionedSections.length > 0 && (
+                        <span>
+                          {' '}· <span className="font-semibold text-ink">No suggestions:</span> [
+                          {lastReviewResult.unmentionedSections.join(', ')}]
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Probe Table (Inside Details only) */}
+                  {lastReviewResult.probeTable && lastReviewResult.probeTable.length > 0 && (
+                    <div className="overflow-x-auto border border-line rounded-[6px] bg-card p-2">
+                      <p className="text-[10px] font-semibold text-ink mb-1">
+                        Probe Table ({lastReviewResult.probeTable.length} models probed):
+                      </p>
+                      <table className="w-full text-left font-mono text-[10px]">
+                        <thead>
+                          <tr className="border-b border-line text-ink/50">
+                            <th className="pb-1 pr-2">Model</th>
+                            <th className="pb-1 pr-2">Status</th>
+                            <th className="pb-1 pr-2">Latency</th>
+                            <th className="pb-1">Result</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </details>
-              )}
+                        </thead>
+                        <tbody>
+                          {lastReviewResult.probeTable.map((p) => (
+                            <tr key={p.model} className="border-b border-line/40 last:border-0">
+                              <td className="py-0.5 pr-2">{p.model}</td>
+                              <td
+                                className={`py-0.5 pr-2 font-bold ${
+                                  p.status === 200 ? 'text-emerald-600' : 'text-red-500'
+                                }`}
+                              >
+                                {p.status}
+                              </td>
+                              <td className="py-0.5 pr-2">{p.elapsedMs}ms</td>
+                              <td className="py-0.5 text-ink/60 truncate max-w-[140px]">
+                                {p.status === 200 ? 'OK' : p.errorMsg || 'Failed'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
 
-              {/* Expandable Rejected Reasons */}
-              {lastReviewResult.rejected.length > 0 && (
-                <details className="text-[11px] text-ink/70">
-                  <summary className="cursor-pointer hover:text-ink font-medium text-amber-600 dark:text-amber-400">
-                    View {lastReviewResult.rejected.length} rejected suggestions & reasons
-                  </summary>
-                  <ul className="mt-1.5 space-y-1 list-disc list-inside bg-card p-2 rounded-[6px] border border-line text-[10px]">
-                    {lastReviewResult.rejected.map((r, i) => (
-                      <li key={i} className="text-ink/80">
-                        <span className="font-medium text-ink">{r.suggestion?.title || 'Suggestion'}:</span>{' '}
-                        <span className="text-red-600 dark:text-red-400">{r.reason}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
+                  {/* Expandable Rejected Reasons */}
+                  {lastReviewResult.rejected && lastReviewResult.rejected.length > 0 && (
+                    <div className="bg-card p-2 rounded-[6px] border border-line text-[10px] space-y-1">
+                      <p className="font-semibold text-amber-600 dark:text-amber-400">
+                        Rejected Suggestions ({lastReviewResult.rejected.length}):
+                      </p>
+                      <ul className="space-y-1 list-disc list-inside">
+                        {lastReviewResult.rejected.map((r, i) => (
+                          <li key={i} className="text-ink/80">
+                            <span className="font-medium text-ink">
+                              {r.suggestion?.title || 'Suggestion'}:
+                            </span>{' '}
+                            <span className="text-red-600 dark:text-red-400">{r.reason}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Raw response snippet */}
+                  {lastReviewResult.rawResponseSnippet && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-ink mb-0.5">Raw model response snippet:</p>
+                      <pre className="font-mono text-[9px] bg-card border border-line p-1.5 rounded max-h-24 overflow-y-auto whitespace-pre-wrap text-ink/70">
+                        {lastReviewResult.rawResponseSnippet}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </details>
             </div>
           )}
 

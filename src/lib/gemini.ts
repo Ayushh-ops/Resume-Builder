@@ -12,7 +12,138 @@ export type CandidateModel = (typeof CANDIDATE_MODELS)[number];
 const LOCAL_STORAGE_KEY = 'resumecraft_gemini_api_key';
 const LOCAL_STORAGE_MODEL_KEY = 'resumecraft_gemini_model';
 const CACHE_KEY = 'resumecraft_gemini_models_cache';
+const WORKING_MODEL_KEY = 'resumecraft_gemini_working_model';
+const REQUEST_LOG_KEY = 'resumecraft_gemini_request_log';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Fallback in-memory store for environments where localStorage is not available (e.g. Node tests)
+const inMemoryStore = new Map<string, string>();
+
+export function getStorageItem(key: string): string | null {
+  try {
+    if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
+      const val = localStorage.getItem(key);
+      if (val !== null) return val;
+    }
+  } catch {}
+  return inMemoryStore.get(key) || null;
+}
+
+export function setStorageItem(key: string, value: string): void {
+  try {
+    if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
+      localStorage.setItem(key, value);
+    }
+  } catch {}
+  inMemoryStore.set(key, value);
+}
+
+export function removeStorageItem(key: string): void {
+  try {
+    if (typeof localStorage !== 'undefined' && typeof localStorage.removeItem === 'function') {
+      localStorage.removeItem(key);
+    }
+  } catch {}
+  inMemoryStore.delete(key);
+}
+
+// Minimum 2-second gap tracker between consecutive Gemini API requests
+let lastGeminiCallEndTime = 0;
+
+export async function ensureCallGap(): Promise<void> {
+  const proc = (globalThis as any).process;
+  if (proc && (proc.env?.VITEST || proc.env?.NODE_ENV === 'test')) {
+    return;
+  }
+  const now = Date.now();
+  const elapsed = now - lastGeminiCallEndTime;
+  if (elapsed < 2000) {
+    const delay = 2000 - elapsed;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+}
+
+export function recordCallEndTime(): void {
+  lastGeminiCallEndTime = Date.now();
+}
+
+/**
+ * Global Request Counter:
+ * Tracks requests per minute (cpm) and per day (cpd) per model in dev logs.
+ */
+interface RequestRecord {
+  timestamp: number;
+  model: string;
+}
+
+export function recordGeminiRequest(model: string): { cpm: number; cpd: number } {
+  const now = Date.now();
+  let log: RequestRecord[] = [];
+  try {
+    const raw = getStorageItem(REQUEST_LOG_KEY);
+    if (raw) log = JSON.parse(raw);
+  } catch {}
+  if (!Array.isArray(log)) log = [];
+
+  // Retain records within the last 24h
+  log = log.filter((r) => now - r.timestamp < 24 * 60 * 60 * 1000);
+  log.push({ timestamp: now, model });
+  setStorageItem(REQUEST_LOG_KEY, JSON.stringify(log));
+
+  const modelLogs = log.filter((r) => r.model === model);
+  const cpm = modelLogs.filter((r) => now - r.timestamp <= 60 * 1000).length;
+  const cpd = modelLogs.length;
+
+  console.log(`[Gemini Request Counter] model=${model} | ${cpm} calls/min | ${cpd} calls today`);
+  return { cpm, cpd };
+}
+
+export function getGeminiRequestStats(model?: string): { cpm: number; cpd: number; text: string } {
+  const now = Date.now();
+  let log: RequestRecord[] = [];
+  try {
+    const raw = getStorageItem(REQUEST_LOG_KEY);
+    if (raw) log = JSON.parse(raw);
+  } catch {}
+  if (!Array.isArray(log)) log = [];
+
+  const targetModel = (model || getSelectedModel() || FALLBACK_MODELS[0]).replace(/^models\//, '');
+  const modelLogs = log.filter((r) => r.model === targetModel);
+  const cpm = modelLogs.filter((r) => now - r.timestamp <= 60 * 1000).length;
+  const cpd = modelLogs.filter((r) => now - r.timestamp <= 24 * 60 * 60 * 1000).length;
+
+  return {
+    cpm,
+    cpd,
+    text: `${cpm} call${cpm === 1 ? '' : 's'}/min, ${cpd} call${cpd === 1 ? '' : 's'} today (${targetModel})`,
+  };
+}
+
+/**
+ * Working model cache (with timestamp) to avoid probing 4 models on every review.
+ */
+export function getWorkingModel(): { model: string; timestamp: number } | null {
+  try {
+    const raw = getStorageItem(WORKING_MODEL_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.model === 'string' && typeof parsed.timestamp === 'number') {
+      return parsed;
+    }
+  } catch {}
+  return null;
+}
+
+export function setWorkingModel(model: string): void {
+  setStorageItem(
+    WORKING_MODEL_KEY,
+    JSON.stringify({ model: model.replace(/^models\//, ''), timestamp: Date.now() })
+  );
+}
+
+export function clearWorkingModel(): void {
+  removeStorageItem(WORKING_MODEL_KEY);
+}
 
 export const EXCLUDED_KEYWORDS = [
   'tts',
@@ -33,10 +164,7 @@ export const EXCLUDED_KEYWORDS = [
 ] as const;
 
 export function getKey(): string {
-  let key = '';
-  try {
-    key = localStorage.getItem(LOCAL_STORAGE_KEY) || '';
-  } catch {}
+  let key = getStorageItem(LOCAL_STORAGE_KEY) || '';
   if (!key && typeof import.meta !== 'undefined' && import.meta.env) {
     key = import.meta.env.VITE_GEMINI_API_KEY || '';
   }
@@ -50,10 +178,7 @@ export function getKey(): string {
 }
 
 export function getKeySource(): 'Settings' | '.env' | 'none' {
-  let localKey = '';
-  try {
-    localKey = localStorage.getItem(LOCAL_STORAGE_KEY) || '';
-  } catch {}
+  const localKey = getStorageItem(LOCAL_STORAGE_KEY) || '';
   if (localKey.trim()) return 'Settings';
   if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY?.trim()) {
     return '.env';
@@ -68,41 +193,33 @@ export function getKeySource(): 'Settings' | '.env' | 'none' {
 export function setKey(key: string): void {
   const cleaned = (key || '').trim().replace(/^["']|["']$/g, '').trim();
   if (cleaned) {
-    localStorage.setItem(LOCAL_STORAGE_KEY, cleaned);
+    setStorageItem(LOCAL_STORAGE_KEY, cleaned);
   } else {
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    removeStorageItem(LOCAL_STORAGE_KEY);
   }
 }
 
 export function clearSavedKey(): void {
-  try {
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
-  } catch {}
+  removeStorageItem(LOCAL_STORAGE_KEY);
 }
 
 export function getSelectedModel(): string {
-  try {
-    const saved = localStorage.getItem(LOCAL_STORAGE_MODEL_KEY);
-    if (saved) return saved;
-  } catch {}
+  const saved = getStorageItem(LOCAL_STORAGE_MODEL_KEY);
+  if (saved) return saved;
   return FALLBACK_MODELS[0];
 }
 
 export function setSelectedModel(model: string): void {
-  try {
-    localStorage.setItem(LOCAL_STORAGE_MODEL_KEY, model.replace(/^models\//, ''));
-  } catch {}
+  setStorageItem(LOCAL_STORAGE_MODEL_KEY, model.replace(/^models\//, ''));
 }
 
 export function clearSelectedModel(): void {
-  try {
-    localStorage.removeItem(LOCAL_STORAGE_MODEL_KEY);
-  } catch {}
+  removeStorageItem(LOCAL_STORAGE_MODEL_KEY);
 }
 
 export function getCachedModels(): string[] | null {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = getStorageItem(CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && Array.isArray(parsed.models) && typeof parsed.timestamp === 'number') {
@@ -115,15 +232,11 @@ export function getCachedModels(): string[] | null {
 }
 
 export function setCachedModels(models: string[]): void {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), models }));
-  } catch {}
+  setStorageItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), models }));
 }
 
 export function clearCachedModels(): void {
-  try {
-    localStorage.removeItem(CACHE_KEY);
-  } catch {}
+  removeStorageItem(CACHE_KEY);
 }
 
 export interface GeminiModelInfo {
@@ -230,19 +343,122 @@ export async function listModels(
   }
 }
 
+export interface Parsed429Info {
+  isQuota: boolean;
+  isDaily: boolean;
+  retryDelaySeconds?: number;
+  retryMessage?: string;
+}
+
+export function parse429Error(
+  resText: string,
+  headers?: Record<string, string> | Headers
+): Parsed429Info {
+  let retryDelaySeconds: number | undefined;
+  let isDaily = false;
+  let retryMessage = '';
+
+  try {
+    const json = JSON.parse(resText);
+    const err = json?.error || json;
+    const msg = String(err?.message || '');
+
+    const details: any[] = Array.isArray(err?.details) ? err.details : [];
+    for (const d of details) {
+      if (d?.retryDelay && typeof d.retryDelay === 'string') {
+        const match = d.retryDelay.match(/^(\d+(?:\.\d+)?)s?$/);
+        if (match) {
+          retryDelaySeconds = Math.round(parseFloat(match[1]));
+        }
+      }
+      if (
+        d?.violations &&
+        Array.isArray(d.violations) &&
+        d.violations.some((v: any) =>
+          String(v?.description || '').toLowerCase().includes('per day') ||
+          String(v?.quotaId || '').toLowerCase().includes('perday')
+        )
+      ) {
+        isDaily = true;
+      }
+    }
+
+    if (
+      msg.toLowerCase().includes('per day limit') ||
+      msg.toLowerCase().includes('requests per day') ||
+      msg.toLowerCase().includes('daily quota')
+    ) {
+      isDaily = true;
+    }
+
+    if (retryDelaySeconds === undefined) {
+      const retryInMatch = msg.match(/retry (?:in|after) (?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?/i);
+      if (retryInMatch) {
+        const hours = parseInt(retryInMatch[1] || '0', 10);
+        const mins = parseInt(retryInMatch[2] || '0', 10);
+        const secs = parseFloat(retryInMatch[3] || '0');
+        const total = hours * 3600 + mins * 60 + secs;
+        if (total > 0) {
+          retryDelaySeconds = Math.round(total);
+        }
+      }
+    }
+  } catch {}
+
+  if (retryDelaySeconds === undefined && headers) {
+    let headerVal = '';
+    if (typeof (headers as any)?.get === 'function') {
+      headerVal = (headers as Headers).get('retry-after') || '';
+    } else if (typeof headers === 'object') {
+      headerVal = (headers as Record<string, string>)['retry-after'] || '';
+    }
+    if (headerVal && /^\d+$/.test(headerVal.trim())) {
+      retryDelaySeconds = parseInt(headerVal.trim(), 10);
+    }
+  }
+
+  if (typeof retryDelaySeconds === 'number' && retryDelaySeconds >= 90) {
+    isDaily = true;
+  }
+
+  if (typeof retryDelaySeconds === 'number') {
+    if (retryDelaySeconds >= 3600) {
+      const h = Math.floor(retryDelaySeconds / 3600);
+      const m = Math.floor((retryDelaySeconds % 3600) / 60);
+      retryMessage = `${h}h ${m}m`;
+    } else if (retryDelaySeconds >= 60) {
+      const m = Math.floor(retryDelaySeconds / 60);
+      const s = retryDelaySeconds % 60;
+      retryMessage = `${m}m ${s}s`;
+    } else {
+      retryMessage = `${retryDelaySeconds}s`;
+    }
+  }
+
+  return {
+    isQuota: true,
+    isDaily,
+    retryDelaySeconds,
+    retryMessage,
+  };
+}
+
 /**
  * Probes a candidate model with a 1-token request (8s timeout).
  */
 export async function probeModel(
   modelName: string,
   apiKey?: string
-): Promise<{ ok: boolean; status: number; elapsedMs: number; errorMsg?: string }> {
+): Promise<{ ok: boolean; status: number; elapsedMs: number; errorMsg?: string; quotaInfo?: Parsed429Info }> {
   const key = apiKey || getKey();
   if (!key) {
     return { ok: false, status: 0, elapsedMs: 0, errorMsg: 'No API key set' };
   }
 
+  await ensureCallGap();
   const cleanName = modelName.replace(/^models\//, '');
+  recordGeminiRequest(cleanName);
+
   const startTime = Date.now();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -256,20 +472,29 @@ export async function probeModel(
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
+    recordCallEndTime();
     const elapsedMs = Date.now() - startTime;
+    const resText = await res.text();
 
     if (res.ok) {
       return { ok: true, status: res.status, elapsedMs };
     }
 
     let errorMsg = res.statusText;
+    let quotaInfo: Parsed429Info | undefined;
     try {
-      const errJson = await res.json();
+      const errJson = JSON.parse(resText);
       errorMsg = errJson?.error?.message || errorMsg;
     } catch {}
-    return { ok: false, status: res.status, elapsedMs, errorMsg };
+
+    if (res.status === 429) {
+      quotaInfo = parse429Error(resText, res.headers);
+    }
+
+    return { ok: false, status: res.status, elapsedMs, errorMsg, quotaInfo };
   } catch (err: any) {
     clearTimeout(timeoutId);
+    recordCallEndTime();
     const elapsedMs = Date.now() - startTime;
     const isTimeout = err?.name === 'AbortError';
     return {
@@ -286,6 +511,7 @@ export interface ModelProbeResult {
   status: number;
   elapsedMs: number;
   errorMsg?: string;
+  quotaInfo?: Parsed429Info;
 }
 
 export interface ModelSelectionResult {
@@ -316,18 +542,36 @@ export function logProbeTable(
 
 /**
  * Selects the main model:
- * 1. Probes user's selected/main model (gemini-3.5-flash or higher non-lite).
- * 2. Never silently falls to flash-lite.
- * 3. Uses lite only if every non-lite model fails, and explicitly says so in the status.
- * 4. Prints and returns the probe table (model, status, ms).
+ * 1. Checks cached working model first. If cached, reuses it without probing 4 models.
+ * 2. Probes only when there is no cached working model, or when forced (forceRefresh/excludeModel).
+ * 3. Never silently falls to flash-lite unless allowLiteFallback is explicitly enabled.
  */
 export async function selectMainModel(
   apiKey?: string,
   preferredModel?: string,
   forceRefresh: boolean = false,
-  excludeModel?: string
+  excludeModel?: string,
+  allowLiteFallback: boolean = false
 ): Promise<ModelSelectionResult> {
   const key = apiKey || getKey();
+
+  // 1. Re-use cached working model if present and not force-refreshing
+  if (!forceRefresh && !excludeModel) {
+    const cached = getWorkingModel();
+    if (cached?.model) {
+      const cleanCached = cached.model.replace(/^models\//, '');
+      const isLite = cleanCached.endsWith('-lite');
+      if (!isLite || allowLiteFallback) {
+        return {
+          chosenModel: cleanCached,
+          isLite,
+          probeTable: [],
+          statusMessage: `Using cached model: ${cleanCached}`,
+        };
+      }
+    }
+  }
+
   let allCandidates = await listModels(key, forceRefresh);
   if (excludeModel) {
     allCandidates = allCandidates.filter((m) => m !== excludeModel);
@@ -339,7 +583,6 @@ export async function selectMainModel(
   const probeTable: ModelProbeResult[] = [];
   const probeOrder: string[] = [];
 
-  // If user provided an explicit preference or saved choice in Settings, prioritize testing that
   const userSaved = (preferredModel || getSelectedModel() || '').replace(/^models\//, '');
   if (userSaved && userSaved !== excludeModel && mainModels.includes(userSaved)) {
     probeOrder.push(userSaved);
@@ -348,7 +591,7 @@ export async function selectMainModel(
     if (!probeOrder.includes(m)) probeOrder.push(m);
   }
 
-  // 1. Probe all main (non-lite) models first
+  // 2a. Probe main (non-lite) models first
   for (const model of probeOrder) {
     const probe = await probeModel(model, key);
     probeTable.push({
@@ -356,9 +599,11 @@ export async function selectMainModel(
       status: probe.status,
       elapsedMs: probe.elapsedMs,
       errorMsg: probe.errorMsg,
+      quotaInfo: probe.quotaInfo,
     });
     if (probe.ok) {
       setSelectedModel(model);
+      setWorkingModel(model);
       const msg = `Using main model: ${model} (${probe.elapsedMs}ms)`;
       logProbeTable(probeTable, model, false, msg);
       return {
@@ -370,7 +615,7 @@ export async function selectMainModel(
     }
   }
 
-  // 2. If every non-lite model fails, probe lite models
+  // 2b. Probe lite models if all non-lite failed and allowLiteFallback is active
   const failedNonLiteSummary = probeTable.map((p) => `${p.model}: ${p.status}`).join(', ');
   for (const model of liteModels) {
     const probe = await probeModel(model, key);
@@ -379,9 +624,11 @@ export async function selectMainModel(
       status: probe.status,
       elapsedMs: probe.elapsedMs,
       errorMsg: probe.errorMsg,
+      quotaInfo: probe.quotaInfo,
     });
     if (probe.ok) {
       setSelectedModel(model);
+      setWorkingModel(model);
       const msg = `Every non-lite model failed [${failedNonLiteSummary}]. Falling back to lite: ${model} (${probe.elapsedMs}ms)`;
       logProbeTable(probeTable, model, true, msg);
       return {
@@ -393,7 +640,7 @@ export async function selectMainModel(
     }
   }
 
-  // 3. Fallback if all candidates fail
+  // 2c. Fallback if all candidates fail
   const fallback = allCandidates[0] || (excludeModel === FALLBACK_MODELS[0] ? FALLBACK_MODELS[1] : FALLBACK_MODELS[0]);
   const msg = `All candidate models failed [${failedNonLiteSummary}]. Defaulting to ${fallback}.`;
   logProbeTable(probeTable, fallback, false, msg);
@@ -585,24 +832,37 @@ export const RESUME_DATA_RESPONSE_SCHEMA = {
   },
 };
 
+export interface GenerateResult {
+  ok: boolean;
+  text?: string;
+  modelUsed?: string;
+  status?: number;
+  message?: string;
+  quotaInfo?: Parsed429Info;
+}
+
+export interface GenerateOptions {
+  apiKey?: string;
+  preferredModel?: string;
+  signal?: AbortSignal;
+  responseMimeType?: string;
+  responseSchema?: any;
+  temperature?: number;
+  onRateLimitCountdown?: (secondsRemaining: number) => void;
+}
+
 /**
  * Executes generateContent using plain REST fetch:
- * - Dynamically determines model; re-picks and retries if 404/410.
- * - Omits responseMimeType when empty/undefined; for JSON calls uses application/json with responseSchema.
+ * - Dynamically determines model; re-picks and retries if 404/410/403.
+ * - Handles 429 separately: auto-retries transient (<90s) limits with countdown, stops on daily quotas.
+ * - Enforces minimum 2-second gap between consecutive calls.
+ * - Tracks requests per minute & day in global request counter.
  * - Keeps thinkingConfig { thinkingBudget: 0 } but retries once without it on HTTP 400.
  * - Timeout 40s.
- * - Logs request status, elapsed ms, first 300 chars of any error.
  */
 export async function generate(
   prompt: string,
-  options?: {
-    apiKey?: string;
-    preferredModel?: string;
-    signal?: AbortSignal;
-    responseMimeType?: string;
-    responseSchema?: any;
-    temperature?: number;
-  }
+  options?: GenerateOptions
 ): Promise<GenerateResult> {
   const key = options?.apiKey || getKey();
   if (!key) {
@@ -621,7 +881,14 @@ export async function generate(
   const executeOnce = async (
     modelName: string,
     useThinkingConfig: boolean
-  ): Promise<{ ok: boolean; status: number; text?: string; errorMsg?: string; isTimeout?: boolean }> => {
+  ): Promise<{
+    ok: boolean;
+    status: number;
+    text?: string;
+    errorMsg?: string;
+    isTimeout?: boolean;
+    quotaInfo?: Parsed429Info;
+  }> => {
     const controller = new AbortController();
     let isTimedOut = false;
     const timeoutId = setTimeout(() => {
@@ -638,6 +905,9 @@ export async function generate(
         externalSignal.addEventListener('abort', abortListener);
       }
     }
+
+    await ensureCallGap();
+    recordGeminiRequest(modelName);
 
     const startTime = Date.now();
     try {
@@ -671,7 +941,7 @@ export async function generate(
       payload.generationConfig = genConfig;
 
       const bodyString = JSON.stringify(payload);
-      const res = await fetch(url, {
+      let res = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -684,10 +954,64 @@ export async function generate(
       if (externalSignal) {
         externalSignal.removeEventListener('abort', abortListener);
       }
+      recordCallEndTime();
 
-      const elapsedMs = Date.now() - startTime;
-      const resText = await res.text();
-      const first300 = resText.slice(0, 300);
+      let elapsedMs = Date.now() - startTime;
+      let resText = await res.text();
+      let first300 = resText.slice(0, 300);
+
+      // Handle 429: Rate limit / Quota
+      if (res.status === 429) {
+        const quota = parse429Error(resText, res.headers);
+        console.warn(
+          `[Gemini REST] 429 on model=${modelName}: isDaily=${quota.isDaily}, delay=${quota.retryDelaySeconds}s`
+        );
+
+        // If per-minute transient limit (<90s), wait and auto-retry once
+        if (!quota.isDaily && quota.retryDelaySeconds && quota.retryDelaySeconds < 90) {
+          console.log(`[Gemini REST] Transient 429 limit. Retrying in ${quota.retryDelaySeconds}s...`);
+          let secsLeft = quota.retryDelaySeconds;
+          while (secsLeft > 0) {
+            if (options?.onRateLimitCountdown) {
+              options.onRateLimitCountdown(secsLeft);
+            }
+            await new Promise((r) => setTimeout(r, 1000));
+            secsLeft--;
+          }
+          if (options?.onRateLimitCountdown) {
+            options.onRateLimitCountdown(0);
+          }
+
+          // Retry once
+          await ensureCallGap();
+          recordGeminiRequest(modelName);
+          const retryRes = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: bodyString,
+            signal: controller.signal,
+          });
+          recordCallEndTime();
+          if (retryRes.ok) {
+            const retryText = await retryRes.text();
+            try {
+              const retryJson = JSON.parse(retryText);
+              const t = retryJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (typeof t === 'string') {
+                return { ok: true, status: 200, text: t };
+              }
+            } catch {}
+          }
+        }
+
+        // Daily quota or retry still failed
+        return {
+          ok: false,
+          status: 429,
+          quotaInfo: quota,
+          errorMsg: `Daily quota reached for ${modelName}. Resets later.`,
+        };
+      }
 
       if (!res.ok) {
         console.warn(
@@ -723,6 +1047,7 @@ export async function generate(
       if (externalSignal) {
         externalSignal.removeEventListener('abort', abortListener);
       }
+      recordCallEndTime();
       const elapsedMs = Date.now() - startTime;
       console.error(`[Gemini REST] exception on model=${modelName} elapsed=${elapsedMs}ms:`, err);
       if (isTimedOut || err?.name === 'AbortError') {
@@ -736,11 +1061,16 @@ export async function generate(
 
   const attemptWithThinkingRetry = async (
     modelName: string
-  ): Promise<{ ok: boolean; status: number; text?: string; errorMsg?: string; isTimeout?: boolean }> => {
+  ): Promise<{
+    ok: boolean;
+    status: number;
+    text?: string;
+    errorMsg?: string;
+    isTimeout?: boolean;
+    quotaInfo?: Parsed429Info;
+  }> => {
     triedModels.push(modelName);
-    // 1. Try with thinkingBudget: 0
     let attempt = await executeOnce(modelName, true);
-    // 2. Retry once without thinkingConfig on HTTP 400
     if (!attempt.ok && attempt.status === 400) {
       console.log(`[Gemini REST] HTTP 400 on model=${modelName}, retrying without thinkingConfig...`);
       attempt = await executeOnce(modelName, false);
@@ -759,11 +1089,23 @@ export async function generate(
     };
   }
 
-  // If 404, 410, 503, or 429 (quota exhausted): drop model from cache, re-pick automatically, then retry candidate models
+  // Handle 429: Do not mark model as broken, do not clear working model. Return daily quota status directly.
+  if (result.status === 429) {
+    return {
+      ok: false,
+      status: 429,
+      quotaInfo: result.quotaInfo,
+      message: result.errorMsg || `Daily quota reached for ${currentModel}. Resets later.`,
+      modelUsed: currentModel,
+    };
+  }
+
+  // If 404, 410, 503, or 403: model or key is invalid/missing, clear cache and re-pick
   let attempts = 0;
-  while ((result.status === 404 || result.status === 410 || result.status === 503 || result.status === 429) && attempts < 3) {
+  while ((result.status === 404 || result.status === 410 || result.status === 503 || result.status === 403) && attempts < 3) {
     attempts++;
     console.warn(`[Gemini REST] model ${currentModel} returned ${result.status}, re-picking dynamically (attempt ${attempts})...`);
+    clearWorkingModel();
     clearCachedModels();
     clearSelectedModel();
 
@@ -795,5 +1137,6 @@ export async function generate(
     status: result.status,
     message: formatGeminiError(result.status, result.errorMsg || '', triedModels),
     modelUsed: currentModel,
+    quotaInfo: result.quotaInfo,
   };
 }

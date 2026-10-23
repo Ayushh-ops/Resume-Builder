@@ -5,7 +5,7 @@ import * as fs from 'fs';
 async function main() {
   const artifactDir = 'C:/Users/hp/.gemini/antigravity/brain/e6e05e19-2948-43a2-884a-5247e105ee13';
   const pdfPath = path.resolve(process.cwd(), 'resume.pdf');
-  const weakFixturePath = path.resolve(process.cwd(), 'tests/fixtures/weak-resume.json');
+  const weakFixturePath = path.resolve(process.cwd(), 'tests/data/weak-resume.json');
 
   const envPath = path.resolve(process.cwd(), '.env');
   let apiKey = '';

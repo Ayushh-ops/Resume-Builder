@@ -1,0 +1,49 @@
+{
+  "id": "weak-resume-fixture-001",
+  "title": "Alex Taylor - Weak Resume Fixture",
+  "personalInfo": {
+    "fullName": "Alex Taylor",
+    "jobTitle": "Junior Software Engineer",
+    "email": "alex.taylor@fakeexample.com",
+    "phone": "+1 555-0142",
+    "location": "Austin, TX",
+    "linkedin": "linkedin.com/in/alextaylor-test",
+    "github": "github.com/alextaylor-test"
+  },
+  "summary": "Junior Software Engineer with practical background in Python, JavaScript, React, and SQL database systems.",
+  "experience": [
+    {
+      "company": "Nexus Web Systems",
+      "position": "Junior Software Engineer",
+      "location": "Austin, TX",
+      "startDate": "Jan 2023",
+      "endDate": "Dec 2023",
+      "current": false,
+      "highlights": [
+        "Lead the development of customer portal features and organize weekly code reviews across team.",
+        "Responsible for maintaining backend databases and helping teammates with daily data tasks.",
+        "Worked on various computer tasks and assisted coworkers with technical things.",
+        "Built internal ticketing dashboard using React and Python that helped speed things up across support tickets.",
+        "Helped develop a web application by writing code for the frontend in React and also looking at the backend code in Node.js and attending daily meetings with the team to discuss progress and blockers over a long period.",
+        "Assisted in helping to create weekly status reports on customer issues."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of Texas at Austin",
+      "degree": "Bachelor of Science in Computer Science",
+      "fieldOfStudy": "Computer Science",
+      "location": "Austin, TX",
+      "startDate": "Aug 2019",
+      "endDate": "May 2023",
+      "grade": "3.6"
+    }
+  ],
+  "skills": [
+    {
+      "name": "Languages & Frameworks",
+      "skills": ["JavaScript", "TypeScript", "Python", "React", "Node.js", "SQL", "Git"]
+    }
+  ]
+}
