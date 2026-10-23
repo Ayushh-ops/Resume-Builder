@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ResumeData, ResumeTheme } from '../../../types/resume';
-import { Mail, Phone, MapPin, Globe, ExternalLink } from 'lucide-react';
+import { Mail, Phone, MapPin, Globe } from 'lucide-react';
 import { LinkedinIcon, GithubIcon } from '../../common/Icons';
 
 interface TemplateProps {
@@ -80,11 +80,16 @@ export const ModernTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
               {projects.map((proj, idx) => (
                 <div key={proj.id || idx} className="avoid-break">
                   <div className="flex items-baseline justify-between">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-baseline gap-2">
                       <span className="text-xs font-bold text-slate-900">{proj.name}</span>
                       {proj.link && (
-                        <a href={proj.link} target="_blank" rel="noreferrer" className="text-slate-400 hover:text-indigo-600">
-                          <ExternalLink className="w-2.5 h-2.5" />
+                        <a
+                          href={proj.link.startsWith('http') ? proj.link : `https://${proj.link}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] text-slate-500 hover:text-indigo-600 underline font-normal"
+                        >
+                          {proj.linkLabel || proj.link}
                         </a>
                       )}
                     </div>
@@ -172,17 +177,18 @@ export const ModernTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
             >
               {titles['certifications'] || 'Certifications & Licenses'}
             </h2>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-700">
+            <div className="space-y-1 text-xs text-slate-700">
               {certifications.map((cert, idx) => (
-                <div key={cert.id || idx} className="flex items-center gap-1.5">
-                  <span className="font-semibold text-slate-800">{cert.name}</span>
-                  {cert.issuer && (
-                    <>
-                      <span className="text-slate-400">–</span>
-                      <span className="text-slate-600 text-[11px]">{cert.issuer}</span>
-                    </>
+                <div key={cert.id || idx} className="flex justify-between items-baseline text-xs">
+                  <span className="text-slate-800">
+                    <span className="font-semibold">{cert.name}</span>
+                    {cert.issuer && <span className="text-slate-600"> — {cert.issuer}</span>}
+                  </span>
+                  {cert.date && (
+                    <span className="text-[11px] text-slate-500 font-normal shrink-0 ml-2">
+                      {cert.date}
+                    </span>
                   )}
-                  {cert.date && <span className="text-slate-400 text-[11px]">({cert.date})</span>}
                 </div>
               ))}
             </div>
@@ -348,13 +354,13 @@ export const ModernTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
           {personalInfo.linkedin && (
             <a href={personalInfo.linkedin.startsWith('http') ? personalInfo.linkedin : `https://${personalInfo.linkedin}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-indigo-600">
               <LinkedinIcon className="w-3 h-3 text-slate-400" />
-              <span>{personalInfo.linkedin.replace(/^https?:\/\/(www\.)?linkedin\.com\/in\//, 'in/')}</span>
+              <span>{personalInfo.linkedin}</span>
             </a>
           )}
           {personalInfo.github && (
             <a href={personalInfo.github.startsWith('http') ? personalInfo.github : `https://${personalInfo.github}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-indigo-600">
               <GithubIcon className="w-3 h-3 text-slate-400" />
-              <span>{personalInfo.github.replace(/^https?:\/\/(www\.)?github\.com\//, 'github/')}</span>
+              <span>{personalInfo.github}</span>
             </a>
           )}
         </div>

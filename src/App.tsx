@@ -1388,8 +1388,8 @@ export const App: React.FC = () => {
                 )}
               </div>
 
-              {/* 3-step strip: Upload -> See score and fixes -> Download PDF (plain text, numbers, no pills) */}
-              <div className="py-3.5 px-4 my-6 border-y border-line text-xs text-ink/70 flex items-center justify-center gap-4 sm:gap-8 flex-wrap">
+              {/* 3-step strip: Upload -> See score and fixes -> Download PDF (plain text, numbers, no pills, one divider above only) */}
+              <div className="py-3.5 px-4 my-6 border-t border-line text-xs text-ink/70 flex items-center justify-center gap-4 sm:gap-8 flex-wrap">
                 <div className="flex items-center gap-1.5">
                   <span className="font-semibold text-ink">1.</span>
                   <span>Upload</span>
@@ -1407,7 +1407,7 @@ export const App: React.FC = () => {
               </div>
 
               {/* 3 Plain Feature Columns */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 py-6 border-t border-line">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 py-6">
                 <div>
                   <CheckCircle2 className="w-4 h-4 text-ink/40 mb-2" strokeWidth={1.5} />
                   <h3 className="text-xs font-semibold text-ink">Score against ATS rules</h3>

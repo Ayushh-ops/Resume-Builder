@@ -106,8 +106,13 @@ export const HarvardTemplate: React.FC<TemplateProps> = ({ data }) => {
                       )}
                     </span>
                     {proj.link && (
-                      <a href={proj.link} target="_blank" rel="noreferrer" className="text-[10px] underline text-neutral-600">
-                        Link
+                      <a
+                        href={proj.link.startsWith('http') ? proj.link : `https://${proj.link}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] underline text-neutral-600 font-normal"
+                      >
+                        {proj.linkLabel || proj.link}
                       </a>
                     )}
                   </div>
@@ -152,10 +157,18 @@ export const HarvardTemplate: React.FC<TemplateProps> = ({ data }) => {
             <h2 className="text-xs font-bold uppercase tracking-wider border-b border-black pb-0.5 mb-1.5 text-black">
               {titles['certifications'] || 'Certifications'}
             </h2>
-            <div className="text-xs text-neutral-900 space-y-0.5">
+            <div className="text-xs text-neutral-900 space-y-1">
               {certifications.map((cert, idx) => (
-                <div key={cert.id || idx}>
-                  <span className="font-bold">{cert.name}</span> – {cert.issuer} {cert.date ? `(${cert.date})` : ''}
+                <div key={cert.id || idx} className="flex justify-between items-baseline">
+                  <span>
+                    <span className="font-bold text-black">{cert.name}</span>
+                    {cert.issuer && <span> — {cert.issuer}</span>}
+                  </span>
+                  {cert.date && (
+                    <span className="text-[11px] font-normal text-neutral-600 shrink-0 ml-2">
+                      {cert.date}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>

@@ -39,6 +39,7 @@ export interface ProjectItem {
   description: string;
   technologies: string[];
   link?: string;
+  linkLabel?: string;
   githubLink?: string;
   highlights: string[];
 }

@@ -259,40 +259,42 @@ export function getResumeGuidance(resumeData: ResumeData): GuidanceItem[] {
     });
   }
 
-  // 3. SKILLS COVERAGE CHECK
-  const targetTitle = resumeData.personalInfo.jobTitle || '';
-  const coreSkills = getCoreSkillsForRole(targetTitle);
-  const userSkillStrings = (resumeData.skills || []).flatMap((s) => s.skills || []).map((s) => s.trim());
+  // 3. SKILLS COVERAGE CHECK (runs only when a target title exists)
+  const allUserSkills = (resumeData.skills || []).flatMap((s) => s.skills || []).map((s) => s.trim());
+  const targetTitle = (resumeData.personalInfo.jobTitle || '').trim();
+  if (targetTitle) {
+    const coreSkills = getCoreSkillsForRole(targetTitle);
 
-  const presentSkills = coreSkills.filter((cs) =>
-    userSkillStrings.some((us) => matchesSkillOrSynonym(cs, us))
-  );
-  const missingSkills = coreSkills.filter((cs) => !presentSkills.includes(cs));
+    const presentSkills = coreSkills.filter((cs) =>
+      allUserSkills.some((us) => matchesSkillOrSynonym(cs, us))
+    );
+    const missingSkills = coreSkills.filter((cs) => !presentSkills.includes(cs));
 
-  if (missingSkills.length > 0) {
-    items.push({
-      id: 'skills-coverage',
-      status: 'fix',
-      title: 'Core skills coverage',
-      found: `Found ${presentSkills.length} of ${coreSkills.length} standard skills for "${targetTitle || 'your role'}". Missing: ${missingSkills.slice(0, 4).join(', ')}${missingSkills.length > 4 ? ` (+${missingSkills.length - 4} more)` : ''}.`,
-      why: 'ATS filters cross-reference your skills directly against standard requisition templates.',
-      fix: 'Add the missing competencies you have experience with to your Skills section.',
-      section: 'skills',
-      presentSkills,
-      missingSkills,
-    });
-  } else {
-    items.push({
-      id: 'skills-coverage',
-      status: 'ok',
-      title: 'Core skills coverage',
-      found: `All ${coreSkills.length} benchmark skills for "${targetTitle || 'your role'}" are present in your resume.`,
-      why: 'Complete skills coverage prevents automated filter rejections by keyword matchers.',
-      fix: 'Keep core skills aligned with the latest versions and tooling in your specialty.',
-      section: 'skills',
-      presentSkills,
-      missingSkills: [],
-    });
+    if (missingSkills.length > 0) {
+      items.push({
+        id: 'skills-coverage',
+        status: 'fix',
+        title: 'Core skills coverage',
+        found: `Found ${presentSkills.length} of ${coreSkills.length} standard skills for "${targetTitle}". Missing: ${missingSkills.slice(0, 4).join(', ')}${missingSkills.length > 4 ? ` (+${missingSkills.length - 4} more)` : ''}.`,
+        why: 'ATS filters cross-reference your skills directly against standard requisition templates.',
+        fix: 'Add the missing competencies you have experience with to your Skills section.',
+        section: 'skills',
+        presentSkills,
+        missingSkills,
+      });
+    } else {
+      items.push({
+        id: 'skills-coverage',
+        status: 'ok',
+        title: 'Core skills coverage',
+        found: `All ${coreSkills.length} benchmark skills for "${targetTitle}" are present in your resume.`,
+        why: 'Complete skills coverage prevents automated filter rejections by keyword matchers.',
+        fix: 'Keep core skills aligned with the latest versions and tooling in your specialty.',
+        section: 'skills',
+        presentSkills,
+        missingSkills: [],
+      });
+    }
   }
 
   // 4. AI & TOOLING MENTION
@@ -300,7 +302,7 @@ export function getResumeGuidance(resumeData: ResumeData): GuidanceItem[] {
   const fullResumeText = [
     resumeData.summary || '',
     ...allBullets.map((b) => b.text),
-    ...userSkillStrings,
+    ...allUserSkills,
   ].join(' ');
 
   const hasAiMention = aiKeywordsRegex.test(fullResumeText);

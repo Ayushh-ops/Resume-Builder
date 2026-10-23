@@ -701,5 +701,78 @@ describe('Resume Importer Rebuild Tests', () => {
       console.error('Missing tokens from final resume data:', Array.from(new Set(missingTokens)));
     }
     expect(Array.from(new Set(missingTokens))).toEqual([]);
+
+    // 4. Assert all PDF hyperlink annotations and visible link labels are present in data and preview
+    const expectedAnnotationUrls = [
+      'https://linkedin.com/in/sachinvermadev',
+      'https://github.com/Sachin1707-jpg',
+      'https://polar-ems-barl.vercel.app/',
+      'https://red-connect-d-h-n.vercel.app/',
+      'https://lenevo-assignment2.vercel.app/login',
+    ];
+
+    const expectedVisibleLabels = [
+      'linkedin.com/in/sachinvermadev',
+      'github.com/Sachin1707-jpg',
+      'polar-ems-barl.vercel.app',
+      'red-connect-d-h-n.vercel.app',
+      'Live Demo',
+    ];
+
+    // Assert in parsed resume data
+    const fullData: ResumeData = {
+      personalInfo: {
+        fullName: parsed.personalInfo?.fullName || '',
+        jobTitle: parsed.personalInfo?.jobTitle || '',
+        email: parsed.personalInfo?.email || '',
+        phone: parsed.personalInfo?.phone || '',
+        location: parsed.personalInfo?.location || '',
+        website: parsed.personalInfo?.website || '',
+        linkedin: parsed.personalInfo?.linkedin || '',
+        github: parsed.personalInfo?.github || '',
+      },
+      summary: parsed.summary || '',
+      experience: parsed.experience || [],
+      education: parsed.education || [],
+      skills: parsed.skills || [],
+      projects: parsed.projects || [],
+      certifications: parsed.certifications || [],
+      customSections: parsed.customSections || [],
+      sectionOrder: parsed.sectionOrder,
+      sectionTitles: parsed.sectionTitles,
+    };
+
+    expect(fullData.personalInfo.linkedin).toContain('linkedin.com/in/sachinvermadev');
+    expect(fullData.personalInfo.github).toContain('github.com/Sachin1707-jpg');
+
+    const proj0 = fullData.projects.find((p) => p.name.includes('Polar'));
+    expect(proj0).toBeDefined();
+    expect(proj0!.link).toContain('polar-ems-barl.vercel.app');
+    expect(proj0!.linkLabel).toBe('polar-ems-barl.vercel.app');
+
+    const proj1 = fullData.projects.find((p) => p.name.includes('RedConnect'));
+    expect(proj1).toBeDefined();
+    expect(proj1!.link).toContain('red-connect-d-h-n.vercel.app');
+    expect(proj1!.linkLabel).toBe('red-connect-d-h-n.vercel.app');
+
+    const proj2 = fullData.projects.find((p) => p.name.includes('MediCare'));
+    expect(proj2).toBeDefined();
+    expect(proj2!.link).toBe('https://lenevo-assignment2.vercel.app/login');
+    expect(proj2!.linkLabel).toBe('Live Demo');
+
+    // Assert in template preview across templates
+    const theme = THEME_PRESETS[0];
+    const previewTemplates = [ModernTemplate, HarvardTemplate, MinimalistTemplate, CreativeTemplate];
+    for (const Tpl of previewTemplates) {
+      const html = renderToStaticMarkup(React.createElement(Tpl, { data: fullData, theme }));
+      for (const label of expectedVisibleLabels) {
+        expect(html, `Visible label "${label}" must be rendered in ${Tpl.name}`).toContain(label);
+      }
+      for (const url of expectedAnnotationUrls) {
+        // Strip trailing slash if any for matching href
+        const urlBase = url.replace(/\/$/, '');
+        expect(html, `Hyperlink URL "${urlBase}" must be present in ${Tpl.name} markup`).toContain(urlBase);
+      }
+    }
   });
 });

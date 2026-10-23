@@ -73,7 +73,19 @@ export const MinimalistTemplate: React.FC<TemplateProps> = ({ data }) => {
               {projects.map((proj, idx) => (
                 <div key={proj.id || idx} className="avoid-break">
                   <div className="flex items-baseline justify-between text-xs">
-                    <span className="font-bold text-slate-900">{proj.name}</span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-bold text-slate-900">{proj.name}</span>
+                      {proj.link && (
+                        <a
+                          href={proj.link.startsWith('http') ? proj.link : `https://${proj.link}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-slate-500 hover:text-slate-800 underline font-normal"
+                        >
+                          {proj.linkLabel || proj.link}
+                        </a>
+                      )}
+                    </div>
                     {proj.technologies && (
                       <span className="text-[10px] text-slate-500 font-mono">
                         {proj.technologies.slice(0, 5).join(' / ')}
@@ -147,8 +159,16 @@ export const MinimalistTemplate: React.FC<TemplateProps> = ({ data }) => {
             </h2>
             <div className="space-y-1 text-xs text-slate-700">
               {certifications.map((cert, idx) => (
-                <div key={cert.id || idx}>
-                  <span className="font-bold text-slate-800">{cert.name}</span> — {cert.issuer} {cert.date ? `(${cert.date})` : ''}
+                <div key={cert.id || idx} className="flex justify-between items-baseline">
+                  <span>
+                    <span className="font-bold text-slate-800">{cert.name}</span>
+                    {cert.issuer && <span> — {cert.issuer}</span>}
+                  </span>
+                  {cert.date && (
+                    <span className="text-[10px] text-slate-500 shrink-0 ml-2 font-mono">
+                      {cert.date}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
@@ -290,10 +310,24 @@ export const MinimalistTemplate: React.FC<TemplateProps> = ({ data }) => {
           {personalInfo.phone && <span>/ {personalInfo.phone}</span>}
           {personalInfo.location && <span>/ {personalInfo.location}</span>}
           {personalInfo.linkedin && (
-            <span>/ {personalInfo.linkedin.replace(/^https?:\/\/(www\.)?linkedin\.com\/in\//, 'in/')}</span>
+            <a
+              href={personalInfo.linkedin.startsWith('http') ? personalInfo.linkedin : `https://${personalInfo.linkedin}`}
+              target="_blank"
+              rel="noreferrer"
+              className="hover:underline"
+            >
+              / {personalInfo.linkedin}
+            </a>
           )}
           {personalInfo.github && (
-            <span>/ {personalInfo.github.replace(/^https?:\/\/(www\.)?github\.com\//, 'gh/')}</span>
+            <a
+              href={personalInfo.github.startsWith('http') ? personalInfo.github : `https://${personalInfo.github}`}
+              target="_blank"
+              rel="noreferrer"
+              className="hover:underline"
+            >
+              / {personalInfo.github}
+            </a>
           )}
         </div>
       </header>

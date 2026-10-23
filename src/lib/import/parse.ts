@@ -602,17 +602,44 @@ export function parseProjects(projLines: Line[]): ResumeData['projects'] {
     const block = blocks[p];
     const headerText = block.headerLine.text.trim();
 
-    // Extract link if any
+    // Extract link & linkLabel if any
     let link = '';
-    const linkMatch = headerText.match(URL_REGEX);
-    if (linkMatch) {
-      link = linkMatch[0].trim();
-    } else if (/live\s*demo/i.test(headerText)) {
-      link = 'Live Demo';
+    let linkLabel = '';
+
+    const firstLink = block.headerLine.links?.[0];
+    const firstSegWithLink = block.headerLine.segments.find((s) => s.linkUrl);
+    if (firstLink) {
+      link = firstLink.url;
+      linkLabel = firstLink.text;
+    } else if (firstSegWithLink) {
+      link = firstSegWithLink.linkUrl || '';
+      linkLabel = firstSegWithLink.linkLabel || firstSegWithLink.text;
+    }
+
+    if (!link) {
+      const linkMatch = headerText.match(URL_REGEX);
+      if (linkMatch) {
+        link = linkMatch[0].trim();
+        linkLabel = link;
+      } else if (/live\s*demo/i.test(headerText)) {
+        linkLabel = 'Live Demo';
+      }
+    } else if (!linkLabel) {
+      if (/live\s*demo/i.test(headerText)) {
+        linkLabel = 'Live Demo';
+      } else {
+        const linkMatch = headerText.match(URL_REGEX);
+        linkLabel = linkMatch ? linkMatch[0].trim() : link;
+      }
     }
 
     // Name is the header text before the URL or dash; subtitle/description is after the dash
-    let cleanHeader = headerText.replace(URL_REGEX, '').replace(/live\s+demo/i, '').trim();
+    let cleanHeader = headerText;
+    if (linkLabel) {
+      cleanHeader = cleanHeader.replace(linkLabel, '');
+    }
+    cleanHeader = cleanHeader.replace(URL_REGEX, '').replace(/live\s+demo/i, '').trim();
+    cleanHeader = cleanHeader.replace(/^[|–—\-]\s*|\s*[|–—\-]$/g, '').trim();
     let name = cleanHeader;
     let description = '';
 
@@ -624,12 +651,19 @@ export function parseProjects(projLines: Line[]): ResumeData['projects'] {
       const parts = cleanHeader.split(' - ').map((s) => s.trim());
       name = parts[0];
       description = parts.slice(1).join(' - ');
+    } else if (cleanHeader.includes('|')) {
+      const parts = cleanHeader.split('|').map((s) => s.trim());
+      name = parts[0];
+      description = parts.slice(1).join(' | ');
     }
 
     // Technologies
     const technologies: string[] = [];
     if (block.techLine) {
       const techTokens = block.techLine.text.split(/[,|;]/).map((t) => t.trim()).filter(Boolean);
+      technologies.push(...techTokens);
+    } else if (description && cleanHeader.includes('|')) {
+      const techTokens = description.split(/[,|;]/).map((t) => t.trim()).filter(Boolean);
       technologies.push(...techTokens);
     }
 
@@ -642,6 +676,7 @@ export function parseProjects(projLines: Line[]): ResumeData['projects'] {
       description: description || '',
       technologies,
       link,
+      linkLabel: linkLabel || (link ? link.replace(/^https?:\/\//, '') : ''),
       githubLink: '',
       highlights,
     });

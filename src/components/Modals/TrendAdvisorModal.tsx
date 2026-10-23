@@ -121,6 +121,13 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
               </button>
             </div>
 
+            {/* If no target title, show one muted line */}
+            {!resumeData.personalInfo?.jobTitle?.trim() && (
+              <div className="p-3 bg-muted/30 border border-line rounded-[6px] text-xs text-ink/60 italic">
+                Add a target title to check skills
+              </div>
+            )}
+
             {/* Guidance Cards List */}
             <div className="space-y-2.5">
               {guidanceItems.map((item) => (

@@ -220,7 +220,7 @@ export const ExperienceForm: React.FC<ExperienceFormProps> = ({ experience, onCh
             {item.highlights.map((bullet, bulletIndex) => (
               <div key={bulletIndex} className="space-y-2">
                 <div className="flex items-start gap-2 group">
-                  <span className="text-ink/40 mt-2 text-xs">•</span>
+                  <span className="text-ink/40 text-sm leading-normal pt-2 select-none">•</span>
                   <textarea
                     id={`exp-${expIndex}-bullet-${bulletIndex}`}
                     ref={(el) => { if (el) { el.style.height='auto'; el.style.height=el.scrollHeight+'px'; } }}
@@ -229,7 +229,7 @@ export const ExperienceForm: React.FC<ExperienceFormProps> = ({ experience, onCh
                     onChange={(e) => handleUpdateBullet(expIndex, bulletIndex, e.target.value)}
                     rows={2}
                     placeholder="e.g. Spearheaded microservice migration reducing p95 latency by 45%..."
-                    className="flex-1 input leading-relaxed resize-none overflow-hidden"
+                    className="flex-1 input text-sm leading-normal py-2 resize-none overflow-hidden"
                   />
                   <div className="flex flex-col gap-1 mt-1 opacity-0 group-hover:opacity-100 transition">
                     <button

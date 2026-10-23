@@ -168,13 +168,13 @@ export const ProjectsForm: React.FC<ProjectsFormProps> = ({ projects, onChange }
             </div>
             {proj.highlights?.map((bullet, bulletIdx) => (
               <div key={bulletIdx} className="flex items-center gap-2">
-                <span className="text-ink/40 text-xs">•</span>
+                <span className="text-ink/40 text-sm leading-normal select-none">•</span>
                 <input
                   type="text"
                   value={bullet}
                   onChange={(e) => handleUpdateBullet(index, bulletIdx, e.target.value)}
                   placeholder="e.g. Attracted 2,400+ stars on GitHub and featured in Hacker News..."
-                  className="flex-1 input text-xs py-1"
+                  className="flex-1 input text-sm leading-normal"
                 />
                 <button
                   onClick={() => handleRemoveBullet(index, bulletIdx)}

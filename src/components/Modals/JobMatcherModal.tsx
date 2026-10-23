@@ -360,34 +360,101 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
       maxWidth="max-w-3xl"
       bodyClassName="p-0 flex flex-col flex-1 overflow-hidden min-h-0"
       footer={
-        activeTab === 'ats_profile' && profileSubView === 'create' ? null : (
-          tailoredChanges && activeTab === 'jd_matcher' ? (
+        activeTab === 'ats_profile' && profileSubView === 'create' ? (
+          editingProfile ? (
             <>
               <button
                 type="button"
-                onClick={() => setTailoredChanges(null)}
+                onClick={() => {
+                  setEditingProfile(null);
+                  setProfileSubView('list');
+                }}
                 className="px-3.5 py-1.5 font-medium text-xs text-ink/70 hover:bg-muted rounded-[6px] transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={handleApplyTailoring}
+                onClick={handleSaveProfile}
                 className="btn-primary h-8"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>Apply changes</span>
+                <span>Save profile</span>
+              </button>
+            </>
+          ) : creationMethod === 'paste' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setProfileSubView('list')}
+                className="px-3.5 py-1.5 font-medium text-xs text-ink/70 hover:bg-muted rounded-[6px] transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleParseRubric(rubricText)}
+                disabled={isParsingRubric || !rubricText.trim()}
+                className="btn-primary h-8"
+              >
+                {isParsingRubric ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                <span>{isParsingRubric ? 'Parsing Rubric with Gemini...' : 'Parse Criteria with AI'}</span>
+              </button>
+            </>
+          ) : creationMethod === 'upload' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setProfileSubView('list')}
+                className="px-3.5 py-1.5 font-medium text-xs text-ink/70 hover:bg-muted rounded-[6px] transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isParsingRubric}
+                className="btn-primary h-8"
+              >
+                {isParsingRubric ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                <span>{isParsingRubric ? 'Reading & Parsing File...' : 'Select File'}</span>
               </button>
             </>
           ) : (
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => setProfileSubView('list')}
               className="btn-outline h-8 px-3.5"
             >
-              Close
+              Cancel
             </button>
           )
+        ) : tailoredChanges && activeTab === 'jd_matcher' ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setTailoredChanges(null)}
+              className="px-3.5 py-1.5 font-medium text-xs text-ink/70 hover:bg-muted rounded-[6px] transition cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleApplyTailoring}
+              className="btn-primary h-8"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Apply changes</span>
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-outline h-8 px-3.5"
+          >
+            Close
+          </button>
         )
       }
     >
@@ -714,7 +781,7 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
           )}
 
           {activeTab === 'ats_profile' && (
-            <div className="space-y-6 animate-in fade-in">
+            <div className="space-y-6 animate-in fade-in pt-4">
               <HowToUse toolId="ats_profile" />
               {profileSubView === 'list' ? (
                 <>
@@ -959,27 +1026,8 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                             value={rubricText}
                             onChange={(e) => setRubricText(e.target.value)}
                             placeholder="Paste the grading criteria, job requirements, or screening instructions here..."
-                            className="input font-sans text-xs min-h-[200px] resize-y w-full"
+                            className="input font-sans text-xs min-h-[160px] resize-y w-full"
                           />
-                          {/* Sticky bottom action bar for Paste method */}
-                          <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-3 bg-card border-t border-line flex items-center justify-end gap-2 z-20">
-                            <button
-                              type="button"
-                              onClick={() => setProfileSubView('list')}
-                              className="px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-muted rounded-[6px] transition cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleParseRubric(rubricText)}
-                              disabled={isParsingRubric || !rubricText.trim()}
-                              className="btn-primary"
-                            >
-                              {isParsingRubric ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-                              <span>{isParsingRubric ? 'Parsing Rubric with Gemini...' : 'Parse Criteria with AI'}</span>
-                            </button>
-                          </div>
                         </div>
                       )}
 
@@ -1000,25 +1048,6 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                               <div className="text-xs font-semibold text-ink">Upload ATS Rubric File</div>
                               <p className="text-xs text-ink/60 mt-0.5">Supports PDF, DOCX, TXT (Max 5MB)</p>
                             </div>
-                          </div>
-                          {/* Sticky bottom action bar for Upload method */}
-                          <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-3 bg-card border-t border-line flex items-center justify-end gap-2 z-20">
-                            <button
-                              type="button"
-                              onClick={() => setProfileSubView('list')}
-                              className="px-3 py-1.5 text-xs font-medium text-ink/70 hover:bg-muted rounded-[6px] transition cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => fileInputRef.current?.click()}
-                              disabled={isParsingRubric}
-                              className="btn-primary text-xs"
-                            >
-                              {isParsingRubric ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                              <span>{isParsingRubric ? 'Reading & Parsing File...' : 'Select File'}</span>
-                            </button>
                           </div>
                         </div>
                       )}
@@ -1148,28 +1177,6 @@ export const JobMatcherModal: React.FC<JobMatcherModalProps> = ({
                             </div>
                           ))}
                         </div>
-                      </div>
-
-                      {/* Sticky bottom action bar for criteria form */}
-                      <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-3 bg-card/95 backdrop-blur-sm border-t border-line flex items-center justify-end gap-2 shadow-soft z-20">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingProfile(null);
-                            setProfileSubView('list');
-                          }}
-                          className="px-3 py-1.5 text-xs font-semibold text-ink/60 hover:text-ink cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleSaveProfile}
-                          className="btn-primary"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          <span>Save profile</span>
-                        </button>
                       </div>
                     </div>
                   )}

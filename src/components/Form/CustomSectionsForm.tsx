@@ -180,13 +180,13 @@ export const CustomSectionsForm: React.FC<CustomSectionsFormProps> = ({
                   <div className="text-[11px] font-medium text-ink/60">Bullet points</div>
                   {(item.bullets || []).map((bullet, bIdx) => (
                     <div key={bIdx} className="flex items-center gap-2">
-                      <span className="text-ink/40 text-xs">•</span>
+                      <span className="text-ink/40 text-sm leading-normal select-none">•</span>
                       <input
                         type="text"
                         value={bullet}
                         onChange={(e) => handleUpdateBullet(secIdx, itemIdx, bIdx, e.target.value)}
                         placeholder="Bullet accomplishment"
-                        className="flex-1 text-xs text-ink bg-muted px-2 py-1 rounded-[4px] border border-line focus:outline-hidden"
+                        className="flex-1 input text-sm leading-normal"
                       />
                       <button
                         type="button"

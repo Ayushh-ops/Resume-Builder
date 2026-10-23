@@ -1,7 +1,7 @@
 import React from 'react';
 import type { ResumeData, ResumeTheme } from '../../../types/resume';
 import { Mail, Phone, MapPin } from 'lucide-react';
-import { LinkedinIcon } from '../../common/Icons';
+import { LinkedinIcon, GithubIcon } from '../../common/Icons';
 
 interface TemplateProps {
   data: ResumeData;
@@ -47,10 +47,26 @@ export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
             </span>
           )}
           {personalInfo.linkedin && (
-            <span className="flex items-center gap-1">
+            <a
+              href={personalInfo.linkedin.startsWith('http') ? personalInfo.linkedin : `https://${personalInfo.linkedin}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 hover:underline text-slate-300"
+            >
               <LinkedinIcon className="w-3 h-3 text-indigo-400" />
-              {personalInfo.linkedin.replace(/^https?:\/\/(www\.)?linkedin\.com\/in\//, 'in/')}
-            </span>
+              {personalInfo.linkedin}
+            </a>
+          )}
+          {personalInfo.github && (
+            <a
+              href={personalInfo.github.startsWith('http') ? personalInfo.github : `https://${personalInfo.github}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 hover:underline text-slate-300"
+            >
+              <GithubIcon className="w-3 h-3 text-indigo-400" />
+              {personalInfo.github}
+            </a>
           )}
         </div>
       </div>
@@ -120,11 +136,14 @@ export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
               >
                 {titles['certifications'] || 'Certifications'}
               </h2>
-              <div className="space-y-1.5 text-xs">
+              <div className="space-y-1 text-xs">
                 {certifications.map((c, idx) => (
-                  <div key={c.id || idx}>
-                    <p className="font-semibold text-slate-800 text-[11px]">{c.name}</p>
-                    <p className="text-[10px] text-slate-500">{c.issuer}</p>
+                  <div key={c.id || idx} className="flex justify-between items-baseline text-xs">
+                    <span className="text-slate-800 text-[11px] min-w-0">
+                      <span className="font-semibold">{c.name}</span>
+                      {c.issuer && <span className="text-slate-500"> — {c.issuer}</span>}
+                    </span>
+                    {c.date && <span className="text-[10px] text-slate-400 shrink-0 ml-1.5">{c.date}</span>}
                   </div>
                 ))}
               </div>
@@ -190,7 +209,19 @@ export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
                 {projects.map((proj, idx) => (
                   <div key={proj.id || idx} className="avoid-break text-xs">
                     <div className="flex justify-between items-baseline font-bold text-slate-900">
-                      <span>{proj.name}</span>
+                      <div className="flex items-baseline gap-2">
+                        <span>{proj.name}</span>
+                        {proj.link && (
+                          <a
+                            href={proj.link.startsWith('http') ? proj.link : `https://${proj.link}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] text-slate-500 hover:text-slate-800 underline font-normal"
+                          >
+                            {proj.linkLabel || proj.link}
+                          </a>
+                        )}
+                      </div>
                       {proj.technologies && (
                         <span className="text-[10px] font-normal text-slate-500">
                           {proj.technologies.slice(0, 3).join(', ')}

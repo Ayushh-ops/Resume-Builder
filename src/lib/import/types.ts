@@ -6,6 +6,8 @@ export interface Segment {
   x1: number;
   fontSize: number;
   bold: boolean;
+  linkUrl?: string;
+  linkLabel?: string;
 }
 
 export interface Line {
@@ -14,6 +16,7 @@ export interface Line {
   segments: Segment[];
   text: string;
   maxFont: number;
+  links?: Array<{ url: string; text: string; x0?: number; x1?: number }>;
 }
 
 export type CanonicalSectionKey =
