@@ -1,7 +1,14 @@
 import type { ResumeData } from '../types/resume';
-import { generate } from '../lib/gemini';
+import {
+  generate,
+  getKey,
+  selectMainModel,
+  type ModelProbeResult,
+} from '../lib/gemini';
 
 export const VALID_ISSUE_TYPES = [
+  'tense',
+  'grammar',
   'weak_verb',
   'no_metric',
   'vague',
@@ -36,6 +43,12 @@ export interface AIReviewResult {
   accepted: AIReviewSuggestion[];
   rejected: { suggestion: any; reason: string }[];
   modelUsed?: string;
+  isLiteFallback?: boolean;
+  probeTable?: ModelProbeResult[];
+  probeStatusMessage?: string;
+  rawCount: number;
+  rawResponseSnippet?: string;
+  statusText: string;
 }
 
 export const FLUFF_PHRASES = [
@@ -77,7 +90,17 @@ export const AI_REVIEW_SCHEMA = {
           targetType: { type: 'STRING' },
           issue: {
             type: 'STRING',
-            enum: ['weak_verb', 'no_metric', 'vague', 'too_long', 'passive', 'redundant', 'formatting'],
+            enum: [
+              'tense',
+              'grammar',
+              'weak_verb',
+              'no_metric',
+              'vague',
+              'too_long',
+              'passive',
+              'redundant',
+              'formatting',
+            ],
           },
           title: { type: 'STRING' },
           before: { type: 'STRING' },
@@ -267,7 +290,13 @@ export function validateAIReviewSuggestion(
   }
 
   // 7. Reject near-synonym swaps (e.g. Built->Constructed, Completed->Executed)
-  if (before && isNearSynonymSwap(before, after)) {
+  // Tense and grammar fixes (e.g. Lead->Led, organize->organized) are explicitly allowed
+  if (
+    suggestion.issue !== 'tense' &&
+    suggestion.issue !== 'grammar' &&
+    before &&
+    isNearSynonymSwap(before, after)
+  ) {
     return {
       valid: false,
       reason: 'Rejected near-synonym swap (same sentence with only 1-2 words substituted)',
@@ -308,17 +337,34 @@ export function validateAIReviewSuggestion(
   return { valid: true };
 }
 
+export interface AIReviewOptions {
+  signal?: AbortSignal;
+  apiKey?: string;
+  preferredModel?: string;
+  stricter?: boolean;
+}
+
 /**
  * Executes AI resume review:
- * - Produces up to 5 high-impact improvements (or 0 if resume is already solid).
- * - Must name a concrete issue type.
+ * - Probes user's main non-lite model first; falls back to lite only if every non-lite fails.
+ * - Quality pass asking for 3 to 6 suggestions ranked by impact (tense consistency, weak openers, missing metrics, redundancy, long bullets).
+ * - Two few-shot examples (good: tense fix, vague->specific; bad: synonym swap, invented numbers).
  * - Strictly keeps seniority words, no title inflation, no fluff phrases, no thesaurus swaps.
  * - Validates each suggestion and filters out invalid, hallucinated, or inflated entries.
  */
 export async function reviewResumeWithAI(
   resume: ResumeData,
-  signal?: AbortSignal
+  optionsOrSignal?: AbortSignal | AIReviewOptions
 ): Promise<AIReviewResult> {
+  const options: AIReviewOptions =
+    optionsOrSignal instanceof AbortSignal
+      ? { signal: optionsOrSignal }
+      : optionsOrSignal || {};
+
+  const apiKey = options.apiKey || getKey();
+  const modelSelection = await selectMainModel(apiKey, options.preferredModel);
+  const chosenModel = modelSelection.chosenModel;
+
   const jobTitle = resume.personalInfo?.jobTitle || '';
   const summary = resume.summary || '';
   const skillsList = resume.skills?.flatMap((s) => s.skills) || [];
@@ -329,28 +375,55 @@ export async function reviewResumeWithAI(
     highlights: e.highlights || [],
   }));
 
-  const prompt = `You are a strict, truth-enforcing executive resume editor.
-Analyze the candidate's resume and generate 1 to 5 high-impact improvements ONLY if there are genuine issues. If the resume is already well-written with clear metrics, return an empty list of suggestions. Do NOT propose filler changes or thesaurus swaps.
+  let prompt = `You are an expert executive resume reviewer and editor.
+Conduct a thorough quality pass over the candidate's resume and generate 3 to 6 high-impact improvement suggestions ranked by impact.
 
-CONCRETE ISSUE TYPES (each suggestion MUST identify exactly one):
-- weak_verb: Replaces passive or non-action verbs with specific technical action verbs in a restructured sentence.
-- no_metric: Connects an unquantified task to an outcome/metric already documented elsewhere in the resume.
-- vague: Clarifies ambiguous claims by specifying tools, platforms, or scope from the candidate's actual background.
-- too_long: Tightens sprawling run-on descriptions into punchy, high-retention bullet points.
-- passive: Converts passive voice ("was responsible for") into direct active ownership.
-- redundant: Eliminates repeated words, duplicate tool lists, or obvious filler.
-- formatting: Fixes awkward phrasing or sentence boundary issues.
+QUALITY AUDIT CRITERIA (actively inspect and fix):
+1. Grammar & Tense Consistency: Ensure consistent verb tenses across bullets. For past positions, convert present-tense verbs to past tense (e.g., "Lead the club" -> "Led the club", "organize weekly code reviews" -> "organized weekly code reviews").
+2. Weak or Vague Openers: Replace weak openers ("Responsible for...", "Worked on...", "Assisted with...", "Helped...") with direct, active ownership verbs.
+3. Missing Metric: Where the resume hints at scale or outcomes already documented in the resume text, connect and articulate that impact.
+4. Redundancy: Eliminate redundant phrasing (e.g., "Assisted in helping to create", repetitive tech mentions).
+5. Over-Long Bullets: Split or streamline sprawling run-on descriptions into punchy, high-retention bullet points.
 
-STRICT CONSTRAINTS (Violations will be programmatically rejected):
-1. NO THESAURUS SWAPS: NEVER just replace 1 or 2 words with synonyms (e.g., "Built" -> "Constructed", "Completed" -> "Executed"). Only suggest changes that fix a real issue, keep the person's voice.
+FEW-SHOT EXAMPLES:
+[GOOD EXAMPLE 1: Tense Consistency]
+Before: "Lead the club and organize weekly workshops on React."
+After:  "Led the club and organized weekly workshops on React."
+Issue:  "tense"
+Explanation: "Fixed inconsistent present-tense verbs ('Lead', 'organize') to past-tense for a past role."
+
+[GOOD EXAMPLE 2: Vague Opener -> Specific without New Facts]
+Before: "Responsible for doing data work with Python and creating spreadsheets."
+After:  "Automated data cleaning and processing workflows using Python to streamline reporting."
+Issue:  "vague"
+Explanation: "Eliminated weak 'Responsible for' opener and specified the automated workflow using candidate's documented Python skills without introducing unmentioned facts."
+
+[BAD EXAMPLE 1: Synonym / Thesaurus Swap - FORBIDDEN & PROGRAMMATICALLY REJECTED]
+Before: "Built interactive dashboards using Power BI."
+After:  "Constructed interactive dashboards using Power BI."
+Why Rejected: Pure 1-word thesaurus swap (Built -> Constructed) without resolving an actual issue or adding substance.
+
+[BAD EXAMPLE 2: Invented Numbers / Metrics - FORBIDDEN & PROGRAMMATICALLY REJECTED]
+Before: "Developed user authentication system with JWT."
+After:  "Architected enterprise JWT authentication serving 100,000+ users with 99.99% uptime."
+Why Rejected: Invented unverified numbers (100,000+, 99.99%) absent from the source resume.
+
+STRICT FAITHFULNESS CONSTRAINTS (Violations will be automatically rejected):
+1. NO THESAURUS SWAPS: Do NOT perform 1-2 word synonym substitutions on otherwise identical sentences.
 2. NO SENIORITY INFLATION: If the candidate is an "Intern", "Undergraduate", or "Student", YOU MUST KEEP those exact qualifying words. NEVER claim standalone titles like "Developer", "Engineer", "Data Analyst", "Lead", or "Senior".
-3. NO YEARS OF EXPERIENCE: Do NOT invent or claim years of experience (e.g., "with 2+ years of experience").
+3. NO YEARS OF EXPERIENCE: Do NOT invent years of experience claims (e.g., "with 2+ years of experience").
 4. NO FLUFF: Absolutely forbidden words/phrases: "proven track record", "results-driven", "performance-driven", "dynamic", "passionate", "seasoned", "expert", "world-class", "cutting-edge", "spearheaded".
-5. FACTS ONLY: Every number, decimal (e.g. 8.4), threshold (e.g. 10,000+, 1,000+), metric, technology, tool, employer, and degree MUST come strictly from the provided resume text below. Do NOT introduce unmentioned tools (e.g., Docker, AWS, Kubernetes).
-6. SENTENCE COUNT: For summaries, the sentence count must be within +-1 of the original sentence count.
+5. FACTS ONLY: Every number, decimal (e.g. 8.4), threshold (e.g. 10,000+, 1,000+), metric, technology, tool, employer, and degree MUST come strictly from the provided resume text below. Do NOT introduce unmentioned tools.
+6. SENTENCE COUNT: For summaries, the sentence count must be within +-1 of original.
 7. FORMAT: For experience bullets, 'before' must match an existing bullet verbatim.
 
-Candidate Target Title: ${jobTitle}
+Do NOT return an empty list unless the resume truly has none of these issues. Rank suggestions by impact.`;
+
+  if (options.stricter) {
+    prompt += `\n\nSTRICT SECOND PASS: You are conducting an uncompromising critical audit. You MUST identify at least 3 distinct improvement areas across tense consistency, weak openers ("Responsible for", "Helped"), unanchored outcomes, or rambling descriptions. Retain candidate facts with zero hallucinations.`;
+  }
+
+  prompt += `\n\nCandidate Target Title: ${jobTitle}
 Current Summary:
 "${summary}"
 
@@ -363,15 +436,20 @@ ${JSON.stringify(experiences, null, 2)}
 Output raw JSON strictly matching the schema.`;
 
   const res = await generate(prompt, {
-    signal,
+    apiKey,
+    preferredModel: chosenModel,
+    signal: options.signal,
     responseMimeType: 'application/json',
     responseSchema: AI_REVIEW_SCHEMA,
+    temperature: options.stricter ? 0.5 : 0.1,
   });
 
   if (!res.ok || !res.text) {
     const modelTag = res.modelUsed ? `[${res.modelUsed}] ` : '';
     throw new Error(`${modelTag}${res.message || 'AI review failed'}`);
   }
+
+  const rawResponseSnippet = res.text.slice(0, 500);
 
   let parsed: any;
   try {
@@ -408,5 +486,21 @@ Output raw JSON strictly matching the schema.`;
     }
   });
 
-  return { accepted, rejected, modelUsed: res.modelUsed };
+  const rawCount = rawSuggestions.length;
+  const statusText =
+    rawCount === 0
+      ? 'AI returned no suggestions'
+      : `Model returned ${rawCount}, accepted ${accepted.length}, rejected ${rejected.length}`;
+
+  return {
+    accepted,
+    rejected,
+    modelUsed: res.modelUsed || chosenModel,
+    isLiteFallback: modelSelection.isLite,
+    probeTable: modelSelection.probeTable,
+    probeStatusMessage: modelSelection.statusMessage,
+    rawCount,
+    rawResponseSnippet,
+    statusText,
+  };
 }

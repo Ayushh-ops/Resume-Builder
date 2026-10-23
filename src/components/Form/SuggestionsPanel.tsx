@@ -13,7 +13,11 @@ import {
 import type { ResumeData } from '../../types/resume';
 import { getResumeGuidance, type GuidanceItem } from '../../lib/guidance';
 import { getKey, getSelectedModel } from '../../lib/gemini';
-import { reviewResumeWithAI, type AIReviewSuggestion } from '../../services/aiReview';
+import {
+  reviewResumeWithAI,
+  type AIReviewSuggestion,
+  type AIReviewResult,
+} from '../../services/aiReview';
 
 interface SuggestionsPanelProps {
   resumeData: ResumeData;
@@ -34,6 +38,7 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
   const [aiError, setAiError] = useState<string | null>(null);
   const [hasRunAi, setHasRunAi] = useState(false);
   const [aiStatus, setAiStatus] = useState<string | null>(null);
+  const [lastReviewResult, setLastReviewResult] = useState<AIReviewResult | null>(null);
   const [aiReviewSuggestions, setAiReviewSuggestions] = useState<AIReviewSuggestion[]>(() => {
     try {
       const saved = sessionStorage.getItem('resumecraft_ai_review_suggestions');
@@ -204,7 +209,7 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
     scrollToChangedField(suggestion.section, suggestion.expIdx, suggestion.bulletIdx);
   };
 
-  const handleReviewWithAi = async () => {
+  const handleReviewWithAi = async (opts?: { stricter?: boolean }) => {
     setAiError(null);
     setAiStatus(null);
 
@@ -223,12 +228,16 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
-    }, 40000); // 40-second timeout
+    }, 45000); // 45-second timeout
 
     try {
-      const result = await reviewResumeWithAI(resumeData, controller.signal);
+      const result = await reviewResumeWithAI(resumeData, {
+        signal: controller.signal,
+        stricter: opts?.stricter,
+      });
       clearTimeout(timeoutId);
       setHasRunAi(true);
+      setLastReviewResult(result);
 
       if (result.accepted.length > 0) {
         setAiReviewSuggestions((prev) => {
@@ -238,15 +247,13 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
           } catch {}
           return merged;
         });
-        setAiStatus('AI review ready');
-      } else {
-        setAiStatus('No major issues found');
       }
+      setAiStatus(result.statusText);
     } catch (err: any) {
       clearTimeout(timeoutId);
       setHasRunAi(true);
       const currentModel = getSelectedModel();
-      const msg = err.name === 'AbortError' ? 'AI review timed out after 40 seconds' : (err.message || 'AI review failed');
+      const msg = err.name === 'AbortError' ? 'AI review timed out after 45 seconds' : (err.message || 'AI review failed');
       const formatted = msg.startsWith('[') ? msg : `[${currentModel}] ${msg}`;
       setAiError(formatted);
       setAiStatus(formatted);
@@ -291,11 +298,100 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
             </p>
           )}
 
-          {/* If AI review was run and no issues were found */}
-          {hasRunAi && activeAiSuggestions.length === 0 && !aiError && (
-            <div className="p-2.5 rounded-[8px] bg-muted/30 border border-line flex items-center gap-2 text-xs text-ink/70">
-              <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>No major issues found · Resume adheres to strong metric and action-verb standards.</span>
+          {/* Model Choice, Exact Counts & Expandable Details */}
+          {lastReviewResult && (
+            <div className="p-2.5 rounded-[8px] bg-muted/20 border border-line space-y-2 text-xs">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <span className="font-semibold text-ink">
+                  Model: <span className="font-mono text-brand-600 dark:text-brand-400">{lastReviewResult.modelUsed}</span>
+                  {lastReviewResult.isLiteFallback && (
+                    <span className="ml-1.5 text-[10px] text-amber-600 dark:text-amber-400 font-normal">
+                      (lite fallback: all non-lite models failed)
+                    </span>
+                  )}
+                </span>
+                <span className="text-[11px] text-ink/80 font-medium">
+                  {lastReviewResult.statusText}
+                </span>
+              </div>
+
+              {lastReviewResult.isLiteFallback && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                  Notice: Every non-lite model failed probe. Used {lastReviewResult.modelUsed}.
+                </p>
+              )}
+
+              {/* Expandable Model Probe Table */}
+              {lastReviewResult.probeTable && lastReviewResult.probeTable.length > 0 && (
+                <details className="text-[11px] text-ink/70">
+                  <summary className="cursor-pointer hover:text-ink font-medium">
+                    View model probe table ({lastReviewResult.probeTable.length} models probed)
+                  </summary>
+                  <div className="mt-1.5 overflow-x-auto border border-line rounded-[6px] bg-card p-2">
+                    <table className="w-full text-left font-mono text-[10px]">
+                      <thead>
+                        <tr className="border-b border-line text-ink/50">
+                          <th className="pb-1 pr-2">Model</th>
+                          <th className="pb-1 pr-2">Status</th>
+                          <th className="pb-1 pr-2">Latency</th>
+                          <th className="pb-1">Result</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lastReviewResult.probeTable.map((p) => (
+                          <tr key={p.model} className="border-b border-line/40 last:border-0">
+                            <td className="py-0.5 pr-2">{p.model}</td>
+                            <td className={`py-0.5 pr-2 font-bold ${p.status === 200 ? 'text-emerald-600' : 'text-red-500'}`}>{p.status}</td>
+                            <td className="py-0.5 pr-2">{p.elapsedMs}ms</td>
+                            <td className="py-0.5 text-ink/60 truncate max-w-[140px]">
+                              {p.status === 200 ? 'OK' : p.errorMsg || 'Failed'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
+
+              {/* Expandable Rejected Reasons */}
+              {lastReviewResult.rejected.length > 0 && (
+                <details className="text-[11px] text-ink/70">
+                  <summary className="cursor-pointer hover:text-ink font-medium text-amber-600 dark:text-amber-400">
+                    View {lastReviewResult.rejected.length} rejected suggestions & reasons
+                  </summary>
+                  <ul className="mt-1.5 space-y-1 list-disc list-inside bg-card p-2 rounded-[6px] border border-line text-[10px]">
+                    {lastReviewResult.rejected.map((r, i) => (
+                      <li key={i} className="text-ink/80">
+                        <span className="font-medium text-ink">{r.suggestion?.title || 'Suggestion'}:</span>{' '}
+                        <span className="text-red-600 dark:text-red-400">{r.reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          )}
+
+          {/* Honest Empty State when N=0 */}
+          {hasRunAi && (!lastReviewResult || lastReviewResult.rawCount === 0) && activeAiSuggestions.length === 0 && !aiError && !aiLoading && (
+            <div className="p-3 rounded-[8px] bg-muted/30 border border-line space-y-2 text-xs">
+              <div className="flex items-center gap-2 text-ink font-medium">
+                <AlertCircle className="w-4 h-4 text-ink/60 shrink-0" />
+                <span>AI returned no suggestions</span>
+              </div>
+              <p className="text-[11px] text-ink/60">
+                The reviewer found no issues meeting quality thresholds on this pass.
+              </p>
+              <button
+                type="button"
+                onClick={() => handleReviewWithAi({ stricter: true })}
+                disabled={aiLoading}
+                className="btn-primary text-xs py-1 px-3 flex items-center gap-1.5 cursor-pointer mt-1"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Ask again with a stricter reviewer</span>
+              </button>
             </div>
           )}
 
@@ -522,8 +618,9 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
               </div>
               <button
                 type="button"
+                data-testid="btn-review-resume"
                 disabled={aiLoading}
-                onClick={handleReviewWithAi}
+                onClick={() => handleReviewWithAi()}
                 className="btn-outline h-7 px-2.5 text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
               >
                 {aiLoading ? (

@@ -62,9 +62,9 @@ export const TrendAdvisorModal: React.FC<TrendAdvisorModalProps> = ({
       setHasRunAi(true);
       if (result.accepted.length > 0) {
         setAiSuggestions(result.accepted);
-        setAiStatus('AI review ready');
+        setAiStatus(result.statusText);
       } else {
-        setAiStatus('No major issues found');
+        setAiStatus(result.statusText || 'AI returned no suggestions');
       }
     } catch (err: any) {
       clearTimeout(timer);

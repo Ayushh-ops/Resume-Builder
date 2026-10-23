@@ -3,7 +3,6 @@ import * as path from 'path';
 import { extractLinesFromPdf } from '../src/lib/import/extract';
 import { fallbackRegexParser } from '../src/services/resumeParser';
 import { reviewResumeWithAI } from '../src/services/aiReview';
-import { setSelectedModel } from '../src/lib/gemini';
 
 if (!globalThis.localStorage || typeof globalThis.localStorage.getItem !== 'function') {
   const store = new Map<string, string>();
@@ -43,45 +42,93 @@ async function main() {
   }
 
   process.env.VITE_GEMINI_API_KEY = key;
-  setSelectedModel('gemini-3.5-flash-lite');
 
-  console.log('1. Loading and parsing ./resume.pdf...');
+  // ==========================================
+  // PART 1: TEST WITH KNOWN-WEAK FIXTURE
+  // ==========================================
+  console.log('====================================================');
+  console.log('PART 1: REAL AI REVIEW ON tests/fixtures/weak-resume.json');
+  console.log('====================================================');
+  const weakFixturePath = path.resolve(process.cwd(), 'tests/fixtures/weak-resume.json');
+  const weakData = JSON.parse(fs.readFileSync(weakFixturePath, 'utf8'));
+
+  const tWeak = Date.now();
+  const weakResult = await reviewResumeWithAI(weakData, { apiKey: key });
+  const msWeak = Date.now() - tWeak;
+
+  console.log(`\nModel Used: ${weakResult.modelUsed} ${weakResult.isLiteFallback ? '(lite fallback)' : '(main)'}`);
+  console.log(`Status line: ${weakResult.probeStatusMessage || ''}`);
+  console.log(`Status text: ${weakResult.statusText}`);
+  console.log(`Latency:     ${msWeak}ms`);
+  console.log(`Counts:      Model returned ${weakResult.rawCount}, accepted ${weakResult.accepted.length}, rejected ${weakResult.rejected.length}`);
+
+  if (weakResult.rejected.length > 0) {
+    console.log('\nRejected suggestions:');
+    weakResult.rejected.forEach((r, i) => {
+      console.log(`  [${i + 1}] "${r.suggestion?.title}": ${r.reason}`);
+    });
+  }
+
+  console.log(`\nAccepted suggestion pairs (Count: ${weakResult.accepted.length}):`);
+  weakResult.accepted.forEach((a, i) => {
+    console.log(`\n  [${i + 1}] Issue: [${a.issue}] - ${a.title}`);
+    console.log(`      Before: "${a.before}"`);
+    console.log(`      After:  "${a.after}"`);
+    console.log(`      Why:    "${a.explanation}"`);
+  });
+
+  if (weakResult.accepted.length < 3) {
+    console.error(`\n[FAILURE] Weak fixture required at least 3 accepted suggestions, got ${weakResult.accepted.length}`);
+    process.exit(1);
+  } else {
+    console.log(`\n[SUCCESS] Weak fixture passed requirement: accepted ${weakResult.accepted.length} >= 3`);
+  }
+
+  // ==========================================
+  // PART 2: REAL AI REVIEW ON ./resume.pdf
+  // ==========================================
+  console.log('\n====================================================');
+  console.log('PART 2: REAL AI REVIEW ON ./resume.pdf DATA');
+  console.log('====================================================');
+
   const pdfBuffer = fs.readFileSync(path.resolve(process.cwd(), 'resume.pdf'));
   const lines = await extractLinesFromPdf(pdfBuffer);
   const rawText = lines.map((l) => l.text).join('\n');
-  const parsedData = fallbackRegexParser(rawText, 'resume.pdf', lines);
+  const resumeData = fallbackRegexParser(rawText, 'resume.pdf', lines);
 
-  console.log(`Parsed name: ${parsedData.personalInfo?.fullName}`);
-  console.log(`Parsed experience roles: ${parsedData.experience?.length}`);
-  console.log(`Parsed skills categories: ${parsedData.skills?.length}`);
+  const tResume = Date.now();
+  const resumeResult = await reviewResumeWithAI(resumeData as any, { apiKey: key });
+  const msResume = Date.now() - tResume;
 
-  console.log('\n2. Calling reviewResumeWithAI on ./resume.pdf data...');
-  const t0 = Date.now();
-  const result = await reviewResumeWithAI(parsedData as any);
-  const elapsed = Date.now() - t0;
+  console.log(`\nModel Used: ${resumeResult.modelUsed} ${resumeResult.isLiteFallback ? '(lite fallback)' : '(main)'}`);
+  console.log(`Status line: ${resumeResult.probeStatusMessage || ''}`);
+  console.log(`Status text: ${resumeResult.statusText}`);
+  console.log(`Latency:     ${msResume}ms`);
+  console.log(`Counts:      Model returned ${resumeResult.rawCount}, accepted ${resumeResult.accepted.length}, rejected ${resumeResult.rejected.length}`);
 
-  console.log('\n--- AI Resume Review Results ---');
-  console.log(`Elapsed time: ${elapsed}ms`);
-  console.log(`Accepted suggestions count: ${result.accepted.length}`);
-  console.log(`Rejected suggestions count: ${result.rejected.length}`);
-
-  if (result.rejected.length > 0) {
-    console.log('\nRejected reasons:');
-    result.rejected.forEach((r, i) => {
-      console.log(`  [${i + 1}] Reason: ${r.reason}`);
+  if (resumeResult.rejected.length > 0) {
+    console.log('\nRejected suggestions:');
+    resumeResult.rejected.forEach((r, i) => {
+      console.log(`  [${i + 1}] "${r.suggestion?.title}": ${r.reason}`);
     });
   }
 
-  if (result.accepted.length > 0) {
-    console.log('\nAccepted Suggestions:');
-    result.accepted.forEach((a, i) => {
-      console.log(`\n  [${i + 1}] Title: ${a.title} (${a.section} / ${a.targetType})`);
-      if (a.before) console.log(`      Before: "${a.before}"`);
+  if (resumeResult.accepted.length > 0) {
+    console.log(`\nAccepted suggestion pairs (Count: ${resumeResult.accepted.length}):`);
+    resumeResult.accepted.forEach((a, i) => {
+      console.log(`\n  [${i + 1}] Issue: [${a.issue}] - ${a.title}`);
+      console.log(`      Before: "${a.before}"`);
       console.log(`      After:  "${a.after}"`);
-      if (a.explanation) console.log(`      Why:    "${a.explanation}"`);
+      console.log(`      Why:    "${a.explanation}"`);
     });
   }
-  console.log('--------------------------------');
+
+  if (resumeResult.rawCount === 0) {
+    console.log('\nModel returned 0 suggestions. Raw model response snippet (first 500 chars):');
+    console.log(resumeResult.rawResponseSnippet || '(empty response)');
+  }
+
+  console.log('====================================================\n');
 }
 
 main().catch((err) => {

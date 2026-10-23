@@ -281,42 +281,149 @@ export async function probeModel(
   }
 }
 
+export interface ModelProbeResult {
+  model: string;
+  status: number;
+  elapsedMs: number;
+  errorMsg?: string;
+}
+
+export interface ModelSelectionResult {
+  chosenModel: string;
+  isLite: boolean;
+  probeTable: ModelProbeResult[];
+  statusMessage: string;
+}
+
+export function logProbeTable(
+  probeTable: ModelProbeResult[],
+  chosen: string,
+  isLite: boolean,
+  statusMsg: string
+): void {
+  console.log('\n--- Gemini Model Probe Table ---');
+  console.log('Model'.padEnd(25) + ' | ' + 'Status'.padEnd(7) + ' | ' + 'Latency'.padEnd(9) + ' | Result');
+  console.log('-'.repeat(68));
+  for (const p of probeTable) {
+    const res = p.status === 200 ? 'OK' : (p.errorMsg || 'Failed').slice(0, 28);
+    console.log(`${p.model.padEnd(25)} | ${String(p.status).padEnd(7)} | ${(p.elapsedMs + 'ms').padEnd(9)} | ${res}`);
+  }
+  console.log('-'.repeat(68));
+  console.log(`Chosen model: ${chosen}${isLite ? ' (lite fallback)' : ''}`);
+  console.log(`Status line:  ${statusMsg}`);
+  console.log('--------------------------------\n');
+}
+
+/**
+ * Selects the main model:
+ * 1. Probes user's selected/main model (gemini-3.5-flash or higher non-lite).
+ * 2. Never silently falls to flash-lite.
+ * 3. Uses lite only if every non-lite model fails, and explicitly says so in the status.
+ * 4. Prints and returns the probe table (model, status, ms).
+ */
+export async function selectMainModel(
+  apiKey?: string,
+  preferredModel?: string,
+  forceRefresh: boolean = false,
+  excludeModel?: string
+): Promise<ModelSelectionResult> {
+  const key = apiKey || getKey();
+  let allCandidates = await listModels(key, forceRefresh);
+  if (excludeModel) {
+    allCandidates = allCandidates.filter((m) => m !== excludeModel);
+  }
+
+  const mainModels = allCandidates.filter((m) => !m.endsWith('-lite'));
+  const liteModels = allCandidates.filter((m) => m.endsWith('-lite'));
+
+  const probeTable: ModelProbeResult[] = [];
+  const probeOrder: string[] = [];
+
+  // If user provided an explicit preference or saved choice in Settings, prioritize testing that
+  const userSaved = (preferredModel || getSelectedModel() || '').replace(/^models\//, '');
+  if (userSaved && userSaved !== excludeModel && mainModels.includes(userSaved)) {
+    probeOrder.push(userSaved);
+  }
+  for (const m of mainModels) {
+    if (!probeOrder.includes(m)) probeOrder.push(m);
+  }
+
+  // 1. Probe all main (non-lite) models first
+  for (const model of probeOrder) {
+    const probe = await probeModel(model, key);
+    probeTable.push({
+      model,
+      status: probe.status,
+      elapsedMs: probe.elapsedMs,
+      errorMsg: probe.errorMsg,
+    });
+    if (probe.ok) {
+      setSelectedModel(model);
+      const msg = `Using main model: ${model} (${probe.elapsedMs}ms)`;
+      logProbeTable(probeTable, model, false, msg);
+      return {
+        chosenModel: model,
+        isLite: false,
+        probeTable,
+        statusMessage: msg,
+      };
+    }
+  }
+
+  // 2. If every non-lite model fails, probe lite models
+  const failedNonLiteSummary = probeTable.map((p) => `${p.model}: ${p.status}`).join(', ');
+  for (const model of liteModels) {
+    const probe = await probeModel(model, key);
+    probeTable.push({
+      model,
+      status: probe.status,
+      elapsedMs: probe.elapsedMs,
+      errorMsg: probe.errorMsg,
+    });
+    if (probe.ok) {
+      setSelectedModel(model);
+      const msg = `Every non-lite model failed [${failedNonLiteSummary}]. Falling back to lite: ${model} (${probe.elapsedMs}ms)`;
+      logProbeTable(probeTable, model, true, msg);
+      return {
+        chosenModel: model,
+        isLite: true,
+        probeTable,
+        statusMessage: msg,
+      };
+    }
+  }
+
+  // 3. Fallback if all candidates fail
+  const fallback = allCandidates[0] || (excludeModel === FALLBACK_MODELS[0] ? FALLBACK_MODELS[1] : FALLBACK_MODELS[0]);
+  const msg = `All candidate models failed [${failedNonLiteSummary}]. Defaulting to ${fallback}.`;
+  logProbeTable(probeTable, fallback, false, msg);
+  return {
+    chosenModel: fallback,
+    isLite: false,
+    probeTable,
+    statusMessage: msg,
+  };
+}
+
 /**
  * Pick the model:
- * - User's saved choice if it is still in the candidate list and not excluded.
- * - Else probe candidates in order with a 1-token request (8s timeout each)
- *   and use the first that returns 200; save it as the working model.
+ * Probes candidates in order prioritizing main models, saves working model.
  */
 export async function pickModel(
   apiKey?: string,
   forceRefresh: boolean = false,
   excludeModel?: string
-): Promise<{ picked: string; fallbackList: string[] }> {
-  let candidates = await listModels(apiKey, forceRefresh);
+): Promise<{ picked: string; fallbackList: string[]; probeTable?: ModelProbeResult[] }> {
+  const result = await selectMainModel(apiKey, undefined, forceRefresh, excludeModel);
+  let candidates = await listModels(apiKey, false);
   if (excludeModel) {
     candidates = candidates.filter((c) => c !== excludeModel);
   }
-
-  const saved = getSelectedModel();
-  if (saved && saved !== excludeModel && candidates.includes(saved)) {
-    return { picked: saved, fallbackList: candidates };
-  }
-
-  // Probe candidates in order
-  for (const candidate of candidates) {
-    const probe = await probeModel(candidate, apiKey);
-    if (probe.ok) {
-      setSelectedModel(candidate);
-      return { picked: candidate, fallbackList: candidates };
-    }
-  }
-
-  // Fallback to first available candidate
-  const fallback =
-    candidates[0] ||
-    (excludeModel === FALLBACK_MODELS[0] ? FALLBACK_MODELS[1] : FALLBACK_MODELS[0]);
-  setSelectedModel(fallback);
-  return { picked: fallback, fallbackList: candidates };
+  return {
+    picked: result.chosenModel,
+    fallbackList: candidates,
+    probeTable: result.probeTable,
+  };
 }
 
 export interface GenerateResult {
@@ -494,6 +601,7 @@ export async function generate(
     signal?: AbortSignal;
     responseMimeType?: string;
     responseSchema?: any;
+    temperature?: number;
   }
 ): Promise<GenerateResult> {
   const key = options?.apiKey || getKey();
@@ -543,7 +651,7 @@ export async function generate(
       };
 
       const genConfig: any = {
-        temperature: 0.1,
+        temperature: typeof options?.temperature === 'number' ? options.temperature : 0.1,
       };
 
       if (useThinkingConfig) {

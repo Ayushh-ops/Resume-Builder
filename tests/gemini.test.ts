@@ -195,6 +195,43 @@ describe('Gemini Resilience & Fallback Tests', () => {
     expect(payloadsSent[0].generationConfig.thinkingConfig).toBeDefined();
     expect(payloadsSent[1].generationConfig.thinkingConfig).toBeUndefined();
   });
+
+  it('selectMainModel uses main non-lite model if available, and falls back to lite only if all main models fail', async () => {
+    const { selectMainModel } = await import('../src/lib/gemini');
+
+    // Case 1: gemini-3.8-flash succeeds
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const urlStr = url.toString();
+      if (urlStr.includes('/models?')) {
+        return new Response(JSON.stringify({ models: DIAGNOSIS_MODELS }), { status: 200 });
+      }
+      if (urlStr.includes('gemini-3.8-flash:generateContent')) {
+        return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ error: { code: 429, message: 'Quota exceeded' } }), { status: 429 });
+    }) as any;
+
+    const res1 = await selectMainModel('dummy-key', undefined, true);
+    expect(res1.chosenModel).toBe('gemini-3.8-flash');
+    expect(res1.isLite).toBe(false);
+
+    // Case 2: All non-lite models return 429, lite model succeeds
+    globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+      const urlStr = url.toString();
+      if (urlStr.includes('/models?')) {
+        return new Response(JSON.stringify({ models: DIAGNOSIS_MODELS }), { status: 200 });
+      }
+      if (urlStr.includes('-lite:generateContent')) {
+        return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ error: { code: 429, message: 'Quota exceeded' } }), { status: 429 });
+    }) as any;
+
+    const res2 = await selectMainModel('dummy-key', undefined, true);
+    expect(res2.isLite).toBe(true);
+    expect(res2.chosenModel).toBe('gemini-3.5-flash-lite');
+    expect(res2.statusMessage).toContain('Every non-lite model failed');
+  });
 });
 
 describe('AI Review Validator Unit Tests', () => {
@@ -391,6 +428,34 @@ describe('AI Review Validator Unit Tests', () => {
       dummyResume
     );
     expect(result.valid).toBe(true);
+  });
+
+  it('accepts grammatical tense consistency fixes without treating them as near-synonym swaps', async () => {
+    const { validateAIReviewSuggestion } = await import('../src/services/aiReview');
+    const result = validateAIReviewSuggestion(
+      {
+        section: 'experience',
+        targetType: 'bullet',
+        before: 'Lead the team and organize weekly technical workshops.',
+        after: 'Led the team and organized weekly technical workshops.',
+        issue: 'tense',
+      },
+      dummyResume
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it('verifies tests/fixtures/weak-resume.json has 6 intentionally weak bullets', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const fixturePath = path.resolve(process.cwd(), 'tests/fixtures/weak-resume.json');
+    expect(fs.existsSync(fixturePath)).toBe(true);
+
+    const data = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
+    expect(data.experience).toHaveLength(1);
+    expect(data.experience[0].highlights).toHaveLength(6);
+    expect(data.experience[0].highlights[0]).toMatch(/^Lead the/);
+    expect(data.experience[0].highlights[1]).toMatch(/^Responsible for/);
   });
 });
 
