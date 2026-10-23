@@ -141,6 +141,7 @@ export const SummaryForm: React.FC<SummaryFormProps> = ({ summary, resumeData, o
 
       <div className="relative">
         <textarea
+          id="summary-textarea"
           ref={textareaRef}
           value={summary || ''}
           onChange={(e) => onChange(e.target.value)}

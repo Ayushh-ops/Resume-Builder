@@ -96,26 +96,24 @@ export const HarvardTemplate: React.FC<TemplateProps> = ({ data }) => {
             <div className="space-y-2.5">
               {projects.map((proj, idx) => (
                 <div key={proj.id || idx} className="avoid-break">
-                  <div className="flex justify-between items-baseline text-xs">
-                    <span className="font-bold text-black">
-                      {proj.name}
-                      {proj.technologies && proj.technologies.length > 0 && (
-                        <span className="font-normal italic text-neutral-700 ml-1">
-                          | {proj.technologies.join(', ')}
-                        </span>
-                      )}
-                    </span>
+                  <div className="flex items-baseline gap-2 text-xs flex-wrap">
+                    <span className="font-bold text-black whitespace-nowrap">{proj.name}</span>
                     {proj.link && (
                       <a
                         href={proj.link.startsWith('http') ? proj.link : `https://${proj.link}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-[10px] underline text-neutral-600 font-normal"
+                        className="text-[10px] underline text-neutral-600 font-normal whitespace-nowrap"
                       >
                         {proj.linkLabel || proj.link}
                       </a>
                     )}
                   </div>
+                  {proj.technologies && proj.technologies.length > 0 && (
+                    <div className="text-[10px] italic text-neutral-700 mt-0.5">
+                      {proj.technologies.join(', ')}
+                    </div>
+                  )}
                   {proj.description && (
                     <p className="text-xs text-neutral-800 mt-0.5">{proj.description}</p>
                   )}

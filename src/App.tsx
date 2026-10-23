@@ -147,6 +147,10 @@ const computeInitialRoute = (index: ResumeIndexEntry[]): Route => {
 export const App: React.FC = () => {
   const { showToast } = useToast();
 
+  useEffect(() => {
+    (window as any).__resumecraft_showToast = showToast;
+  }, [showToast]);
+
   // Storage initialization and initial index
   const [resumeIndex, setResumeIndex] = useState<ResumeIndexEntry[]>(() => initResumeStorage());
 

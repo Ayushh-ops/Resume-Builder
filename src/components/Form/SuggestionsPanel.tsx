@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import type { ResumeData } from '../../types/resume';
 import { getResumeGuidance, type GuidanceItem } from '../../lib/guidance';
-import { getKey } from '../../lib/gemini';
+import { getKey, getSelectedModel } from '../../lib/gemini';
 import { reviewResumeWithAI, type AIReviewSuggestion } from '../../services/aiReview';
 
 interface SuggestionsPanelProps {
@@ -32,7 +32,16 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
-  const [aiReviewSuggestions, setAiReviewSuggestions] = useState<AIReviewSuggestion[]>([]);
+  const [hasRunAi, setHasRunAi] = useState(false);
+  const [aiStatus, setAiStatus] = useState<string | null>(null);
+  const [aiReviewSuggestions, setAiReviewSuggestions] = useState<AIReviewSuggestion[]>(() => {
+    try {
+      const saved = sessionStorage.getItem('resumecraft_ai_review_suggestions');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   const hasTargetTitle = Boolean(resumeData.personalInfo?.jobTitle?.trim());
 
@@ -71,6 +80,33 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
     }
+  };
+
+  const scrollToChangedField = (section: string, expIdx?: number, bulletIdx?: number) => {
+    setTimeout(() => {
+      let targetEl: HTMLElement | null = null;
+      if (typeof expIdx === 'number' && typeof bulletIdx === 'number') {
+        targetEl = document.getElementById(`exp-${expIdx}-bullet-${bulletIdx}`);
+      }
+      if (!targetEl && (section === 'summary' || section === 'summary-check')) {
+        targetEl = document.getElementById('summary-textarea') || document.getElementById('summary');
+      }
+      if (!targetEl && (section === 'skills' || section === 'skills-coverage')) {
+        targetEl = document.getElementById('skills');
+      }
+      if (!targetEl && section === 'experience') {
+        targetEl = document.getElementById('experience');
+      }
+      if (!targetEl) {
+        targetEl = document.getElementById(section);
+      }
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if ('focus' in targetEl && typeof (targetEl as any).focus === 'function') {
+          (targetEl as any).focus();
+        }
+      }
+    }, 60);
   };
 
   const handleApply = (item: GuidanceItem) => {
@@ -113,6 +149,7 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
 
     onApplyChange(updated);
     handleDismiss(item.id);
+    scrollToChangedField(item.section);
   };
 
   const handleApplyAiSuggestion = (suggestion: AIReviewSuggestion) => {
@@ -164,14 +201,20 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
 
     onApplyChange(updated);
     handleDismiss(suggestion.id);
+    scrollToChangedField(suggestion.section, suggestion.expIdx, suggestion.bulletIdx);
   };
 
   const handleReviewWithAi = async () => {
     setAiError(null);
+    setAiStatus(null);
 
     const apiKey = getKey();
     if (!apiKey) {
-      setAiError('No API key set. Please set your Gemini API key in Settings.');
+      const currentModel = getSelectedModel();
+      const err = `[${currentModel}] No API key set. Please set your Gemini API key in Settings.`;
+      setAiError(err);
+      setAiStatus(err);
+      setHasRunAi(true);
       return;
     }
 
@@ -185,20 +228,32 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
     try {
       const result = await reviewResumeWithAI(resumeData, controller.signal);
       clearTimeout(timeoutId);
+      setHasRunAi(true);
 
       if (result.accepted.length > 0) {
-        setAiReviewSuggestions((prev) => [...prev, ...result.accepted]);
+        setAiReviewSuggestions((prev) => {
+          const merged = [...prev, ...result.accepted];
+          try {
+            sessionStorage.setItem('resumecraft_ai_review_suggestions', JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
+        setAiStatus('AI review ready');
       } else {
         const firstReason = result.rejected[0]?.reason;
-        setAiError(firstReason ? `AI review suggestions rejected by validator: ${firstReason}` : 'No valid improvements generated.');
+        const currentModel = result.modelUsed || getSelectedModel();
+        const err = `[${currentModel}] ${firstReason ? `AI suggestions rejected: ${firstReason}` : 'No valid improvements generated'}`;
+        setAiError(err);
+        setAiStatus(err);
       }
     } catch (err: any) {
       clearTimeout(timeoutId);
-      if (err.name === 'AbortError') {
-        setAiError('AI review timed out after 40 seconds.');
-      } else {
-        setAiError(err.message || 'AI review failed.');
-      }
+      setHasRunAi(true);
+      const currentModel = getSelectedModel();
+      const msg = err.name === 'AbortError' ? 'AI review timed out after 40 seconds' : (err.message || 'AI review failed');
+      const formatted = msg.startsWith('[') ? msg : `[${currentModel}] ${msg}`;
+      setAiError(formatted);
+      setAiStatus(formatted);
     } finally {
       setAiLoading(false);
     }
@@ -301,7 +356,7 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
 
           {/* Actionable Suggestions from Guidance (Neutral styling only) */}
           {actionableSuggestions.map((item) => {
-            const isTemplateCard = isTemplate(item.after);
+            const isTemplateCard = isTemplate(item.after) || (!item.after && !item.missingSkills?.length);
 
             return (
               <div
@@ -370,23 +425,25 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
                       >
                         Dismiss
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyTemplate(item.id, item.after!)}
-                        className="btn-outline h-6 px-2.5 text-[11px] flex items-center gap-1 cursor-pointer"
-                      >
-                        {copiedId === item.id ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-600" />
-                            <span className="text-emerald-600 font-semibold">Copied!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span>Copy template</span>
-                          </>
-                        )}
-                      </button>
+                      {item.after && (
+                        <button
+                          type="button"
+                          onClick={() => handleCopyTemplate(item.id, item.after!)}
+                          className="btn-outline h-6 px-2.5 text-[11px] flex items-center gap-1 cursor-pointer"
+                        >
+                          {copiedId === item.id ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span className="text-emerald-600 font-semibold">Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>Copy template</span>
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -438,27 +495,51 @@ export const SuggestionsPanel: React.FC<SuggestionsPanelProps> = ({
             </div>
           )}
 
-          {/* Review resume with AI on-demand button */}
-          <div className="pt-1 flex items-center justify-between border-t border-line/60">
-            <span className="text-[11px] text-ink/50">Run AI review on click (40s timeout)</span>
-            <button
-              type="button"
-              disabled={aiLoading}
-              onClick={handleReviewWithAi}
-              className="btn-outline h-7 px-2.5 text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              {aiLoading ? (
-                <>
-                  <RefreshCw className="w-3 h-3 text-brand-600 animate-spin" />
-                  <span>Reviewing (up to 40s)...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3 h-3 text-brand-600" />
-                  <span>Review resume with AI</span>
-                </>
-              )}
-            </button>
+          {/* Review resume with AI on-demand button and status line */}
+          <div className="pt-2 flex flex-col gap-2 border-t border-line/60">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                {aiStatus ? (
+                  <p
+                    data-testid="ai-review-status"
+                    className={`text-[11px] font-medium truncate ${
+                      aiStatus === 'AI review ready'
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-amber-600 dark:text-amber-400'
+                    }`}
+                  >
+                    {aiStatus}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-ink/50 truncate">
+                    Run AI review on click (40s timeout)
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                disabled={aiLoading}
+                onClick={handleReviewWithAi}
+                className="btn-outline h-7 px-2.5 text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+              >
+                {aiLoading ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 text-brand-600 animate-spin" />
+                    <span>Reviewing (up to 40s)...</span>
+                  </>
+                ) : hasRunAi ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 text-brand-600" />
+                    <span>Re-run</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3 h-3 text-brand-600" />
+                    <span>Review my resume</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -651,16 +651,18 @@ export async function generate(
     };
   }
 
-  // If 404, 410, or 503 (high demand): drop model from cache, re-pick automatically, then retry once
-  if (result.status === 404 || result.status === 410 || result.status === 503) {
-    console.warn(`[Gemini REST] model ${currentModel} returned ${result.status}, re-picking dynamically...`);
+  // If 404, 410, or 503 (high demand): drop model from cache, re-pick automatically, then retry candidate models
+  let attempts = 0;
+  while ((result.status === 404 || result.status === 410 || result.status === 503) && attempts < 3) {
+    attempts++;
+    console.warn(`[Gemini REST] model ${currentModel} returned ${result.status}, re-picking dynamically (attempt ${attempts})...`);
     clearCachedModels();
     clearSelectedModel();
 
     try {
       const pickedInfo = await pickModel(key, true, currentModel);
       const nextModel = pickedInfo.picked;
-      if (nextModel && nextModel !== currentModel) {
+      if (nextModel && !triedModels.includes(nextModel)) {
         currentModel = nextModel;
         result = await attemptWithThinkingRetry(currentModel);
         if (result.ok && result.text) {
@@ -671,9 +673,12 @@ export async function generate(
             modelUsed: currentModel,
           };
         }
+      } else {
+        break;
       }
     } catch (rePickErr) {
       console.error('[Gemini REST] re-picking model failed:', rePickErr);
+      break;
     }
   }
 

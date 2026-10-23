@@ -341,7 +341,6 @@ export function getResumeGuidance(resumeData: ResumeData): GuidanceItem[] {
   const summary = (resumeData.summary || '').trim();
   const summaryWords = summary.split(/\s+/).filter(Boolean);
   const wordCount = summaryWords.length;
-  const hasYears = /\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\+?\s*(?:years?|yrs?)\b/i.test(summary);
   const hasResult = /(?:\d+%|\$\d+|\d+\+|\bmeasurable\b|\blead\b|\bdelivered\b|\bincreased\b|\breduced\b|\baccelerated\b)/i.test(summary);
 
   if (!summary) {
@@ -351,15 +350,13 @@ export function getResumeGuidance(resumeData: ResumeData): GuidanceItem[] {
       title: 'Professional summary elevator pitch',
       found: 'Professional summary is empty.',
       why: 'A 3-4 sentence elevator pitch anchors your background for recruiters scanning within 6 seconds.',
-      fix: 'Write a 30-60 word summary with your role title, years of experience, and a quantified win.',
-      after: `${targetTitle || 'Software Engineer'} with [X] years of experience building scalable applications. Proven track record delivering [core system] that increased [key metric] by [Y%]. Skilled in [Top 3 Core Technologies].`,
+      fix: 'Write a 30-60 word summary with your role title, core skills, and a quantified win.',
       section: 'summary',
     });
-  } else if (wordCount < 30 || wordCount > 60 || !hasYears || !hasResult) {
+  } else if (wordCount < 30 || wordCount > 60 || !hasResult) {
     const issues: string[] = [];
     if (wordCount < 30) issues.push(`too short (${wordCount} words, ideal: 30-60)`);
     else if (wordCount > 60) issues.push(`too long (${wordCount} words, ideal: 30-60)`);
-    if (!hasYears) issues.push('missing years of experience');
     if (!hasResult) issues.push('missing a quantified outcome');
 
     items.push({
@@ -368,9 +365,8 @@ export function getResumeGuidance(resumeData: ResumeData): GuidanceItem[] {
       title: 'Professional summary elevator pitch',
       found: `Summary is ${issues.join(', ')}.`,
       why: 'Summaries over 60 words get skipped; under 30 words lack sufficient ATS keyword density.',
-      fix: 'Format into 3 crisp sentences: [Current Role + Years of Experience] -> [Core Technical Strengths] -> [Top Quantified Win].',
+      fix: 'Format into 3 crisp sentences: [Current Role] -> [Core Technical Strengths] -> [Top Quantified Win].',
       before: summary,
-      after: `${targetTitle || 'Professional'} with [X] years of experience specializing in [Domain]. Architected [Key Project] improving [Metric] by [Y%]. Expertise across [Core Skill 1], [Core Skill 2], and [Core Skill 3].`,
       section: 'summary',
     });
   } else {
@@ -378,7 +374,7 @@ export function getResumeGuidance(resumeData: ResumeData): GuidanceItem[] {
       id: 'summary-check',
       status: 'ok',
       title: 'Professional summary elevator pitch',
-      found: `Summary is ${wordCount} words with role title, experience duration, and concrete impact.`,
+      found: `Summary is ${wordCount} words with role title and concrete impact.`,
       why: 'Crisp summaries maintain high recruiter retention during initial screening.',
       fix: 'Keep summary aligned with your highest-priority target role.',
       section: 'summary',

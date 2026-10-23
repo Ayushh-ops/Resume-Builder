@@ -233,24 +233,24 @@ export const HeroShowcase: React.FC = () => {
         {/* Floating Card 2: Lives in Right Gutter [410, 520px], never over paper text */}
         <div
           data-testid="hero-card-ats"
-          className="absolute top-8 right-2 z-20 w-[100px] bg-card/95 backdrop-blur-md border border-line shadow-xl rounded-[10px] p-2 flex items-center gap-1.5 transition-transform duration-200 hover:-translate-y-1 cursor-default font-sans"
+          className="absolute top-8 right-2 z-20 w-[112px] bg-card/95 backdrop-blur-md border border-line shadow-xl rounded-[10px] p-2 flex items-center gap-1.5 transition-transform duration-200 hover:-translate-y-1 cursor-default font-sans"
           style={animationStyle('heroFloat2', '5.5s', '1.2s')}
         >
           <div className="w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
             <Check className="w-3 h-3" strokeWidth={2.5} />
           </div>
           <div className="min-w-0">
-            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 block leading-tight truncate">
+            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 block leading-tight whitespace-nowrap">
               ATS friendly
             </span>
-            <span className="text-[8px] text-ink/50 block truncate">Passes filter</span>
+            <span className="text-[8px] text-ink/50 block whitespace-nowrap">Passes filter</span>
           </div>
         </div>
 
         {/* Floating Card 3: Lives in Right Gutter [410, 520px], never over paper text */}
         <div
           data-testid="hero-card-skills"
-          className="absolute top-36 right-2 z-20 w-[100px] bg-card/95 backdrop-blur-md border border-line shadow-xl rounded-[10px] p-2 transition-transform duration-200 hover:-translate-y-1 cursor-default font-sans"
+          className="absolute top-36 right-2 z-20 w-[105px] bg-card/95 backdrop-blur-md border border-line shadow-xl rounded-[10px] p-2 transition-transform duration-200 hover:-translate-y-1 cursor-default font-sans"
           style={animationStyle('heroFloat3', '6.5s', '2.4s')}
         >
           <div className="flex items-center justify-between mb-1">
@@ -265,6 +265,9 @@ export const HeroShowcase: React.FC = () => {
             </span>
             <span className="px-1 py-0.5 rounded text-[8px] font-medium bg-muted text-ink/80 border border-line truncate">
               Teamwork
+            </span>
+            <span className="px-1 py-0.5 rounded text-[8px] font-medium bg-muted text-ink/80 border border-line truncate">
+              Communication
             </span>
           </div>
         </div>

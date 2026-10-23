@@ -243,6 +243,66 @@ describe('AI Review Validator Unit Tests', () => {
     expect(result.reason).toContain('Hallucinated year/date');
   });
 
+  it('rejects previously accepted summary rewrite with fluff and role inflation', async () => {
+    const { validateAIReviewSuggestion } = await import('../src/services/aiReview');
+    const result = validateAIReviewSuggestion(
+      {
+        section: 'summary',
+        targetType: 'summary',
+        before: dummyResume.summary,
+        after: 'Performance-driven MERN Stack Developer and Data Analyst with proven experience. Proven track record delivering machine learning models.',
+      },
+      dummyResume
+    );
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/fluff|role upgrade|standalone role claim/i);
+  });
+
+  it('rejects invented technology or tool not present in the resume', async () => {
+    const { validateAIReviewSuggestion } = await import('../src/services/aiReview');
+    const result = validateAIReviewSuggestion(
+      {
+        section: 'experience',
+        targetType: 'bullet',
+        before: dummyResume.experience[0].highlights[0],
+        after: 'Deployed predictive machine learning models using Docker, Kubernetes, and AWS infrastructure.',
+      },
+      dummyResume
+    );
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/technology\/tool|not present/i);
+  });
+
+  it('rejects invented number not present in the resume', async () => {
+    const { validateAIReviewSuggestion } = await import('../src/services/aiReview');
+    const result = validateAIReviewSuggestion(
+      {
+        section: 'experience',
+        targetType: 'bullet',
+        before: dummyResume.experience[0].highlights[0],
+        after: 'Developed predictive machine learning models reducing processing time by 45%.',
+      },
+      dummyResume
+    );
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/number \(45%?\)|not present in source resume/i);
+  });
+
+  it('rejects seniority inflation or dropping intern status (Intern -> Analyst)', async () => {
+    const { validateAIReviewSuggestion } = await import('../src/services/aiReview');
+    const result = validateAIReviewSuggestion(
+      {
+        section: 'summary',
+        targetType: 'summary',
+        before: 'Data Analyst Intern with proven experience in Python, SQL, and predictive machine learning models.',
+        after: 'Data Analyst with proven experience in Python, SQL, and predictive machine learning models.',
+      },
+      dummyResume
+    );
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/seniority dropped|role upgrade/i);
+  });
+
   it('accepts valid, truthful enhancements', async () => {
     const { validateAIReviewSuggestion } = await import('../src/services/aiReview');
     const result = validateAIReviewSuggestion(

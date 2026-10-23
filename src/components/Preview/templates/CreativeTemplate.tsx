@@ -208,26 +208,24 @@ export const CreativeTemplate: React.FC<TemplateProps> = ({ data, theme }) => {
               <div className="space-y-2">
                 {projects.map((proj, idx) => (
                   <div key={proj.id || idx} className="avoid-break text-xs">
-                    <div className="flex justify-between items-baseline font-bold text-slate-900">
-                      <div className="flex items-baseline gap-2">
-                        <span>{proj.name}</span>
-                        {proj.link && (
-                          <a
-                            href={proj.link.startsWith('http') ? proj.link : `https://${proj.link}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-[10px] text-slate-500 hover:text-slate-800 underline font-normal"
-                          >
-                            {proj.linkLabel || proj.link}
-                          </a>
-                        )}
-                      </div>
-                      {proj.technologies && (
-                        <span className="text-[10px] font-normal text-slate-500">
-                          {proj.technologies.slice(0, 3).join(', ')}
-                        </span>
+                    <div className="flex items-baseline gap-2 flex-wrap font-bold text-slate-900">
+                      <span className="whitespace-nowrap">{proj.name}</span>
+                      {proj.link && (
+                        <a
+                          href={proj.link.startsWith('http') ? proj.link : `https://${proj.link}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-slate-500 hover:text-slate-800 underline font-normal whitespace-nowrap"
+                        >
+                          {proj.linkLabel || proj.link}
+                        </a>
                       )}
                     </div>
+                    {proj.technologies && proj.technologies.length > 0 && (
+                      <div className="text-[10px] font-normal text-slate-500 mt-0.5">
+                        {proj.technologies.slice(0, 5).join(', ')}
+                      </div>
+                    )}
                     {proj.description && <p className="text-slate-600 text-[11px] mt-0.5">{proj.description}</p>}
                     {proj.highlights && proj.highlights.length > 0 && (
                       <ul className="list-disc list-outside ml-3.5 mt-0.5 text-slate-700 space-y-0.5 text-[11px]">

@@ -61,8 +61,13 @@ async function main() {
   }
 
   if (result.accepted.length > 0) {
-    console.log('\nFirst Accepted Suggestion:');
-    console.log(JSON.stringify(result.accepted[0], null, 2));
+    console.log('\nAccepted Suggestions:');
+    result.accepted.forEach((a, i) => {
+      console.log(`\n  [${i + 1}] Title: ${a.title} (${a.section} / ${a.targetType})`);
+      if (a.before) console.log(`      Before: "${a.before}"`);
+      console.log(`      After:  "${a.after}"`);
+      if (a.explanation) console.log(`      Why:    "${a.explanation}"`);
+    });
   }
   console.log('--------------------------------');
 }
